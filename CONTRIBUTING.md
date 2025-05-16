@@ -6,9 +6,13 @@ Thank you for contributing to the Python version of [A5](https://a5geo.org). We 
 
 First install [uv](https://docs.astral.sh/uv/)
 
-### Run tests
+```bash
+# Install test dependencies
+uv pip install -e ".[test]"
+```
 
-`uv run pytest`
+## Run tests
 
-
-
+```bash
+uv run pytest
+```
