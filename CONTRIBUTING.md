@@ -16,3 +16,10 @@ uv pip install -e ".[test]"
 ```bash
 uv run pytest
 ```
+
+## Build & publish
+
+```bash
+uv build
+uv publish
+```
