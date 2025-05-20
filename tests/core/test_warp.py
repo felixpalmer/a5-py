@@ -16,12 +16,17 @@ with open(TEST_COORDS_PATH) as f:
     (1.2, 1.2 - TWO_PI_OVER_5)
 ])
 def test_normalize_gamma(gamma, expected):
-    assert normalize_gamma(gamma) == pytest.approx(expected,abs=1e-4)
+    assert normalize_gamma(gamma) == pytest.approx(expected, abs=1e-4)
 
-def test_normalize_gamma_periodicity():
-    gamma1 = PI_OVER_5
+@pytest.mark.parametrize("value", [
+    -0.977, -0.72, 0.3, 0, 0.01, 0.14, 0.333, 0.5, 0.6198123, 0.77, 0.9
+])
+def test_normalize_gamma_periodicity(value):
+    gamma1 = value * PI_OVER_5
     gamma2 = gamma1 + 2 * PI_OVER_5
-    assert normalize_gamma(gamma1) == pytest.approx(normalize_gamma(gamma2),abs=1e-4)
+    normalized1 = normalize_gamma(gamma1)
+    normalized2 = normalize_gamma(gamma2)
+    assert normalized1 == pytest.approx(normalized2, abs=1e-4)
 
 @pytest.mark.parametrize("input_val, expected", [
     ([0, 0], [0, 0]),
