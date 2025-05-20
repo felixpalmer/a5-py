@@ -4,7 +4,7 @@
 
 import numpy as np
 from typing import Tuple, List, Union, Literal, Final
-from types import IJ, KJ
+from .types import IJ, KJ
 
 # Type aliases
 Quaternary = Literal[0, 1, 2, 3]
