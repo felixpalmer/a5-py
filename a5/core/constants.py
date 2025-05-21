@@ -6,7 +6,7 @@ Copyright (c) A5 contributors
 
 import math
 from typing import cast
-from .types import Radians
+from .a5_types import Radians
 
 # Golden ratio
 PHI = (1 + math.sqrt(5)) / 2

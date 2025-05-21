@@ -6,7 +6,7 @@ Copyright (c) A5 contributors
 
 import numpy as np
 from typing import List, cast
-from .types import Degrees, Face, Vec2
+from .a5_types import Degrees, Face, Vec2
 from .constants import distance_to_edge, PI_OVER_10, PI_OVER_5
 
 class PentagonShape:
