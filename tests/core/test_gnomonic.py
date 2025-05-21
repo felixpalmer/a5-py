@@ -8,7 +8,7 @@ import os
 import pytest
 from typing import cast
 from a5.core.gnomonic import project_gnomonic, unproject_gnomonic
-from a5.core.types import Polar, Spherical
+from a5.core.a5_types import Polar, Spherical
 
 # Test values for basic projection tests
 TEST_VALUES = [
