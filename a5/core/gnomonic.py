@@ -6,7 +6,7 @@ Copyright (c) A5 contributors
 
 import math
 from typing import cast
-from .a5_types import Polar, Spherical
+from .coordinate_systems import Polar, Spherical
 
 def project_gnomonic(polar: Polar) -> Spherical:
     """Project polar coordinates to spherical coordinates using gnomonic projection.

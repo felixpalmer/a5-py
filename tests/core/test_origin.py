@@ -13,8 +13,8 @@ from a5.core.origin import (
     move_point_to_face,
 )
 from a5.core.constants import distance_to_edge, PI_OVER_5, TWO_PI_OVER_5
-from a5.core.a5_types import Face, Radians, Spherical
-from a5.core.a5_math import to_cartesian
+from a5.core.coordinate_systems import Face, Radians, Spherical
+from a5.core.coordinate_transforms import to_cartesian
 
 
 def test_origin_constants():

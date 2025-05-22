@@ -6,8 +6,8 @@ Copyright (c) A5 contributors
 
 import numpy as np
 from typing import List, Tuple, NamedTuple
-from .a5_math import to_cartesian, quat_from_spherical
-from .a5_types import Radians, Spherical, Cartesian, Face
+from .coordinate_transforms import to_cartesian, quat_from_spherical
+from .coordinate_systems import Radians, Spherical, Cartesian, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
 
@@ -180,15 +180,6 @@ def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> F
                                         np.arccos(local_to_axis[2])))
     # Multiply with from_origin's quaternion
     interface_quat = np.dot(from_origin.quat.flatten(), interface_quat)
-
-    #############################################################################
-    # Hard code the edge case. Need to be checked and confirmed by Felix
-    ####################################################################
-    
-    # If the point is at the edge of the face (2 * distance_to_edge from origin),
-    # it should map to [0, 0] in the target face
-    if np.isclose(np.linalg.norm(point), 2 * distance_to_edge):
-        transformed_point = np.array([0.0, 0.0], dtype=np.float64)
 
     return FaceTransform(point=transformed_point, quat=interface_quat)
 
