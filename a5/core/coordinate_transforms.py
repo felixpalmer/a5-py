@@ -7,7 +7,7 @@ Copyright (c) A5 contributors
 import math
 import numpy as np
 from typing import cast
-from .types import (
+from .coordinate_systems import (
     Degrees, Radians, Face, Polar, IJ, Cartesian, Spherical, LonLat,
     Vec2, Vec3
 )
