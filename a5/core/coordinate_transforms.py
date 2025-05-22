@@ -11,6 +11,7 @@ from .coordinate_systems import (
     Degrees, Radians, Face, Polar, IJ, Cartesian, Spherical, LonLat,
     Vec2, Vec3
 )
+from .quat import rotation_to
 
 # Constants
 LONGITUDE_OFFSET = cast(Degrees, 93.0)  # degrees
@@ -100,29 +101,4 @@ def to_lon_lat(spherical: Spherical) -> LonLat:
 def quat_from_spherical(axis: Spherical) -> Vec3:
     """Create a quaternion rotation from spherical coordinates."""
     cartesian = to_cartesian(axis)
-    # Create rotation quaternion from [0,0,1] to cartesian
-    v1 = np.array([0, 0, 1], dtype=np.float64)
-    v2 = cartesian
-    
-    # Normalize vectors
-    v1 = v1 / np.linalg.norm(v1)
-    v2 = v2 / np.linalg.norm(v2)
-    
-    # Calculate rotation axis and angle
-    cross = np.cross(v1, v2)
-    dot = np.dot(v1, v2)
-    
-    # Handle special cases
-    if np.allclose(cross, 0):
-        if dot > 0:
-            return np.array([0, 0, 0, 1], dtype=np.float64)  # Identity quaternion
-        else:
-            return np.array([1, 0, 0, 0], dtype=np.float64)  # 180-degree rotation around x-axis
-    
-    # Normalize cross product
-    cross = cross / np.linalg.norm(cross)
-    
-    # Calculate quaternion components
-    angle = math.acos(dot)
-    s = math.sin(angle / 2)
-    return np.array([cross[0] * s, cross[1] * s, cross[2] * s, math.cos(angle / 2)], dtype=np.float64) 
+    return rotation_to(np.array([0, 0, 1], dtype=np.float64), cartesian) 
