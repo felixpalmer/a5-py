@@ -136,6 +136,60 @@ def quat_to_matrix(quat: np.ndarray) -> np.ndarray:
         [z, -y,  x,  w]
     ])
 
+def conjugate(q: np.ndarray) -> np.ndarray:
+    """
+    Calculate the conjugate of a quaternion.
+    
+    Args:
+        q: The quaternion [x, y, z, w]
+        
+    Returns:
+        The conjugate quaternion [-x, -y, -z, w]
+    """
+    return np.array([-q[0], -q[1], -q[2], q[3]])
+
+def transform_quat(a: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """
+    Transform a vector by a quaternion.
+    
+    Args:
+        a: The vector to transform [x, y, z]
+        q: The quaternion [x, y, z, w]
+        
+    Returns:
+        The transformed vector [x, y, z]
+    """
+    qx, qy, qz, qw = q
+    x, y, z = a
+
+    # Calculate cross product q × a
+    uvx = qy * z - qz * y
+    uvy = qz * x - qx * z
+    uvz = qx * y - qy * x
+
+    # Calculate cross product q × (q × a)
+    uuvx = qy * uvz - qz * uvy
+    uuvy = qz * uvx - qx * uvz
+    uuvz = qx * uvy - qy * uvx
+
+    # Scale uv by 2 * w
+    w2 = qw * 2
+    uvx *= w2
+    uvy *= w2
+    uvz *= w2
+
+    # Scale uuv by 2
+    uuvx *= 2
+    uuvy *= 2
+    uuvz *= 2
+
+    # Add all components
+    return np.array([
+        x + uvx + uuvx,
+        y + uvy + uuvy,
+        z + uvz + uuvz
+    ])
+
 def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> FaceTransform:
     """
     Move a point defined in the coordinate system of one dodecahedron face to the coordinate system of another face.
@@ -148,18 +202,16 @@ def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> F
     Returns:
         FaceTransform containing the new point and the quaternion representing the transform
     """
-    # Convert quaternions to matrices
-    from_quat_matrix = quat_to_matrix(from_origin.quat.flatten())
-    to_quat_matrix = quat_to_matrix(to_origin.quat.flatten())
-    
-    # Calculate inverse using matrix form
-    inverse_quat = np.linalg.inv(from_quat_matrix)
+    # Get inverse quaternion
+    from_quat = from_origin.quat.flatten()
+    inverse_quat = conjugate(from_quat)
+
     to_axis = to_cartesian(to_origin.axis)
 
     # Transform destination axis into face space
-    local_to_axis = np.dot(inverse_quat, np.append(to_axis, 0))[:3]  # Take first 3 components
+    local_to_axis = transform_quat(to_axis, inverse_quat)
 
-    # Calculate the direction vector in the source face's coordinate system
+    # Flatten axis to XY plane to obtain direction, scale to get distance to new origin
     direction = np.array([local_to_axis[0], local_to_axis[1]], dtype=np.float64)
     direction = direction / np.linalg.norm(direction)
     direction *= 2 * distance_to_edge
@@ -167,21 +219,12 @@ def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> F
     # Move point to be relative to new origin
     offset_point = point - direction
 
-    # Transform the offset point to the target face's coordinate system
-    # First, convert to homogeneous coordinates (4D)
-    point_homogeneous = np.append(offset_point, [0, 1])  # [x, y, 0, 1]
-    
-    # Apply the transformation
-    transformed_point = np.dot(to_quat_matrix, point_homogeneous)[:2]
-
     # Construct relative transform from old origin to new origin
-    # Create rotation from UP to local_to_axis
     interface_quat = quat_from_spherical((np.arctan2(local_to_axis[1], local_to_axis[0]), 
                                         np.arccos(local_to_axis[2])))
-    # Multiply with from_origin's quaternion
     interface_quat = np.dot(from_origin.quat.flatten(), interface_quat)
 
-    return FaceTransform(point=transformed_point, quat=interface_quat)
+    return FaceTransform(point=offset_point, quat=interface_quat)
 
 def find_nearest_origin(point: Spherical) -> Origin:
     """
