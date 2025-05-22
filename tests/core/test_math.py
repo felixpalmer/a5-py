@@ -5,7 +5,7 @@ Tests for a5.core.math module
 import pytest
 import numpy as np
 from typing import cast
-from a5.core.a5_math import (
+from a5.core.coordinate_transforms import (
     deg_to_rad,
     rad_to_deg,
     to_cartesian,
@@ -13,7 +13,7 @@ from a5.core.a5_math import (
     from_lon_lat,
     to_lon_lat,
 )
-from a5.core.a5_types import Degrees, Radians, Spherical, LonLat
+from a5.core.coordinate_systems import Degrees, Radians, Spherical, LonLat
 
 def test_angle_conversions():
     """Test degree to radian conversions and vice versa."""

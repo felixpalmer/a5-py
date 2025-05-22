@@ -6,7 +6,7 @@ Copyright (c) A5 contributors
 
 import math
 from typing import cast
-from .a5_types import Radians, Polar
+from .coordinate_systems import Radians, Polar
 from .constants import distance_to_edge, PI_OVER_5, TWO_PI_OVER_5, WARP_FACTOR
 
 def normalize_gamma(gamma: Radians) -> Radians:
