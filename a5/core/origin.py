@@ -190,6 +190,58 @@ def transform_quat(a: np.ndarray, q: np.ndarray) -> np.ndarray:
         z + uvz + uuvz
     ])
 
+def set_axis_angle(axis: np.ndarray, rad: float) -> np.ndarray:
+    """
+    Sets a quaternion from the given angle and rotation axis.
+    
+    Args:
+        axis: The axis around which to rotate [x, y, z]
+        rad: The angle in radians
+        
+    Returns:
+        The quaternion [x, y, z, w]
+    """
+    rad = rad * 0.5
+    s = np.sin(rad)
+    return np.array([
+        s * axis[0],
+        s * axis[1],
+        s * axis[2],
+        np.cos(rad)
+    ])
+
+def rotation_to(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    Sets a quaternion to represent the shortest rotation from one vector to another.
+    Both vectors are assumed to be unit length.
+    
+    Args:
+        a: The initial vector [x, y, z]
+        b: The destination vector [x, y, z]
+        
+    Returns:
+        The quaternion [x, y, z, w]
+    """
+    dot = np.dot(a, b)
+    
+    if dot < -0.999999:
+        # Vectors are nearly opposite, use x-axis as reference
+        tmpvec = np.cross(np.array([1, 0, 0]), a)
+        if np.linalg.norm(tmpvec) < 0.000001:
+            # If x-axis is parallel to a, use y-axis
+            tmpvec = np.cross(np.array([0, 1, 0]), a)
+        tmpvec = tmpvec / np.linalg.norm(tmpvec)
+        return set_axis_angle(tmpvec, np.pi)
+    elif dot > 0.999999:
+        # Vectors are nearly parallel, return identity quaternion
+        return np.array([0, 0, 0, 1])
+    else:
+        # Normal case
+        tmpvec = np.cross(a, b)
+        out = np.array([tmpvec[0], tmpvec[1], tmpvec[2], 1 + dot])
+        # Normalize
+        return out / np.linalg.norm(out)
+
 def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> FaceTransform:
     """
     Move a point defined in the coordinate system of one dodecahedron face to the coordinate system of another face.
@@ -220,8 +272,7 @@ def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> F
     offset_point = point - direction
 
     # Construct relative transform from old origin to new origin
-    interface_quat = quat_from_spherical((np.arctan2(local_to_axis[1], local_to_axis[0]), 
-                                        np.arccos(local_to_axis[2])))
+    interface_quat = rotation_to(UP, local_to_axis)
     interface_quat = np.dot(from_origin.quat.flatten(), interface_quat)
 
     return FaceTransform(point=offset_point, quat=interface_quat)
