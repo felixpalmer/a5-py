@@ -8,11 +8,7 @@ import numpy as np
 from typing import List, cast
 from .coordinate_systems import Degrees, Face, Vec2
 from .constants import distance_to_edge, PI_OVER_10, PI_OVER_5
-
-class PentagonShape:
-    """A pentagon shape defined by its vertices."""
-    def __init__(self, vertices: List[Face]):
-        self.vertices = vertices
+from .utils import PentagonShape
 
 # Pentagon vertex angles
 A = cast(Degrees, 72.0)
