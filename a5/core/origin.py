@@ -7,20 +7,14 @@ Copyright (c) A5 contributors
 import numpy as np
 from typing import List, Tuple, NamedTuple
 from .coordinate_transforms import to_cartesian, quat_from_spherical
-from .coordinate_systems import Radians, Spherical, Cartesian, Face
+from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
 from .quat import conjugate, transform_quat, rotation_to
+from .utils import Origin, origins
 
 UP = np.array([0, 0, 1], dtype=np.float64)
 
-class Origin(NamedTuple):
-    id: int
-    axis: Spherical
-    quat: np.ndarray
-    angle: Radians
-    orientation: List[Orientation]
-    first_quintant: int
 
 class FaceTransform(NamedTuple):
     point: Face
@@ -53,7 +47,6 @@ QUINTANT_FIRST = [4, 2, 3, 2, 0, 4, 3, 2, 2, 0, 3, 0]
 # Placements of dodecahedron faces along the Hilbert curve
 ORIGIN_ORDER = [0, 1, 2, 4, 3, 5, 7, 8, 6, 11, 10, 9]
 
-origins: List[Origin] = []
 
 def generate_origins() -> None:
     """Generate all origin points for the dodecahedron faces."""

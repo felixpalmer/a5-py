@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from a5.core.dodecahedron import project_dodecahedron, unproject_dodecahedron
-from a5.core.origin import origins 
+from a5.core.utils import origins 
 from a5.core.coordinate_systems import Polar
 from pathlib import Path
 

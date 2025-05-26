@@ -2,15 +2,27 @@
 # Copyright (c) A5 contributors
 
 import numpy as np
-from typing import List, Tuple, Optional, TypedDict
-from .origin import Origin
+from typing import List, Tuple, Optional, TypedDict,NamedTuple
 from .triangle import Triangle
-from .coordinate_systems import Degrees, LonLat, Face  
+from .coordinate_systems import Radians,LonLat,Face, Spherical
+from .hilbert import Orientation
+from dataclasses import dataclass
 
 vec2 = np.array
 vec3 = np.array
 mat2 = np.ndarray
 mat2d = np.ndarray
+
+class Origin(NamedTuple):
+    id: int
+    axis: Spherical
+    quat: np.ndarray
+    angle: Radians
+    orientation: List[Orientation]
+    first_quintant: int
+
+origins: List[Origin] = []
+
 
 Pentagon = List[Face]
 Contour = List[LonLat]
@@ -111,12 +123,18 @@ class PentagonShape:
         return normalized
 
 
-class A5Cell(TypedDict):
+# class A5Cell(TypedDict):
+#     origin: Origin
+#     segment: int
+#     S: int
+#     resolution: int
+
+@dataclass
+class A5Cell:
     origin: Origin
     segment: int
     S: int
     resolution: int
-
 
 def triangle_area(v1: vec3, v2: vec3, v3: vec3) -> float:
     edge1 = v2 - v1
