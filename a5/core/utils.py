@@ -126,12 +126,6 @@ class A5Cell(TypedDict):
     S: int
     resolution: int
 
-# @dataclass
-# class A5Cell:
-#     origin: Origin
-#     segment: int
-#     S: int
-#     resolution: int
 
 def triangle_area(v1: vec3, v2: vec3, v3: vec3) -> float:
     edge1 = v2 - v1
