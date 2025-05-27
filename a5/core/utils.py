@@ -21,9 +21,6 @@ class Origin(NamedTuple):
     orientation: List[Orientation]
     first_quintant: int
 
-origins: List[Origin] = []
-
-
 Pentagon = List[Face]
 Contour = List[LonLat]
 
@@ -123,18 +120,18 @@ class PentagonShape:
         return normalized
 
 
-# class A5Cell(TypedDict):
-#     origin: Origin
-#     segment: int
-#     S: int
-#     resolution: int
-
-@dataclass
-class A5Cell:
+class A5Cell(TypedDict):
     origin: Origin
     segment: int
     S: int
     resolution: int
+
+# @dataclass
+# class A5Cell:
+#     origin: Origin
+#     segment: int
+#     S: int
+#     resolution: int
 
 def triangle_area(v1: vec3, v2: vec3, v3: vec3) -> float:
     edge1 = v2 - v1

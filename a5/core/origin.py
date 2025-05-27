@@ -11,9 +11,10 @@ from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
 from .quat import conjugate, transform_quat, rotation_to
-from .utils import Origin, origins
+from .utils import Origin
 
 UP = np.array([0, 0, 1], dtype=np.float64)
+origins: List[Origin] = []
 
 
 class FaceTransform(NamedTuple):

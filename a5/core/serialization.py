@@ -2,7 +2,8 @@
 # Copyright (c) A5 contributors
 
 from typing import List, Optional
-from .utils import A5Cell, Origin, origins
+from .utils import A5Cell, Origin
+from .origin import origins
 
 FIRST_HILBERT_RESOLUTION = 3
 MAX_RESOLUTION = 31
@@ -63,10 +64,10 @@ def deserialize(index: int) -> A5Cell:
 
 
 def serialize(cell: A5Cell) -> int:
-    origin = cell.origin
-    segment = cell.segment
-    S = cell.S
-    resolution = cell.resolution
+    origin = cell["origin"]
+    segment = cell["segment"]
+    S = cell["S"]
+    resolution = cell["resolution"]
 
     if resolution > MAX_RESOLUTION:
         raise ValueError(f"Resolution ({resolution}) is too large")
@@ -106,7 +107,7 @@ def serialize(cell: A5Cell) -> int:
 
 def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List[int]:
     cell = deserialize(index)
-    origin, segment, S, current_resolution = cell.origin, cell.segment, cell.S, cell.resolution
+    origin, segment, S, current_resolution = cell["origin"], cell["segment"], cell["S"], cell["resolution"]
     new_resolution = child_resolution if child_resolution is not None else current_resolution + 1
 
     if new_resolution <= current_resolution:
@@ -140,10 +141,7 @@ def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List
 
 def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
     cell = deserialize(index)
-    origin, segment, S, current_resolution = cell.origin, cell.segment, cell.S, cell.resolution
-
-    if current_resolution < 0:
-        raise ValueError(f"Deserialized resolution is negative: {current_resolution}")
+    origin, segment, S, current_resolution = cell["origin"], cell["segment"], cell["S"], cell["resolution"]
 
     new_resolution = parent_resolution if parent_resolution is not None else current_resolution - 1
 
@@ -155,11 +153,11 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
             f"Target resolution ({new_resolution}) must be less than current resolution ({current_resolution})"
         )
 
-    resolution_diff = current_resolution - new_resolution
+    shifted_S = S >> (2 * (current_resolution - new_resolution))
 
-    # Extra protection against negative shift
-    if resolution_diff < 0:
-        raise ValueError(f"Resolution diff ({resolution_diff}) is negative")
-
-    shifted_S = S >> (2 * resolution_diff)
-    return serialize(A5Cell(origin=origin, segment=segment, S=shifted_S, resolution=new_resolution))
+    return serialize({
+        'origin': origin,
+        'segment': segment,
+        'S': shifted_S,
+        'resolution': new_resolution
+    })  

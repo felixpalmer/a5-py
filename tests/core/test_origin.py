@@ -14,7 +14,7 @@ from a5.core.origin import (
 from a5.core.constants import distance_to_edge, PI_OVER_5, TWO_PI_OVER_5
 from a5.core.coordinate_systems import Face, Radians, Spherical
 from a5.core.coordinate_transforms import to_cartesian
-from a5.core.utils import origins
+from a5.core.origin import origins
 
 def test_origin_constants():
     """Test that we have 12 origins for dodecahedron faces."""

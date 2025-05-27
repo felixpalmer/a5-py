@@ -10,12 +10,11 @@ from a5.core.serialization import (
     cell_to_parent,
     cell_to_children,
 )
-from a5.core.utils import origins, A5Cell
+from a5.core.utils import A5Cell
+from a5.core.origin import origins
 import json
 import random
 from pathlib import Path
-import numpy as np
-from types import SimpleNamespace
 import copy
 
 # Equivalent RESOLUTION_MASKS as list of strings
@@ -75,15 +74,6 @@ def test_removal_mask():
     expected = int(f"0b{origin_segment_bits}{remaining_bits}", 2)
     assert REMOVAL_MASK == expected
 
-def test_removal_mask_is_correct():
-    origin_segment_bits = '0' * 6
-    remaining_bits = '1' * 58
-    expected = int(f'0b{origin_segment_bits}{remaining_bits}', 2)
-    
-    # Example value for REMOVAL_MASK; replace with your actual constant
-    REMOVAL_MASK = int(f'0b{origin_segment_bits}{remaining_bits}', 2)
-    
-    assert REMOVAL_MASK == expected
 
 @pytest.mark.parametrize("i", range(len(RESOLUTION_MASKS)))
 def test_encodes_resolution_correctly(i):
@@ -176,40 +166,6 @@ def test_hilbert_to_non_hilbert():
     assert len(children) == 4
 
 
-# def test_hierarchy_chain():
-#     # Test a chain of resolutions from 0 to 4
-#     resolutions = [0, 1, 2, 3, 4]
-#     cells = [
-#         serialize(A5Cell(origin = origin0,segment = 0,S = 0,resolution= res))
-#         for res in resolutions
-#     ]
-#     # Test parent relationships
-#     for i in range(1, len(cells)):
-#         assert cell_to_parent(cells[i]) == cells[i - 1]
-    
-#     # Test children relationships 
-#     for i in range(len(cells) - 1):
-#         children = cell_to_children(cells[i])
-#         assert cells[i + 1] in children
-        
-# def test_base_cell_division_counts():
-#     # Start with the base cell at resolution 0
-#     base_cell = serialize(A5Cell(origin = origin0,segment = 0,S = 0,resolution= 0))
-#     current_cells = [base_cell]
-#     expected_counts = [1, 12, 60, 240, 960]  # 1, 12, 12*5, 12*5*4, 12*5*4*4
-
-#     # Test each resolution level up to 4
-#     for resolution in range(4):  
-#         all_children = []
-#         # Get all children of current cells
-#         for cell in current_cells:
-#             all_children.extend(cell_to_children(cell))
-        
-#         # Verify the total number of cells matches expected
-#         assert len(all_children) == expected_counts[resolution + 1]
-#         # Update current cells for next iteration
-#         current_cells = all_children
-
 def test_low_resolution_hierarchy_chain():
     resolutions = [0, 1, 2, 3, 4]
     cells = [
@@ -246,7 +202,3 @@ def random_id():
     S_bits = format(S, f'0{2 * resolution}b')
     id_bits = f'{origin_segment}{S_bits}10'.ljust(64, '0')
     return hex(int(id_bits, 2))[2:].rjust(16, '0')
-
-# Example usage:
-for _ in range(100):
-    print(f'"{random_id()}",')
