@@ -66,7 +66,7 @@ def to_cartesian(spherical: Spherical) -> Cartesian:
     z = math.cos(phi)
     return cast(Cartesian, np.array([x, y, z], dtype=np.float64))
 
-def from_lon_lat(lon_lat: LonLat) -> Spherical:
+def from_lonlat(lon_lat: LonLat) -> Spherical:
     """Convert longitude/latitude to spherical coordinates.
     
     Args:
@@ -82,7 +82,7 @@ def from_lon_lat(lon_lat: LonLat) -> Spherical:
     phi = deg_to_rad(cast(Degrees, 90 - latitude))
     return cast(Spherical, (theta, phi))
 
-def to_lon_lat(spherical: Spherical) -> LonLat:
+def to_lonlat(spherical: Spherical) -> LonLat:
     """Convert spherical coordinates to longitude/latitude.
     
     Args:
