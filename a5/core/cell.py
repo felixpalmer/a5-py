@@ -145,16 +145,7 @@ def cell_to_lonlat(cell_id: int) -> LonLat:
     """
     cell = deserialize(cell_id)
     pentagon = _get_pentagon(cell)
-    # Ensure quaternion is properly handled
-    origin = Origin(
-        id=cell["origin"].id,
-        axis=cell["origin"].axis,
-        quat=cell["origin"].quat,
-        angle=cell["origin"].angle,
-        orientation=cell["origin"].orientation,
-        first_quintant=cell["origin"].first_quintant
-    )
-    lon_lat = project_point(pentagon.get_center(), origin)
+    lon_lat = project_point(pentagon.get_center(), cell["origin"])
     return PentagonShape.normalize_longitudes([lon_lat])[0]
 
 def cell_to_boundary(cell_id: int) -> List[LonLat]:
@@ -169,16 +160,7 @@ def cell_to_boundary(cell_id: int) -> List[LonLat]:
     """
     cell = deserialize(cell_id)
     pentagon = _get_pentagon(cell)
-    # Ensure quaternion is properly handled
-    origin = Origin(
-        id=cell["origin"].id,
-        axis=cell["origin"].axis,
-        quat=cell["origin"].quat,
-        angle=cell["origin"].angle,
-        orientation=cell["origin"].orientation,
-        first_quintant=cell["origin"].first_quintant
-    )
-    return project_pentagon(pentagon, origin)
+    return project_pentagon(pentagon, cell["origin"])
 
 def a5cell_contains_point(cell: A5Cell, point: LonLat) -> bool:
     """
