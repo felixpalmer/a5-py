@@ -4,14 +4,14 @@ Tests for a5.core.math module
 
 import pytest
 import numpy as np
-from typing import cast
+from typing import cast, Tuple
 from a5.core.coordinate_transforms import (
     deg_to_rad,
     rad_to_deg,
     to_cartesian,
     to_spherical,
-    from_lon_lat,
-    to_lon_lat,
+    from_lonlat,
+    to_lonlat,
 )
 from a5.core.coordinate_systems import Degrees, Radians, Spherical, LonLat
 
@@ -60,17 +60,17 @@ def test_cartesian_to_spherical():
 def test_lonlat_to_spherical():
     """Test conversion from longitude/latitude to spherical coordinates."""
     # Test Greenwich equator
-    greenwich = from_lon_lat(cast(LonLat, (0.0, 0.0)))
+    greenwich = from_lonlat(cast(LonLat, (0.0, 0.0)))
     # Match OFFSET_LON: 93
     assert greenwich[0] == pytest.approx(deg_to_rad(cast(Degrees, 93.0)))
     assert greenwich[1] == pytest.approx(np.pi/2)  # 90° colatitude = equator
 
     # Test north pole
-    north_pole = from_lon_lat(cast(LonLat, (0.0, 90.0)))
+    north_pole = from_lonlat(cast(LonLat, (0.0, 90.0)))
     assert north_pole[1] == pytest.approx(0.0)  # 0° colatitude = north pole
 
     # Test south pole
-    south_pole = from_lon_lat(cast(LonLat, (0.0, -90.0)))
+    south_pole = from_lonlat(cast(LonLat, (0.0, -90.0)))
     assert south_pole[1] == pytest.approx(np.pi)  # 180° colatitude = south pole
 
 def test_spherical_to_lonlat():
@@ -85,8 +85,8 @@ def test_spherical_to_lonlat():
     ]
 
     for lon, lat in test_points:
-        spherical = from_lon_lat(cast(LonLat, (lon, lat)))
-        new_lon, new_lat = to_lon_lat(spherical)
+        spherical = from_lonlat(cast(LonLat, (lon, lat)))
+        new_lon, new_lat = to_lonlat(spherical)
         
         assert new_lon == pytest.approx(lon)
         assert new_lat == pytest.approx(lat) 
