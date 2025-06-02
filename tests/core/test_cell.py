@@ -1,9 +1,37 @@
 import pytest
 import numpy as np
+import json
 from a5.core.cell import lonlat_to_cell, cell_to_lonlat, cell_to_boundary, a5cell_contains_point
 from a5.core.coordinate_systems import LonLat
 from a5.core.utils import A5Cell
 from a5.core.serialization import deserialize, MAX_RESOLUTION
+
+def boundary_to_geojson(boundary: list[LonLat], resolution: int) -> dict:
+    """Convert boundary points to GeoJSON Feature Collection."""
+    # Create coordinates list with first point appended at the end to close the polygon
+    coordinates = [[lon, lat] for lon, lat in boundary]
+    if coordinates:  # Only append if we have points
+        coordinates.append(coordinates[0])  # Close the polygon
+    
+    # Create a polygon feature
+    feature = {
+        "type": "Feature",
+        "properties": {
+            "resolution": resolution
+        },
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [coordinates]  # Wrap in list as per GeoJSON spec
+        }
+    }
+    
+    # Create a feature collection
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [feature]
+    }
+    
+    return feature_collection
 
 def test_cell_boundary_contains_point():
     # Test coordinates for Ho Chi Minh City
@@ -22,6 +50,11 @@ def test_cell_boundary_contains_point():
             
             # Get cell boundary
             boundary = cell_to_boundary(cell_id)
+            
+            # Convert boundary to GeoJSON and print it
+            geojson = boundary_to_geojson(boundary, resolution)
+            print(f"\nResolution {resolution} GeoJSON:")
+            print(json.dumps(geojson))
             
             # Verify the original point is contained within the cell
             cell = deserialize(cell_id)
@@ -44,10 +77,6 @@ def test_cell_boundary_contains_point():
                     if not (-90 <= lat <= 90):
                         resolution_failures.append(f"Boundary point {i} has invalid latitude: {lat}")
             
-            # Add boundary information for debugging
-            if resolution_failures:
-                resolution_failures.append(f"Boundary points: {boundary}")
-                        
         except Exception as e:
             resolution_failures.append(f"Unexpected error: {str(e)}")
             if hasattr(e, '__traceback__'):
