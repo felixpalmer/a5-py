@@ -1,12 +1,13 @@
 import pytest
 import numpy as np
 import json
+from typing import List, Dict
 from a5.core.cell import lonlat_to_cell, cell_to_lonlat, cell_to_boundary, a5cell_contains_point
 from a5.core.coordinate_systems import LonLat
 from a5.core.utils import A5Cell
 from a5.core.serialization import deserialize, MAX_RESOLUTION
 
-def boundary_to_geojson(boundary: list[LonLat], resolution: int) -> dict:
+def boundary_to_geojson(boundary: List[LonLat], resolution: int) -> Dict:
     """Convert boundary points to GeoJSON Feature Collection."""
     # Create coordinates list with first point appended at the end to close the polygon
     coordinates = [[lon, lat] for lon, lat in boundary]
