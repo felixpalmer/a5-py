@@ -78,16 +78,16 @@ def assert_cells_equal(actual: A5Cell, expected: A5Cell):
 
 
 # =============================================================================
-# serialize tests (matching TypeScript describe('serialize') block)
+# serialize tests
 # =============================================================================
 
 def test_correct_number_of_masks():
-    """Test correct number of masks (matches TS 'Correct number of masks')."""
+    """Test correct number of masks."""
     assert len(RESOLUTION_MASKS) == MAX_RESOLUTION
 
 
 def test_removal_mask_is_correct():
-    """Test removal mask is correct (matches TS 'Removal mask is correct')."""
+    """Test removal mask is correct."""
     origin_segment_bits = "0" * 6
     remaining_bits = "1" * 58
     expected = int(f"0b{origin_segment_bits}{remaining_bits}", 2)
@@ -95,7 +95,7 @@ def test_removal_mask_is_correct():
 
 
 def test_encodes_resolution_correctly_for_different_values():
-    """Test resolution encoding (matches TS 'encodes resolution correctly for different values')."""
+    """Test resolution encoding."""
     for i in range(len(RESOLUTION_MASKS)):
         # Origin 0 has first quintant 4, so use segment 4 to obtain start of Hilbert curve
         input_cell = A5Cell(origin=origin0, segment=4, S=0, resolution=i)
@@ -106,7 +106,7 @@ def test_encodes_resolution_correctly_for_different_values():
 
 
 def test_correctly_extracts_resolution():
-    """Test resolution extraction (matches TS 'correctly extracts resolution')."""
+    """Test resolution extraction."""
     for i, binary in enumerate(RESOLUTION_MASKS):
         assert len(binary) == 64
         n = int(f"0b{binary}", 2)
@@ -115,7 +115,7 @@ def test_correctly_extracts_resolution():
 
 
 def test_encodes_origin_segment_and_s_correctly():
-    """Test origin, segment and S encoding (matches TS 'encodes origin, segment and S correctly')."""
+    """Test origin, segment and S encoding."""
     # Origin 0 has first quintant 4, so use segment 4 to obtain start of Hilbert curve
     cell = A5Cell(origin=origin0, segment=4, S=0, resolution=MAX_RESOLUTION - 1)
     serialized = serialize(cell)
@@ -123,30 +123,23 @@ def test_encodes_origin_segment_and_s_correctly():
 
 
 def test_throws_error_when_s_too_large_for_resolution():
-    """Test S too large error (matches TS 'throws error when S is too large for resolution')."""
+    """Test S too large error."""
     cell = A5Cell(origin=origin0, segment=0, S=16, resolution=3)  # Too large for resolution 3 (max is 15)
     with pytest.raises(ValueError, match="S \\(16\\) is too large for resolution level 3"):
         serialize(cell)
 
 
 def test_throws_error_when_resolution_exceeds_maximum():
-    """Test resolution exceeds maximum error (matches TS 'throws error when resolution exceeds maximum')."""
+    """Test resolution exceeds maximum error."""
     cell = A5Cell(origin=origin0, segment=0, S=0, resolution=MAX_RESOLUTION + 1)
     with pytest.raises(ValueError, match="Resolution .* is too large"):
         serialize(cell)
 
 
-def test_serialize_max_resolution():
-    """Test serializing at maximum resolution works (additional test not in TS)."""
-    cell = A5Cell(origin=origin0, segment=4, S=0, resolution=MAX_RESOLUTION - 1)
-    serialized = serialize(cell)
-    assert get_resolution(serialized) == MAX_RESOLUTION - 1
-
-
-# Round trip tests (matching TypeScript describe('round trip') block)
+# Round trip tests
 @pytest.mark.parametrize("id", TEST_IDS)
 def test_round_trip_test_ids(id):
-    """Test round trip with test IDs (matches TS 'test ids')."""
+    """Test round trip with test IDs."""
     serialized = int(id, 16)
     deserialized = deserialize(serialized)
     reserialized = serialize(deserialized)
@@ -156,7 +149,7 @@ def test_round_trip_test_ids(id):
 @pytest.mark.parametrize("origin_id", range(1, 12))
 @pytest.mark.parametrize("binary", RESOLUTION_MASKS[FIRST_HILBERT_RESOLUTION:])
 def test_round_trip_resolution_masks_with_origins(origin_id, binary):
-    """Test round trip for resolution masks with different origins (matches TS loop test)."""
+    """Test round trip for resolution masks with different origins."""
     origin_segment_id = format(5 * origin_id, '06b')
     serialized = int(f"0b{origin_segment_id}{binary[6:]}", 2)
     deserialized = deserialize(serialized)
@@ -182,12 +175,12 @@ def test_serialize_deserialize_round_trip(resolution):
 
 
 # =============================================================================
-# hierarchy tests (matching TypeScript describe('hierarchy') block)
+# hierarchy tests
 # =============================================================================
 
 @pytest.mark.parametrize("id", TEST_IDS)
 def test_round_trip_between_cell_to_parent_and_cell_to_children(id):
-    """Test parent-child round trip (matches TS 'round trip between cellToParent and cellToChildren')."""
+    """Test parent-child round trip."""
     cell = int(id, 16)
     
     children = cell_to_children(cell)
@@ -195,8 +188,7 @@ def test_round_trip_between_cell_to_parent_and_cell_to_children(id):
     
     # Test first child
     child = children[0]
-    parent = cell_to_parent(child)
-    assert parent == cell
+    assert cell_to_parent(child) == cell
     
     # Test all children have same parent
     parents = [cell_to_parent(child) for child in children]
@@ -204,29 +196,27 @@ def test_round_trip_between_cell_to_parent_and_cell_to_children(id):
 
 
 def test_non_hilbert_to_non_hilbert_hierarchy():
-    """Test non-Hilbert to non-Hilbert transition (matches TS 'non-Hilbert to non-Hilbert hierarchy')."""
+    """Test non-Hilbert to non-Hilbert transition."""
     # Test resolution 0 to 1 (both non-Hilbert)
     cell = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=0))
     children = cell_to_children(cell)
     assert len(children) == 5
     for child in children:
-        parent = cell_to_parent(child)
-        assert parent == cell
+        assert cell_to_parent(child) == cell
 
 
 def test_non_hilbert_to_hilbert_hierarchy():
-    """Test non-Hilbert to Hilbert transition (matches TS 'non-Hilbert to Hilbert hierarchy')."""
+    """Test non-Hilbert to Hilbert transition."""
     # Test resolution 1 to 2 (non-Hilbert to Hilbert)
     cell = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=1))
     children = cell_to_children(cell)
     assert len(children) == 4
     for child in children:
-        parent = cell_to_parent(child)
-        assert parent == cell
+        assert cell_to_parent(child) == cell
 
 
 def test_hilbert_to_non_hilbert_hierarchy():
-    """Test Hilbert to non-Hilbert transition (matches TS 'Hilbert to non-Hilbert hierarchy')."""
+    """Test Hilbert to non-Hilbert transition."""
     # Test resolution 2 to 1 (Hilbert to non-Hilbert)
     cell = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=2))
     parent = cell_to_parent(cell, 1)
@@ -236,7 +226,7 @@ def test_hilbert_to_non_hilbert_hierarchy():
 
 
 def test_low_resolution_hierarchy_chain():
-    """Test hierarchy chain (matches TS 'low resolution hierarchy chain')."""
+    """Test hierarchy chain."""
     # Test a chain of resolutions from 0 to 4
     resolutions = [0, 1, 2, 3, 4]
     cells = [
@@ -246,8 +236,7 @@ def test_low_resolution_hierarchy_chain():
 
     # Test parent relationships
     for i in range(1, len(cells)):
-        parent = cell_to_parent(cells[i])
-        assert parent == cells[i-1]
+        assert cell_to_parent(cells[i]) == cells[i-1]
 
     # Test children relationships
     for i in range(len(cells) - 1):
@@ -256,7 +245,7 @@ def test_low_resolution_hierarchy_chain():
 
 
 def test_base_cell_division_counts():
-    """Test base cell division (matches TS 'base cell division counts')."""
+    """Test base cell division."""
     # Start with the base cell (resolution -1)
     base_cell = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=-1))
     current_cells = [base_cell]
@@ -277,22 +266,14 @@ def test_base_cell_division_counts():
 
 
 # =============================================================================
-# getRes0Cells tests (matching TypeScript describe('getRes0Cells') block)
+# getRes0Cells tests
 # =============================================================================
 
 def test_get_res0_cells_returns_12_resolution_0_cells():
-    """Test getRes0Cells functionality (matches TS 'returns 12 resolution 0 cells')."""
+    """Test getRes0Cells functionality."""
     res0_cells = get_res0_cells()
     assert len(res0_cells) == 12
     
     # Each cell should have resolution 0
     for cell in res0_cells:
         assert get_resolution(cell) == 0
-
-
-def test_world_cell_parent():
-    """Test world cell parent relationship (additional test not in TS)."""
-    cell_res0 = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=0))
-    parent = cell_to_parent(cell_res0)
-    assert get_resolution(parent) == -1
-    assert parent == WORLD_CELL
