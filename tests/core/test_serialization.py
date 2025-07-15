@@ -7,8 +7,10 @@ from a5.core.serialization import (
     MAX_RESOLUTION,
     REMOVAL_MASK,
     FIRST_HILBERT_RESOLUTION,
+    WORLD_CELL,
     cell_to_parent,
     cell_to_children,
+    get_res0_cells,
 )
 from a5.core.utils import A5Cell
 from a5.core.origin import origins
@@ -20,7 +22,6 @@ import copy
 # Equivalent RESOLUTION_MASKS as list of strings
 RESOLUTION_MASKS = [
     # Non-Hilbert resolutions
-    "0000000000000000000000000000000000000000000000000000000000000000",  # Globe
     "0000001000000000000000000000000000000000000000000000000000000000",  # Dodecahedron faces
     "0000000100000000000000000000000000000000000000000000000000000000",  # Quintants
     # Hilbert resolutions
@@ -77,7 +78,7 @@ def test_removal_mask():
 
 @pytest.mark.parametrize("i", range(len(RESOLUTION_MASKS)))
 def test_encodes_resolution_correctly(i):
-    input_cell = A5Cell(origin = origin0,segment = 4, S = 0, resolution= i)
+    input_cell = {"origin": origin0, "segment": 4, "S": 0, "resolution": i}
 
     serialized = serialize(input_cell)
     binary_str = bin(serialized)[2:].zfill(64)
@@ -90,20 +91,21 @@ def test_get_resolution(i, mask):
 
 
 def test_encode_fields():
-    cell = A5Cell(origin=origin0, segment=4, S=0, resolution=30)
+    # Origin 0 has first quintant 4, so use segment 4 to obtain start of Hilbert curve
+    cell = {"origin": origin0, "segment": 4, "S": 0, "resolution": MAX_RESOLUTION - 1}
     assert serialize(cell) == 0b10
 
 
 def test_serialize_too_large_S():
-    cell = A5Cell(origin = origin0,segment = 0,S = 16,resolution= 4) # Too large for resolution 2 (max is 15)
+    cell = {"origin": origin0, "segment": 0, "S": 16, "resolution": 3}  # Too large for resolution 3 (max is 15)
     
-    with pytest.raises(ValueError, match="S \\(16\\) is too large for resolution level 4"):
+    with pytest.raises(ValueError, match="S \\(16\\) is too large for resolution level 3"):
         serialize(cell)
 
 
 def test_serialize_too_large_resolution():
-    cell = A5Cell(origin = origin0,segment = 0,S = 0,resolution= 32) # MAX_RESOLUTION is 31   
-    with pytest.raises(ValueError, match="Resolution \\(32\\) is too large"):
+    cell = {"origin": origin0, "segment": 0, "S": 0, "resolution": 31}  # MAX_RESOLUTION is 30   
+    with pytest.raises(ValueError, match="Resolution \\(31\\) is too large"):
         serialize(cell)
 
 
@@ -140,8 +142,8 @@ def test_cell_hierarchy(id):
 
 
 def test_non_hilbert_to_non_hilbert():
-    # Test resolution 1 to 2 (both non-Hilbert)
-    cell = serialize(A5Cell(origin = origin0,segment = 0,S = 0,resolution= 1))        
+    # Test resolution 0 to 1 (both non-Hilbert)
+    cell = serialize({"origin": origin0, "segment": 0, "S": 0, "resolution": 0})        
     children = cell_to_children(cell)
     assert len(children) == 5
     for child in children:
@@ -149,8 +151,8 @@ def test_non_hilbert_to_non_hilbert():
 
 
 def test_non_hilbert_to_hilbert():
-    # Test resolution 2 to 3 (non-Hilbert to Hilbert)
-    cell = serialize(A5Cell(origin = origin0,segment = 0,S = 0,resolution= 2))            
+    # Test resolution 1 to 2 (non-Hilbert to Hilbert)
+    cell = serialize({"origin": origin0, "segment": 0, "S": 0, "resolution": 1})            
     children = cell_to_children(cell)
     assert len(children) == 4
     for child in children:
@@ -158,9 +160,9 @@ def test_non_hilbert_to_hilbert():
 
 
 def test_hilbert_to_non_hilbert():
-    # Test resolution 3 to 2 (Hilbert to non-Hilbert)
-    cell = serialize(A5Cell(origin = origin0,segment = 0,S = 0,resolution= 3))            
-    parent = cell_to_parent(cell)
+    # Test resolution 2 to 1 (Hilbert to non-Hilbert)
+    cell = serialize({"origin": origin0, "segment": 0, "S": 0, "resolution": 2})            
+    parent = cell_to_parent(cell, 1)
     children = cell_to_children(parent)
     assert cell in children
     assert len(children) == 4
@@ -169,7 +171,7 @@ def test_hilbert_to_non_hilbert():
 def test_low_resolution_hierarchy_chain():
     resolutions = [0, 1, 2, 3, 4]
     cells = [
-        serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=res))
+        serialize({"origin": origin0, "segment": 0, "S": 0, "resolution": res})
         for res in resolutions
     ]
 
@@ -184,16 +186,33 @@ def test_low_resolution_hierarchy_chain():
         assert cells[i + 1] in children
 
 def test_base_cell_division_counts():
-    base_cell = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=0))
+    # Start with the base cell (resolution -1)
+    base_cell = serialize({"origin": origin0, "segment": 0, "S": 0, "resolution": -1})
     current_cells = [base_cell]
-    expected_counts = [1, 12, 60, 240, 960]  # 1, 12, 12*5, 12*5*4, 12*5*4*4
+    expected_counts = [12, 60, 240, 960]  # 12, 12*5, 12*5*4, 12*5*4*4
 
-    for resolution in range(0, 4):
+    # Test each resolution level up to 4
+    for resolution in range(4):
+        # Get all children of current cells
         all_children = [
             child for cell in current_cells for child in cell_to_children(cell)
         ]
-        assert len(all_children) == expected_counts[resolution + 1]
+        
+        # Verify the total number of cells matches expected
+        assert len(all_children) == expected_counts[resolution]
+        
+        # Update current cells for next iteration
         current_cells = all_children
+
+def test_get_res0_cells():
+    """Test that get_res0_cells returns 12 resolution 0 cells."""
+    res0_cells = get_res0_cells()
+    assert len(res0_cells) == 12
+    
+    # Each cell should have resolution 0
+    for cell in res0_cells:
+        assert get_resolution(cell) == 0
+
 
 def random_id():
     origin_segment = format(random.randint(0, 59), '06b')
