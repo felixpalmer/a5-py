@@ -68,8 +68,8 @@ TRIANGLE = PentagonShape([u, v, w, w, w])  # TODO hacky, don't pretend this is p
 Basis vectors used to layout primitive unit
 """
 BASIS = np.array([
-    [v[0], v[1]],
-    [w[0], w[1]]
+    [v[0], w[0]],
+    [v[1], w[1]]
 ], dtype=np.float64)
 
 BASIS_INVERSE = np.linalg.inv(BASIS)

@@ -77,6 +77,9 @@ def get_face_vertices() -> PentagonShape:
     vertices = []
     for rotation in QUINTANT_ROTATIONS:
         vertices.append(np.dot(rotation, v))
+    
+    # Need to reverse to obtain correct winding order
+    vertices.reverse()
     return PentagonShape(vertices)
 
 def get_quintant(point: np.ndarray) -> int:

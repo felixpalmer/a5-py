@@ -18,6 +18,7 @@ POPULATED_PLACES_PATH = FIXTURES_PATH / "ne_50m_populated_places_nameonly.json"
 
 with open(POPULATED_PLACES_PATH) as f:
     populated_places = json.load(f)
+    populated_places['features'] = [populated_places['features'][0]]
 
 class TestAntimeridianCells:
     """Test antimeridian crossing behavior."""

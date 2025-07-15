@@ -114,9 +114,19 @@ class SphericalPolygonShape:
             VP = point - V
 
             # Normalize to obtain unit direction vectors
-            VP = VP / np.linalg.norm(VP)
-            VA = VA / np.linalg.norm(VA)
-            VB = VB / np.linalg.norm(VB)
+            norm_VP = np.linalg.norm(VP)
+            norm_VA = np.linalg.norm(VA)
+            norm_VB = np.linalg.norm(VB)
+            
+            # Handle case where point is identical to vertex (zero-length vector)
+            if norm_VP < 1e-14:
+                return 1.0  # Point is exactly on the vertex, so it's inside
+            if norm_VA < 1e-14 or norm_VB < 1e-14:
+                continue  # Skip degenerate edge
+                
+            VP = VP / norm_VP
+            VA = VA / norm_VA
+            VB = VB / norm_VB
 
             # Cross products will point away from the center of the sphere when
             # point P is within arc formed by VA and VB
