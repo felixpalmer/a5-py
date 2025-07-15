@@ -5,7 +5,7 @@ Copyright (c) A5 contributors
 """
 
 import math
-from typing import cast, Literal, TypedDict
+from typing import cast, Literal, TypedDict, Dict
 from .coordinate_systems import Radians
 
 # Golden ratio
@@ -26,6 +26,9 @@ distance_to_edge = PHI - 1
 # TODO cleaner derivation?
 distance_to_vertex = distance_to_edge / math.cos(PI_OVER_5)
 
+# Warp factor for beta scaling
+WARP_FACTOR = 0.5
+
 # Warp factor types and constants
 WarpType = Literal['high', 'low']
 
@@ -35,7 +38,7 @@ class WarpFactors(TypedDict):
     RHO_SCALE: float
     RHO_SCALE2: float
 
-WARP_FACTORS: dict[WarpType, WarpFactors] = {
+WARP_FACTORS: Dict[WarpType, WarpFactors] = {
     'high': {
         'BETA_SCALE': 0.5115918059668587,
         'RHO_SHIFT': 0.9461616498962347,
@@ -77,6 +80,7 @@ __all__ = [
     'face_edge_angle',
     'distance_to_edge',
     'distance_to_vertex',
+    'WARP_FACTOR',
     'WarpType',
     'WarpFactors',
     'WARP_FACTORS',
