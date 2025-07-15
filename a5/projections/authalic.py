@@ -1,5 +1,12 @@
-from .coordinate_systems import Radians
+"""
+A5
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) A5 contributors
+"""
+
 import numpy as np
+from typing import cast
+from ..core.coordinate_systems import Radians
 
 # Authalic conversion coefficients obtained from: https://arxiv.org/pdf/2212.05818
 # See: authalic_constants.py for the derivation of the coefficients
@@ -52,49 +59,56 @@ AUTHALIC_TO_GEODETIC = np.array([
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-def apply_coefficients(phi: Radians, C: np.ndarray) -> Radians:
+class AuthalicProjection:
     """
-    Applies coefficients using Clenshaw summation algorithm (order 6)
+    Authalic projection implementation that converts between geodetic and authalic latitudes.
+    """
     
-    Args:
-        phi: Angle in radians
-        C: Array of coefficients
+    def _apply_coefficients(self, phi: Radians, C: np.ndarray) -> Radians:
+        """
+        Applies coefficients using Clenshaw summation algorithm (order 6)
         
-    Returns:
-        Transformed angle in radians
-    """
-    sin_phi = np.sin(phi)
-    cos_phi = np.cos(phi)
-    X = 2 * (cos_phi - sin_phi) * (cos_phi + sin_phi)
-    
-    u0 = X * C[5] + C[4]
-    u1 = X * u0 + C[3]
-    u0 = X * u1 - u0 + C[2]
-    u1 = X * u0 - u1 + C[1]
-    u0 = X * u1 - u0 + C[0]
-    
-    return phi + 2 * sin_phi * cos_phi * u0
+        Args:
+            phi: Angle in radians
+            C: Array of coefficients
+            
+        Returns:
+            Transformed angle in radians
+        """
+        sin_phi = np.sin(phi)
+        cos_phi = np.cos(phi)
+        X = 2 * (cos_phi - sin_phi) * (cos_phi + sin_phi)
+        
+        u0 = X * C[5] + C[4]
+        u1 = X * u0 + C[3]
+        u0 = X * u1 - u0 + C[2]
+        u1 = X * u0 - u1 + C[1]
+        u0 = X * u1 - u0 + C[0]
+        
+        return cast(Radians, phi + 2 * sin_phi * cos_phi * u0)
 
-def geodetic_to_authalic(phi: Radians) -> Radians:
-    """
-    Convert geodetic latitude to authalic latitude
-    
-    Args:
-        phi: Geodetic latitude in radians
+    def forward(self, phi: Radians) -> Radians:
+        """
+        Convert geodetic latitude to authalic latitude
         
-    Returns:
-        Authalic latitude in radians
-    """
-    return apply_coefficients(phi, GEODETIC_TO_AUTHALIC)
+        Args:
+            phi: Geodetic latitude in radians
+            
+        Returns:
+            Authalic latitude in radians
+        """
+        return self._apply_coefficients(phi, GEODETIC_TO_AUTHALIC)
 
-def authalic_to_geodetic(phi: Radians) -> Radians:
-    """
-    Convert authalic latitude to geodetic latitude
-    
-    Args:
-        phi: Authalic latitude in radians
+    def inverse(self, phi: Radians) -> Radians:
+        """
+        Convert authalic latitude to geodetic latitude
         
-    Returns:
-        Geodetic latitude in radians
-    """
-    return apply_coefficients(phi, AUTHALIC_TO_GEODETIC) 
+        Args:
+            phi: Authalic latitude in radians
+            
+        Returns:
+            Geodetic latitude in radians
+        """
+        return self._apply_coefficients(phi, AUTHALIC_TO_GEODETIC)
+
+__all__ = ['AuthalicProjection'] 

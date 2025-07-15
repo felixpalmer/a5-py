@@ -13,6 +13,10 @@ from .coordinate_systems import (
 )
 from .quat import rotation_to
 from .pentagon import BASIS_INVERSE, BASIS
+from ..projections.authalic import AuthalicProjection
+
+# Create singleton instance like TypeScript
+authalic = AuthalicProjection()
 
 # Constants
 LONGITUDE_OFFSET = cast(Degrees, 93.0)  # degrees
@@ -78,7 +82,10 @@ def from_lonlat(lon_lat: LonLat) -> Spherical:
     """
     longitude, latitude = lon_lat
     theta = deg_to_rad(cast(Degrees, longitude + LONGITUDE_OFFSET))
-    phi = deg_to_rad(cast(Degrees, 90 - latitude))
+    
+    geodetic_lat = deg_to_rad(cast(Degrees, latitude))
+    authalic_lat = authalic.forward(geodetic_lat)
+    phi = cast(Radians, math.pi / 2 - authalic_lat)
     return cast(Spherical, (theta, phi))
 
 def to_lonlat(spherical: Spherical) -> LonLat:
@@ -96,7 +103,10 @@ def to_lonlat(spherical: Spherical) -> LonLat:
     """
     theta, phi = spherical
     longitude = rad_to_deg(theta) - LONGITUDE_OFFSET
-    latitude = 90 - rad_to_deg(phi)
+
+    authalic_lat = cast(Radians, math.pi / 2 - phi)
+    geodetic_lat = authalic.inverse(authalic_lat)
+    latitude = rad_to_deg(geodetic_lat)
     return cast(LonLat, (longitude, latitude))
 
 def face_to_barycentric(p: Face, triangle: FaceTriangle) -> Barycentric:
