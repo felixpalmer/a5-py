@@ -18,7 +18,7 @@ POPULATED_PLACES_PATH = FIXTURES_PATH / "ne_50m_populated_places_nameonly.json"
 
 with open(POPULATED_PLACES_PATH) as f:
     populated_places = json.load(f)
-    populated_places['features'] = [populated_places['features'][0]]
+    populated_places['features'] = populated_places['features'][:20]
 
 class TestAntimeridianCells:
     """Test antimeridian crossing behavior."""
@@ -74,15 +74,15 @@ class TestCellBoundary:
                     # Get cell ID for the coordinates
                     cell_id = lonlat_to_cell(test_lonlat, resolution)
                     
-                    # Get cell boundary
-                    boundary = cell_to_boundary(cell_id)
-                    
-                    # Convert boundary to GeoJSON
-                    geojson = self._boundary_to_geojson(boundary, resolution, str(cell_id), test_lonlat)
-                    
                     # Verify the original point is contained within the cell
                     cell = deserialize(cell_id)
                     if not (a5cell_contains_point(cell, test_lonlat) > 0):
+                        # Get cell boundary
+                        boundary = cell_to_boundary(cell_id)
+                        
+                        # Convert boundary to GeoJSON
+                        geojson = self._boundary_to_geojson(boundary, resolution, str(cell_id), test_lonlat)
+                        
                         resolution_failures.append(f"Cell {cell_id} does not contain the original point {test_lonlat}")
                         resolution_failures.append(f"GeoJSON:\n {json.dumps(geojson)}")
                     
