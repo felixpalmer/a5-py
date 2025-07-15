@@ -4,8 +4,7 @@
 
 import numpy as np
 from typing import List, Tuple
-from .utils import Pentagon
-from ..geometry.pentagon import PentagonShape
+from ..geometry.pentagon import PentagonShape, Pentagon
 from .pentagon import a, BASIS, PENTAGON, TRIANGLE, v, V, w
 from .constants import TWO_PI, TWO_PI_OVER_5
 from .hilbert import NO, Anchor, YES
