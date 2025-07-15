@@ -1,5 +1,6 @@
 import numpy as np
-from .utils import PentagonShape, Origin
+from .utils import Origin
+from ..geometry.pentagon import PentagonShape
 from .origin import move_point_to_face, find_nearest_origin, is_nearest_origin
 from .dodecahedron import project_dodecahedron
 from .coordinate_transforms import to_lonlat, to_polar
