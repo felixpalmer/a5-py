@@ -51,4 +51,20 @@ Spherical = NewType('Spherical', Tuple[Radians, Radians])
 """
 Geographic longitude & latitude
 """
-LonLat = NewType('LonLat', Tuple[Degrees, Degrees]) 
+LonLat = NewType('LonLat', Tuple[Degrees, Degrees])
+
+# Barycentric coordinates
+"""
+Barycentric coordinates for a triangle (sum to 1)
+"""
+Barycentric = NewType('Barycentric', Tuple[float, float, float])
+
+"""
+Triangle defined by three face coordinates
+"""
+FaceTriangle = NewType('FaceTriangle', Tuple[Face, Face, Face])
+
+"""
+Triangle defined by three spherical coordinates
+"""
+SphericalTriangle = NewType('SphericalTriangle', Tuple[Cartesian, Cartesian, Cartesian]) 

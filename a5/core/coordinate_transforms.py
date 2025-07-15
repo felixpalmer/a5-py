@@ -6,12 +6,13 @@ Copyright (c) A5 contributors
 
 import math
 import numpy as np
-from typing import cast
+from typing import cast, List, Tuple
 from .coordinate_systems import (
     Degrees, Radians, Face, Polar, IJ, Cartesian, Spherical, LonLat,
-    Vec2, Vec3
+    Vec2, Vec3, Barycentric, FaceTriangle
 )
 from .quat import rotation_to
+from .pentagon import BASIS_INVERSE, BASIS
 
 # Constants
 LONGITUDE_OFFSET = cast(Degrees, 93.0)  # degrees
@@ -40,14 +41,12 @@ def to_face(polar: Polar) -> Face:
 def face_to_ij(face: Face) -> IJ:
     """Convert face coordinates to IJ coordinates."""
     # Note: BASIS_INVERSE needs to be defined in pentagon.py
-    from .pentagon import BASIS_INVERSE
     ij_array = np.dot(BASIS_INVERSE, face)
     return cast(IJ, ij_array)
 
 def ij_to_face(ij: IJ) -> Face:
     """Convert IJ coordinates to face coordinates."""
     # Note: BASIS needs to be defined in pentagon.py
-    from .pentagon import BASIS
     face_array = np.dot(BASIS, ij)
     return cast(Face, face_array)
 
@@ -92,13 +91,84 @@ def to_lonlat(spherical: Spherical) -> LonLat:
     
     Returns:
         Tuple of (longitude, latitude) in degrees
+            longitude: 0 to 360
+            latitude: -90 to 90
     """
     theta, phi = spherical
-    longitude = cast(Degrees, rad_to_deg(theta) - LONGITUDE_OFFSET)
-    latitude = cast(Degrees, 90 - rad_to_deg(phi))
+    longitude = rad_to_deg(theta) - LONGITUDE_OFFSET
+    latitude = 90 - rad_to_deg(phi)
     return cast(LonLat, (longitude, latitude))
 
-def quat_from_spherical(axis: Spherical) -> Vec3:
-    """Create a quaternion rotation from spherical coordinates."""
+def face_to_barycentric(p: Face, triangle: FaceTriangle) -> Barycentric:
+    """Convert face coordinates to barycentric coordinates."""
+    p1, p2, p3 = triangle
+    d31 = [p1[0] - p3[0], p1[1] - p3[1]]
+    d23 = [p3[0] - p2[0], p3[1] - p2[1]]
+    d3p = [p[0] - p3[0], p[1] - p3[1]]
+    
+    det = d23[0] * d31[1] - d23[1] * d31[0]
+    b0 = (d23[0] * d3p[1] - d23[1] * d3p[0]) / det
+    b1 = (d31[0] * d3p[1] - d31[1] * d3p[0]) / det
+    b2 = 1 - (b0 + b1)
+    return cast(Barycentric, (b0, b1, b2))
+
+def barycentric_to_face(b: Barycentric, triangle: FaceTriangle) -> Face:
+    """Convert barycentric coordinates to face coordinates."""
+    p1, p2, p3 = triangle
+    return cast(Face, np.array([
+        b[0] * p1[0] + b[1] * p2[0] + b[2] * p3[0],
+        b[0] * p1[1] + b[1] * p2[1] + b[2] * p3[1]
+    ], dtype=np.float64))
+
+Contour = List[LonLat]
+
+def normalize_longitudes(contour: Contour) -> Contour:
+    """Normalizes longitude values in a contour to handle antimeridian crossing.
+    
+    Args:
+        contour: Array of [longitude, latitude] points
+        
+    Returns:
+        Normalized contour with consistent longitude values
+    """
+    # Calculate center in Cartesian space to avoid poles & antimeridian crossing issues
+    points = [to_cartesian(from_lonlat(lonlat)) for lonlat in contour]
+    center = np.zeros(3, dtype=np.float64)
+    for point in points:
+        center += point
+    center /= np.linalg.norm(center)
+    center_lon, center_lat = to_lonlat(to_spherical(cast(Cartesian, center)))
+    
+    if center_lat > 89.99 or center_lat < -89.99:
+        # Near poles, use first point's longitude
+        center_lon = contour[0][0]
+
+    # Normalize center longitude to be in the range -180 to 180
+    center_lon = ((center_lon + 180) % 360 + 360) % 360 - 180
+
+    # Normalize each point relative to center
+    result = []
+    for point in contour:
+        longitude, latitude = point
+        
+        # Adjust longitude to be closer to center
+        while longitude - center_lon > 180:
+            longitude = cast(Degrees, longitude - 360)
+        while longitude - center_lon < -180:
+            longitude = cast(Degrees, longitude + 360)
+        result.append(cast(LonLat, (longitude, latitude)))
+    
+    return result 
+
+def quat_from_spherical(axis: Spherical) -> np.ndarray:
+    """
+    Creates a quaternion representing a rotation from the north pole to a given axis.
+    
+    Args:
+        axis: Spherical coordinate of axis to rotate to
+        
+    Returns:
+        quaternion [x, y, z, w]
+    """
     cartesian = to_cartesian(axis)
     return rotation_to(np.array([0, 0, 1], dtype=np.float64), cartesian) 
