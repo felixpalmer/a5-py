@@ -6,34 +6,37 @@ Copyright (c) A5 contributors
 
 import math
 from typing import cast
-from .coordinate_systems import Polar, Spherical
+from ..core.coordinate_systems import Polar, Spherical
 
-def project_gnomonic(polar: Polar) -> Spherical:
-    """Project polar coordinates to spherical coordinates using gnomonic projection.
-    
-    Args:
-        polar: Tuple of (rho, gamma) where:
-            rho: Radial distance from face center
-            gamma: Azimuthal angle in radians
-    
-    Returns:
-        Tuple of (theta, phi) in radians
+class GnomonicProjection:
     """
-    rho, gamma = polar
-    return cast(Spherical, (gamma, math.atan(rho)))
-
-def unproject_gnomonic(spherical: Spherical) -> Polar:
-    """Unproject spherical coordinates to polar coordinates using gnomonic projection.
-    
-    Args:
-        spherical: Tuple of (theta, phi) in radians
-    
-    Returns:
-        Tuple of (rho, gamma) where:
-            rho: Radial distance from face center
-            gamma: Azimuthal angle in radians
+    Gnomonic projection implementation that converts between spherical and polar coordinates.
     """
-    theta, phi = spherical
-    return cast(Polar, (math.tan(phi), theta))
+    
+    def forward(self, spherical: Spherical) -> Polar:
+        """
+        Projects spherical coordinates to polar coordinates using gnomonic projection
+        
+        Args:
+            spherical: Spherical coordinates [theta, phi]
+            
+        Returns:
+            Polar coordinates [rho, gamma]
+        """
+        theta, phi = spherical
+        return cast(Polar, (math.tan(phi), theta))
 
-__all__ = ['project_gnomonic', 'unproject_gnomonic'] 
+    def inverse(self, polar: Polar) -> Spherical:
+        """
+        Unprojects polar coordinates to spherical coordinates using gnomonic projection
+        
+        Args:
+            polar: Polar coordinates [rho, gamma]
+            
+        Returns:
+            Spherical coordinates [theta, phi]
+        """
+        rho, gamma = polar
+        return cast(Spherical, (gamma, math.atan(rho)))
+
+__all__ = ['GnomonicProjection'] 

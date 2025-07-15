@@ -1,67 +1,55 @@
-"""
-Tests for a5.core.gnomonic module
-"""
+# A5
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) A5 contributors
 
-import json
-import math
-import os
 import pytest
-from typing import cast
-from a5.core.gnomonic import project_gnomonic, unproject_gnomonic
+import json
+from pathlib import Path
+import numpy as np
+from a5.core.gnomonic import GnomonicProjection
 from a5.core.coordinate_systems import Polar, Spherical
 
-# Test values for basic projection tests
-TEST_VALUES = [
-    {"input": (0.001, 0.0), "expected": (0.0, 0.001)},
-    {"input": (0.001, 0.321), "expected": (0.321, 0.001)},
-    {"input": (1.0, math.pi), "expected": (math.pi, math.pi / 4)},
-    {"input": (0.5, 0.777), "expected": (0.777, math.atan(0.5))},
-]
+# Load test fixtures
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+with open(FIXTURES_DIR / "gnomonic.json") as f:
+    TEST_DATA = json.load(f)
 
-@pytest.mark.parametrize("test_case", TEST_VALUES)
-def test_project_gnomonic(test_case):
-    """Test projection from polar to spherical coordinates."""
-    input_coords = cast(Polar, test_case["input"])
-    expected = cast(Spherical, test_case["expected"])
-    result = project_gnomonic(input_coords)
-    
-    assert result[0] == pytest.approx(expected[0], rel=1e-4)
-    assert result[1] == pytest.approx(expected[1], rel=1e-4)
+def is_close_to_array(actual: tuple, expected: list, decimal: int = 6) -> bool:
+    """Helper function to check if arrays are close within tolerance"""
+    return np.allclose(actual, expected, rtol=10**(-decimal))
 
-@pytest.mark.parametrize("test_case", TEST_VALUES)
-def test_unproject_gnomonic(test_case):
-    """Test unprojection from spherical to polar coordinates."""
-    input_coords = cast(Polar, test_case["input"])
-    expected = cast(Spherical, test_case["expected"])
-    result = unproject_gnomonic(expected)
-    
-    assert result[0] == pytest.approx(input_coords[0], rel=1e-4)
-    assert result[1] == pytest.approx(input_coords[1], rel=1e-4)
+@pytest.fixture
+def gnomonic():
+    return GnomonicProjection()
 
-def test_round_trip():
-    """Test round trip conversion through projection and unprojection."""
-    polar = cast(Polar, (0.3, 0.4))
-    spherical = project_gnomonic(polar)
-    result = unproject_gnomonic(spherical)
-    
-    assert result[0] == pytest.approx(polar[0], rel=1e-4)
-    assert result[1] == pytest.approx(polar[1], rel=1e-4)
+def test_forward_projections(gnomonic):
+    """Test forward projections match expected values"""
+    for test_case in TEST_DATA["forward"]:
+        result = gnomonic.forward(tuple(test_case["input"]))
+        assert is_close_to_array(result, test_case["expected"]), \
+            f"Expected {test_case['expected']}, got {result}"
 
-def test_polar_coordinates_round_trip():
-    """Test round trip conversion for all test coordinates."""
-    # Get the directory containing this test file
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    json_path = os.path.join(test_dir, "test-polar-coordinates.json")
-    
-    # Load test coordinates from JSON file
-    with open(json_path, "r") as f:
-        test_coords = json.load(f)
-    
-    for coord in test_coords:
-        polar = cast(Polar, (coord["rho"], coord["beta"]))
-        spherical = project_gnomonic(polar)
-        result = unproject_gnomonic(spherical)
-        
-        # Check that result values are close to original
-        assert result[0] == pytest.approx(polar[0])
-        assert result[1] == pytest.approx(polar[1]) 
+def test_round_trip_forward_projections(gnomonic):
+    """Test forward projections can be reversed accurately"""
+    for test_case in TEST_DATA["forward"]:
+        spherical = tuple(test_case["input"])
+        polar = gnomonic.forward(spherical)
+        result = gnomonic.inverse(polar)
+        assert is_close_to_array(result, spherical), \
+            f"Expected {spherical}, got {result}"
+
+def test_inverse_projections(gnomonic):
+    """Test inverse projections match expected values"""
+    for test_case in TEST_DATA["inverse"]:
+        result = gnomonic.inverse(tuple(test_case["input"]))
+        assert is_close_to_array(result, test_case["expected"]), \
+            f"Expected {test_case['expected']}, got {result}"
+
+def test_round_trip_inverse_projections(gnomonic):
+    """Test inverse projections can be reversed accurately"""
+    for test_case in TEST_DATA["inverse"]:
+        polar = tuple(test_case["input"])
+        spherical = gnomonic.inverse(polar)
+        result = gnomonic.forward(spherical)
+        assert is_close_to_array(result, polar), \
+            f"Expected {polar}, got {result}" 
