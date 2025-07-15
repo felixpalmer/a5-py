@@ -6,7 +6,7 @@ import pytest
 import json
 from pathlib import Path
 import numpy as np
-from a5.core.gnomonic import GnomonicProjection
+from a5.projections.gnomonic import GnomonicProjection
 from a5.core.coordinate_systems import Polar, Spherical
 
 # Load test fixtures
