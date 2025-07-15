@@ -18,13 +18,15 @@ UP = np.array([0.0, 0.0, 1.0], dtype=np.float64)
 
 class SphericalPolygonShape:
     def __init__(self, vertices: SphericalPolygon):
-        self.vertices = vertices
-        if not self._is_winding_correct():
-            self.vertices.reverse()
+        # Convert all vertices to numpy arrays and ensure they're float64
+        self.vertices = [np.array(v, dtype=np.float64) for v in vertices]
+        # Make vertices immutable
+        self.vertices = tuple(self.vertices)
+        # self._is_winding_correct()  # Debug check only, don't correct
 
     def get_boundary(self, n_segments: int = 1, closed_ring: bool = True) -> SphericalPolygon:
         """
-        Returns a close boundary of the polygon, with n_segments points per edge
+        Returns a closed boundary of the polygon, with n_segments points per edge
         
         Args:
             n_segments: Number of points per edge
@@ -85,11 +87,8 @@ class SphericalPolygonShape:
 
         # Points A & B (vertex before and after)
         V = self.vertices[i].copy()
-        VA = self.vertices[j].copy()
-        VB = self.vertices[k].copy()
-        
-        VA = VA - V
-        VB = VB - V
+        VA = self.vertices[j].copy() - V  # Directly subtract to match JS vec3.sub
+        VB = self.vertices[k].copy() - V
         
         return V, VA, VB
 
@@ -148,9 +147,9 @@ class SphericalPolygonShape:
             Area of the spherical triangle in radians
         """
         # Calculate midpoints
-        mid_a = (v2 + v3) / 2
-        mid_b = (v3 + v1) / 2
-        mid_c = (v1 + v2) / 2
+        mid_a = (v2 + v3) * 0.5
+        mid_b = (v3 + v1) * 0.5
+        mid_c = (v1 + v2) * 0.5
         
         # Normalize midpoints
         mid_a = mid_a / np.linalg.norm(mid_a)
@@ -192,7 +191,7 @@ class SphericalPolygonShape:
             return self.get_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2])
 
         # Calculate center of polygon
-        center = np.zeros(3)
+        center = np.zeros(3, dtype=np.float64)
         for vertex in self.vertices:
             center += vertex
         center = center / np.linalg.norm(center)
@@ -210,6 +209,7 @@ class SphericalPolygonShape:
 
     def _is_winding_correct(self) -> bool:
         """Check if the polygon vertices are in the correct winding order"""
-        V, VA, VB = self.get_transformed_vertices(0)
-        cross = np.cross(VA, VB)
-        return np.dot(V, cross) >= 0 
+        if len(self.vertices) < 3:
+            return True
+        area = self.get_area()
+        return area > 0 
