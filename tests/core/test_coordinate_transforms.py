@@ -221,14 +221,14 @@ def test_normalize_longitudes():
 
     # Test contour crossing antimeridian
     contour = [
-        cast(LonLat, (170.0, 0.0)),
-        cast(LonLat, (175.0, 0.0)),
-        cast(LonLat, (-175.0, 0.0)),  # This should become 185
-        cast(LonLat, (-170.0, 0.0)),  # This should become 190
+        cast(LonLat, (170.0, 0.0)), # This should become -190
+        cast(LonLat, (175.0, 0.0)), # This should become -185
+        cast(LonLat, (-175.0, 0.0)),
+        cast(LonLat, (-170.0, 0.0)),
     ]
     normalized = normalize_longitudes(contour)
-    assert normalized[2][0] == pytest.approx(185.0)
-    assert normalized[3][0] == pytest.approx(190.0)
+    assert normalized[0][0] == pytest.approx(-190.0)
+    assert normalized[1][0] == pytest.approx(-185.0)
 
     # Test contour crossing antimeridian in opposite direction
     contour = [
