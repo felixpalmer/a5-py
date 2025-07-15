@@ -52,7 +52,7 @@ def get_pentagon_vertices(resolution: int, quintant: int, anchor: Anchor) -> Pen
         # Orient first & last pentagons when only one of flips is YES
         (F == 0 and (k == 0 or k == 3))
     ):
-        pentagon.reflectY()
+        pentagon.reflect_y()
 
     if anchor.flips[0] == YES and anchor.flips[1] == YES:
         pentagon.rotate180()
@@ -83,4 +83,17 @@ def get_quintant(point: np.ndarray) -> int:
     # TODO perhaps quicker way without trigonometry
     angle = np.arctan2(point[1], point[0])
     normalized_angle = (angle - V + TWO_PI) % TWO_PI
-    return int(np.ceil(normalized_angle / TWO_PI_OVER_5) % 5) 
+    return int(np.ceil(normalized_angle / TWO_PI_OVER_5) % 5)
+
+def get_quintant_polar(polar) -> int:
+    """
+    Get quintant index from polar coordinates.
+    
+    Args:
+        polar: Polar coordinates (rho, gamma)
+        
+    Returns:
+        Quintant index (0-4)
+    """
+    _, gamma = polar
+    return (round(gamma / TWO_PI_OVER_5) + 5) % 5 
