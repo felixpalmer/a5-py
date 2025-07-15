@@ -145,6 +145,79 @@ class SphericalPolygonShape:
         # If point is outside all arcs, will return -1, the further away from 0, the further away from the arc
         return theta_delta_min
 
+    def get_triangle_area(self, v1: Cartesian, v2: Cartesian, v3: Cartesian) -> float:
+        """
+        Calculate the area of a spherical triangle given three vertices
+        
+        Args:
+            v1: First vertex
+            v2: Second vertex  
+            v3: Third vertex
+            
+        Returns:
+            Area of the spherical triangle in radians
+        """
+        # Calculate midpoints
+        mid_a = (v2 + v3) / 2
+        mid_b = (v3 + v1) / 2
+        mid_c = (v1 + v2) / 2
+        
+        # Normalize midpoints
+        mid_a = mid_a / np.linalg.norm(mid_a)
+        mid_b = mid_b / np.linalg.norm(mid_b)
+        mid_c = mid_c / np.linalg.norm(mid_c)
+        
+        # Calculate area using triple product
+        S = np.dot(mid_a, np.cross(mid_b, mid_c))
+        clamped = max(-1.0, min(1.0, S))
+        
+        # sin(x) = x for x < 1e-8
+        if abs(clamped) < 1e-8:
+            return 2 * clamped
+        else:
+            return math.asin(clamped) * 2
+
+    def get_area(self) -> float:
+        """
+        Calculate the area of the spherical polygon by decomposing it into a fan of triangles
+        
+        Returns:
+            The area of the spherical polygon in radians
+        """
+        if not hasattr(self, '_area') or self._area is None:
+            self._area = self._get_area()
+        return self._area
+
+    def _get_area(self) -> float:
+        """
+        Internal method to calculate the area of the spherical polygon
+        
+        Returns:
+            The area of the spherical polygon in radians
+        """
+        if len(self.vertices) < 3:
+            return 0.0
+
+        if len(self.vertices) == 3:
+            return self.get_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2])
+
+        # Calculate center of polygon
+        center = np.zeros(3)
+        for vertex in self.vertices:
+            center += vertex
+        center = center / np.linalg.norm(center)
+
+        # Sum fan of triangles around center
+        area = 0.0
+        for i in range(len(self.vertices)):
+            v1 = self.vertices[i]
+            v2 = self.vertices[(i + 1) % len(self.vertices)]
+            tri_area = self.get_triangle_area(center, v1, v2)
+            if not math.isnan(tri_area):
+                area += tri_area
+
+        return area
+
     def _is_winding_correct(self) -> bool:
         """Check if the polygon vertices are in the correct winding order"""
         V, VA, VB = self.get_transformed_vertices(0)
