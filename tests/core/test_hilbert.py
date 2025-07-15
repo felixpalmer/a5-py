@@ -65,18 +65,18 @@ def test_output_flips_depend_only_on_input():
 
 def test_generates_correct_sequence():
     # Test first few indices
-    anchor0 = s_to_anchor(0, 20, 'uv')
+    anchor0 = s_to_anchor(0, 1, 'uv')
     np.testing.assert_array_equal(anchor0.offset, [0, 0])
     assert anchor0.flips == (NO, NO)
 
-    anchor1 = s_to_anchor(1, 20, 'uv')
+    anchor1 = s_to_anchor(1, 1, 'uv')
     assert anchor1.flips[1] == YES
 
-    anchor4 = s_to_anchor(4, 20, 'uv')
+    anchor4 = s_to_anchor(4, 1, 'uv')
     assert np.linalg.norm(anchor4.offset) > 1  # Should be scaled up
 
     # Test that sequence length grows exponentially
-    anchors = [s_to_anchor(i, 20, 'uv') for i in range(16)]
+    anchors = [s_to_anchor(i, 1, 'uv') for i in range(16)]
     unique_offsets = {tuple(a.offset) for a in anchors}
     assert len(unique_offsets) == 12
     unique_anchors = {(tuple(a.offset), a.flips) for a in anchors}
@@ -84,9 +84,9 @@ def test_generates_correct_sequence():
 
 def test_neighboring_anchors_are_adjacent():
     # Test that combining anchors preserves orientation rules
-    anchor1 = s_to_anchor(0, 20, 'uv')
-    anchor2 = s_to_anchor(1, 20, 'uv')
-    anchor3 = s_to_anchor(2, 20, 'uv')
+    anchor1 = s_to_anchor(0, 1, 'uv')
+    anchor2 = s_to_anchor(1, 1, 'uv')
+    anchor3 = s_to_anchor(2, 1, 'uv')
     
     # Check that relative positions make sense
     diff = anchor2.offset - anchor1.offset
