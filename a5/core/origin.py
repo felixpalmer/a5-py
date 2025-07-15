@@ -67,6 +67,8 @@ def generate_origins() -> None:
 def add_origin(axis: Spherical, angle: Radians) -> None:
     """Add a new origin point."""
     global origin_id
+    if origin_id > 11:
+        raise ValueError(f"Too many origins: {origin_id}")
     origin = Origin(
         id=origin_id,
         axis=axis,
@@ -172,7 +174,7 @@ def find_nearest_origin(point: Spherical) -> Origin:
 
 def is_nearest_origin(point: Spherical, origin: Origin) -> bool:
     """Check if the given origin is the nearest to the point."""
-    return haversine(point, origin.axis) > 0.49
+    return haversine(point, origin.axis) > 0.49999999
 
 def haversine(point: Spherical, axis: Spherical) -> float:
     """
