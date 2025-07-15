@@ -6,7 +6,9 @@ import numpy as np
 from .quat import transform_quat, conjugate
 from .coordinate_transforms import Radians, Spherical, Cartesian, Polar, to_cartesian, to_spherical
 from .warp import warp_polar, unwarp_polar
-from .gnomonic import project_gnomonic, unproject_gnomonic
+from ..projections.gnomonic import GnomonicProjection
+
+gnomonic = GnomonicProjection()
 
 def project_dodecahedron(unwarped: Polar, origin_transform: np.ndarray, origin_rotation: Radians) -> Spherical:
     # Warp in polar space to minimize area variation across sphere
@@ -16,7 +18,7 @@ def project_dodecahedron(unwarped: Polar, origin_transform: np.ndarray, origin_r
     polar = (rho, gamma + origin_rotation)
 
     # Project gnomonically onto sphere and obtain cartesian coordinates
-    projected_spherical = project_gnomonic(polar)
+    projected_spherical = gnomonic.forward(polar)
     projected = to_cartesian(projected_spherical)  # [x, y, z]
 
     # Rotate to correct orientation on globe and return spherical coordinates
@@ -32,7 +34,7 @@ def unproject_dodecahedron(spherical: Spherical, origin_transform: np.ndarray, o
 
     # Unproject gnomonically to polar coordinates in origin space
     projected_spherical = to_spherical(tuple(rotated))
-    polar = unproject_gnomonic(projected_spherical)
+    polar = gnomonic.inverse(projected_spherical)
 
     # Rotate around face axis to remove origin rotation
     rho, gamma = polar
