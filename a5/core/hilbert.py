@@ -285,7 +285,6 @@ def _ij_to_s(input_ij: IJ, invert_j: bool, flip_ij: bool, resolution: int) -> in
         
     pattern = PATTERN_FLIPPED_REVERSED if flip_ij else PATTERN_REVERSED
 
-    flips = [NO, NO]  # Reset flips for the next loop
     for i in range(num_digits):
         new_flips = quaternary_to_flips(digits[i])
         flips[0] *= new_flips[0]
@@ -294,8 +293,8 @@ def _ij_to_s(input_ij: IJ, invert_j: bool, flip_ij: bool, resolution: int) -> in
         
     # Convert digits to s-value
     output = 0
-    for i in range(num_digits):
-        scale = 1 << (2 * (num_digits - 1 - i))
+    for i in range(num_digits - 1, -1, -1):
+        scale = 1 << (2 * i)
         output += digits[i] * scale
         
     return output
