@@ -212,15 +212,4 @@ class SphericalPolygonShape:
         if len(self.vertices) < 3:
             return True
         area = self.get_area()
-        return area > 0
-
-
-class SphericalTriangleShape(SphericalPolygonShape):
-    """
-    A spherical triangle is a spherical polygon with exactly 3 vertices
-    """
-    
-    def __init__(self, vertices: SphericalPolygon):
-        if len(vertices) != 3:
-            raise ValueError('SphericalTriangleShape requires exactly 3 vertices')
-        super().__init__(vertices) 
+        return area > 0 

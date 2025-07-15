@@ -43,7 +43,7 @@ import numpy as np
 from typing import cast
 from ..core.coordinate_systems import Cartesian, Face, Barycentric, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_face
-from ..geometry.spherical_polygon import SphericalTriangleShape
+from ..geometry.spherical_triangle import SphericalTriangleShape
 from ..utils.vector import vector_difference, quadruple_product, slerp
 
 
