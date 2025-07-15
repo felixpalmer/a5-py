@@ -3,7 +3,6 @@
 
 import numpy as np
 from typing import List, Tuple, Optional, TypedDict,NamedTuple
-from .triangle import Triangle
 from .coordinate_systems import Radians,LonLat,Face, Spherical
 from .hilbert import Orientation
 from dataclasses import dataclass
