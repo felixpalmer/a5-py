@@ -8,7 +8,7 @@ import numpy as np
 from typing import List, cast
 from .coordinate_systems import Degrees, Face, Vec2
 from .constants import distance_to_edge, PI_OVER_10, PI_OVER_5
-from .utils import PentagonShape
+from ..geometry.pentagon import PentagonShape
 
 # Pentagon vertex angles
 A = cast(Degrees, 72.0)

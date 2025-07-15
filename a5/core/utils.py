@@ -3,7 +3,6 @@
 
 import numpy as np
 from typing import List, Tuple, Optional, TypedDict,NamedTuple
-from .triangle import Triangle
 from .coordinate_systems import Radians,LonLat,Face, Spherical
 from .hilbert import Orientation
 from dataclasses import dataclass
@@ -21,111 +20,9 @@ class Origin(NamedTuple):
     orientation: List[Orientation]
     first_quintant: int
 
-Pentagon = List[Face]
 Contour = List[LonLat]
 
-class PentagonShape:
-    def __init__(self, vertices: Pentagon):
-        self.vertices = vertices
-        self.id = {"i": 0, "j": 0, "k": 0, "resolution": 1, "segment": None, "origin": None}
-        self.triangles: Optional[List[Triangle]] = None
 
-    def get_vertices(self) -> Pentagon:
-        return self.vertices
-
-    def scale(self, scale: float) -> "PentagonShape":
-        for vertex in self.vertices:
-            np.multiply(vertex, scale, out=vertex)
-        return self
-
-    """
-    Rotates the pentagon 180 degrees (equivalent to negating x & y)
-    @returns The rotated pentagon
-    """
-    def rotate180(self) -> "PentagonShape":
-        for vertex in self.vertices:
-            np.negative(vertex, out=vertex)
-        return self
-
-    """
-    Reflects the pentagon over the x-axis (equivalent to negating y)
-    @returns The reflected pentagon
-    """
-    def reflectY(self) -> "PentagonShape":
-        for vertex in self.vertices:
-            vertex[1] = -vertex[1]
-        return self
-
-    def translate(self, translation: vec2) -> "PentagonShape":
-        for vertex in self.vertices:
-            np.add(vertex, translation, out=vertex)
-        return self
-
-    def transform(self, transform: np.ndarray) -> "PentagonShape":
-        for i, vertex in enumerate(self.vertices):
-            self.vertices[i] = np.dot(transform, vertex)
-        return self
-
-    def transform2d(self, transform: np.ndarray) -> "PentagonShape":
-        for i, vertex in enumerate(self.vertices):
-            self.vertices[i] = np.dot(transform[:, :2], vertex) + transform[:, 2]
-        return self
-
-    def clone(self) -> "PentagonShape":
-        return PentagonShape([np.copy(v) for v in self.vertices])
-
-    def get_center(self) -> Face:
-        return np.sum(self.vertices, axis=0) / 5.0
-
-
-    """
-    Tests if a point is inside the pentagon by checking if it's on the correct side of all edges.
-    Uses cross products to determine which side of each edge the point lies on.
-    @param point The point to test
-    @returns true if the point is inside the pentagon
-    """
-    def contains_point(self, point: vec2) -> bool:
-        N = len(self.vertices)
-        for i in range(N):
-            v1 = self.vertices[i]
-            v2 = self.vertices[(i + 1) % N]
-            
-            # Calculate vectors for cross product
-            dx = v2[0] - v1[0]
-            dy = v2[1] - v1[1]
-            px = point[0] - v1[0]
-            py = point[1] - v1[1]
-            
-            # Cross product: dx * py - dy * px
-            # If positive, point is on the wrong side
-            # If negative, point is on the correct side
-            if dx * py - dy * px > 0:
-                return False
-        
-        return True
-
-    """
-    Normalizes longitude values in a contour to handle antimeridian crossing
-    @param contour Array of [longitude, latitude] points
-    @returns Normalized contour with consistent longitude values
-    """
-    @staticmethod
-    def normalize_longitudes(contour: Contour) -> Contour:
-        longitudes = [((lon + 180) % 360 + 360) % 360 - 180 for lon, _ in contour]
-        # Calculate the average longitude
-        center_lon = sum(longitudes) / len(longitudes)
-        # Normalize center longitude to be in the range -180 to 180
-        center_lon = ((center_lon + 180) % 360 + 360) % 360 - 180
-    
-        # Normalize each point relative to center
-        normalized = []
-        for lon, lat in contour:
-            while lon - center_lon > 180:
-                lon -= 360
-            while lon - center_lon < -180:
-                lon += 360
-            normalized.append((lon, lat))
-        return normalized
 
 
 class A5Cell(TypedDict):

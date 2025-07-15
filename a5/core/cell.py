@@ -4,7 +4,8 @@ from .coordinate_systems import Face, LonLat, Spherical
 from .coordinate_transforms import face_to_ij, from_lonlat, to_face
 from .origin import find_nearest_origin, quintant_to_segment, segment_to_quintant
 from .dodecahedron import unproject_dodecahedron
-from .utils import A5Cell, PentagonShape
+from .utils import A5Cell
+from ..geometry.pentagon import PentagonShape
 from .tiling import get_face_vertices, get_pentagon_vertices, get_quintant, get_quintant_vertices
 from .constants import PI_OVER_5
 from .hilbert import ij_to_s, s_to_anchor
