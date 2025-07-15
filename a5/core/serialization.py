@@ -42,7 +42,7 @@ def deserialize(index: int) -> A5Cell:
     # Technically not a resolution, but can be useful to think of as an
     # abstract cell that contains the whole world
     if resolution == -1:
-        return {"origin": origins[0], "segment": 0, "S": 0, "resolution": resolution}
+        return A5Cell(origin=origins[0], segment=0, S=0, resolution=resolution)
 
     # Extract origin*segment from top 6 bits
     top6_bits = index >> 58
@@ -61,7 +61,7 @@ def deserialize(index: int) -> A5Cell:
         raise ValueError(f"Could not parse origin: {top6_bits}")
 
     if resolution < FIRST_HILBERT_RESOLUTION:
-        return {"origin": origin, "segment": segment, "S": 0, "resolution": resolution}
+        return A5Cell(origin=origin, segment=segment, S=0, resolution=resolution)
 
     # Mask away origin & segment and shift away resolution and 00 bits
     hilbert_levels = resolution - FIRST_HILBERT_RESOLUTION + 1
@@ -69,7 +69,7 @@ def deserialize(index: int) -> A5Cell:
     shift = HILBERT_START_BIT - hilbert_bits
     S = (index & REMOVAL_MASK) >> shift
 
-    return {"origin": origin, "segment": segment, "S": S, "resolution": resolution}
+    return A5Cell(origin=origin, segment=segment, S=S, resolution=resolution)
 
 
 def serialize(cell: A5Cell) -> int:
@@ -144,7 +144,7 @@ def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List
         for new_segment in new_segments:
             for i in range(children_count):
                 new_S = shifted_S + i
-                children.append(serialize({"origin": new_origin, "segment": new_segment, "S": new_S, "resolution": new_resolution}))
+                children.append(serialize(A5Cell(origin=new_origin, segment=new_segment, S=new_S, resolution=new_resolution)))
 
     return children
 
@@ -166,12 +166,12 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
     resolution_diff = current_resolution - new_resolution
     shifted_S = S >> (2 * resolution_diff)
 
-    return serialize({
-        "origin": origin,
-        "segment": segment,
-        "S": shifted_S,
-        "resolution": new_resolution
-    })
+    return serialize(A5Cell(
+        origin=origin,
+        segment=segment,
+        S=shifted_S,
+        resolution=new_resolution
+    ))
 
 
 def get_res0_cells() -> List[int]:
