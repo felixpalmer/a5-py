@@ -6,6 +6,7 @@ import numpy as np
 from typing import List, Tuple, Union
 import math
 from ..core.coordinate_systems import Cartesian
+from ..utils.vector import slerp, triple_product
 
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
@@ -62,16 +63,8 @@ class SphericalPolygonShape:
         # Points A & B
         A = self.vertices[i]
         B = self.vertices[j]
-
-        # Quaternion-based spherical linear interpolation
-        q_oa = self._rotation_to(UP, A)
-        q_ab = self._rotation_to(A, B)
-        q_partial = self._slerp_quat(np.array([0.0, 0.0, 0.0, 1.0]), q_ab, f)
-        q_combined = self._multiply_quat(q_partial, q_oa)
-
-        # Transform unit vector [0, 0, 1] by the combined quaternion
-        out = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-        return self._transform_quat(out, q_combined)
+        
+        return slerp(A, B, f)
 
     def get_transformed_vertices(self, t: float) -> Tuple[Cartesian, Cartesian, Cartesian]:
         """
@@ -140,9 +133,6 @@ class SphericalPolygonShape:
             # By returning the minimum value we find the arc where the point is closest to being outside
             theta_delta_min = min(theta_delta_min, sin_ap, sin_pb)
 
-        # If point is inside all arcs, will return a positive value
-        # If point is on edge of arc, will return 0
-        # If point is outside all arcs, will return -1, the further away from 0, the further away from the arc
         return theta_delta_min
 
     def get_triangle_area(self, v1: Cartesian, v2: Cartesian, v3: Cartesian) -> float:
@@ -168,7 +158,7 @@ class SphericalPolygonShape:
         mid_c = mid_c / np.linalg.norm(mid_c)
         
         # Calculate area using triple product
-        S = np.dot(mid_a, np.cross(mid_b, mid_c))
+        S = triple_product(mid_a, mid_b, mid_c)
         clamped = max(-1.0, min(1.0, S))
         
         # sin(x) = x for x < 1e-8
@@ -222,126 +212,4 @@ class SphericalPolygonShape:
         """Check if the polygon vertices are in the correct winding order"""
         V, VA, VB = self.get_transformed_vertices(0)
         cross = np.cross(VA, VB)
-        return np.dot(V, cross) >= 0
-
-    def _rotation_to(self, from_vec: Cartesian, to_vec: Cartesian) -> np.ndarray:
-        """Create a quaternion that rotates from one vector to another"""
-        # Normalize vectors
-        from_vec = from_vec / np.linalg.norm(from_vec)
-        to_vec = to_vec / np.linalg.norm(to_vec)
-        
-        # Calculate dot product
-        dot = np.dot(from_vec, to_vec)
-        
-        # Handle nearly opposite vectors (dot < -0.999999)
-        if dot < -0.999999:
-            # Try cross product with x unit vector
-            tmp_vec = np.cross(np.array([1.0, 0.0, 0.0]), from_vec)
-            if np.linalg.norm(tmp_vec) < 0.000001:
-                # If that fails, try y unit vector
-                tmp_vec = np.cross(np.array([0.0, 1.0, 0.0]), from_vec)
-            tmp_vec = tmp_vec / np.linalg.norm(tmp_vec)
-            
-            # Create quaternion for 180 degree rotation around tmp_vec
-            angle = math.pi
-            sin_half_angle = math.sin(angle / 2.0)
-            cos_half_angle = math.cos(angle / 2.0)
-            return np.array([
-                tmp_vec[0] * sin_half_angle,
-                tmp_vec[1] * sin_half_angle,
-                tmp_vec[2] * sin_half_angle,
-                cos_half_angle
-            ])
-        
-        # Handle nearly parallel vectors (dot > 0.999999)
-        elif dot > 0.999999:
-            return np.array([0.0, 0.0, 0.0, 1.0])
-        
-        # General case
-        else:
-            cross_vec = np.cross(from_vec, to_vec)
-            quat = np.array([cross_vec[0], cross_vec[1], cross_vec[2], 1.0 + dot])
-            return quat / np.linalg.norm(quat)
-
-    def _slerp_quat(self, q1: np.ndarray, q2: np.ndarray, t: float) -> np.ndarray:
-        """Spherical linear interpolation between two quaternions"""
-        # Extract components
-        ax, ay, az, aw = q1
-        bx, by, bz, bw = q2.copy()
-        
-        # Calculate cosine
-        cosom = ax * bx + ay * by + az * bz + aw * bw
-        
-        # Adjust signs if necessary
-        if cosom < 0.0:
-            cosom = -cosom
-            bx = -bx
-            by = -by
-            bz = -bz
-            bw = -bw
-        
-        # Calculate coefficients
-        EPSILON = 1e-6
-        if 1.0 - cosom > EPSILON:
-            # Standard case (slerp)
-            omega = math.acos(cosom)
-            sinom = math.sin(omega)
-            scale0 = math.sin((1.0 - t) * omega) / sinom
-            scale1 = math.sin(t * omega) / sinom
-        else:
-            # "from" and "to" quaternions are very close
-            # so we can do a linear interpolation
-            scale0 = 1.0 - t
-            scale1 = t
-        
-        # Calculate final values
-        out = np.array([
-            scale0 * ax + scale1 * bx,
-            scale0 * ay + scale1 * by,
-            scale0 * az + scale1 * bz,
-            scale0 * aw + scale1 * bw
-        ])
-        
-        return out
-
-    def _multiply_quat(self, q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
-        """Multiply two quaternions - quaternions stored as [x, y, z, w]"""
-        # Extract components
-        ax = q1[0]
-        ay = q1[1]
-        az = q1[2]
-        aw = q1[3]
-        bx = q2[0]
-        by = q2[1]
-        bz = q2[2]
-        bw = q2[3]
-        
-        return np.array([
-            ax * bw + aw * bx + ay * bz - az * by,
-            ay * bw + aw * by + az * bx - ax * bz,
-            az * bw + aw * bz + ax * by - ay * bx,
-            aw * bw - ax * bx - ay * by - az * bz
-        ])
-
-    def _transform_quat(self, vec: Cartesian, quat: np.ndarray) -> Cartesian:
-        """Transform a vector by a quaternion using optimized algorithm"""
-        qx, qy, qz, qw = quat
-        w2 = qw * 2
-        x, y, z = vec
-        
-        # Cross product: qvec × a
-        uvx = qy * z - qz * y
-        uvy = qz * x - qx * z
-        uvz = qx * y - qy * x
-        
-        # Cross product: qvec × uv, scaled by 2
-        uuvx = (qy * uvz - qz * uvy) * 2
-        uuvy = (qz * uvx - qx * uvz) * 2
-        uuvz = (qx * uvy - qy * uvx) * 2
-        
-        # Final result: a + (uv * w2) + uuv
-        return np.array([
-            x + (uvx * w2) + uuvx,
-            y + (uvy * w2) + uuvy,
-            z + (uvz * w2) + uuvz
-        ]) 
+        return np.dot(V, cross) >= 0 
