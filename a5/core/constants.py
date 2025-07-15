@@ -22,9 +22,8 @@ interhedral_angle = cast(Radians, math.pi - dihedral_angle)  # Angle between pen
 face_edge_angle = cast(Radians, -0.5 * math.pi + math.acos(-1 / math.sqrt(3 - PHI)))  # = 58.28252558853899
 
 # Distance from center to edge of pentagon face
-distance_to_edge = PHI - 1
-# TODO cleaner derivation?
-distance_to_vertex = distance_to_edge / math.cos(PI_OVER_5)
+distance_to_edge = (math.sqrt(5) - 1) / 2  # PHI - 1
+distance_to_vertex = 3 - math.sqrt(5)  # 2 * (2 - PHI)
 
 # Warp factor for beta scaling
 WARP_FACTOR = 0.5
