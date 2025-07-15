@@ -5,7 +5,7 @@
 import numpy as np
 from typing import List, Tuple, Union
 import math
-from .coordinate_systems import Cartesian
+from ..core.coordinate_systems import Cartesian
 
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
