@@ -77,24 +77,32 @@ class PentagonShape:
     def get_center(self) -> Face:
         return np.sum(self.vertices, axis=0) / 5.0
 
+
     """
-    Tests if a point is inside the pentagon by checking if it's in any of the three triangles
-    that make up the pentagon. Assumes pentagon is convex.
+    Tests if a point is inside the pentagon by checking if it's on the correct side of all edges.
+    Uses cross products to determine which side of each edge the point lies on.
     @param point The point to test
     @returns true if the point is inside the pentagon
     """
     def contains_point(self, point: vec2) -> bool:
-        v0 = self.vertices[0]
-
-        if self.triangles is None:
-            self.triangles = []
-            # Order triangles by size to increase chance of early return
-            for i in [2, 1, 3]:
-                v1 = self.vertices[i]
-                v2 = self.vertices[i + 1]
-                self.triangles.append(Triangle(v0, v1, v2))
-
-        return any(triangle.contains_point(point) for triangle in self.triangles)
+        N = len(self.vertices)
+        for i in range(N):
+            v1 = self.vertices[i]
+            v2 = self.vertices[(i + 1) % N]
+            
+            # Calculate vectors for cross product
+            dx = v2[0] - v1[0]
+            dy = v2[1] - v1[1]
+            px = point[0] - v1[0]
+            py = point[1] - v1[1]
+            
+            # Cross product: dx * py - dy * px
+            # If positive, point is on the wrong side
+            # If negative, point is on the correct side
+            if dx * py - dy * px > 0:
+                return False
+        
+        return True
 
     """
     Normalizes longitude values in a contour to handle antimeridian crossing

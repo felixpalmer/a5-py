@@ -5,13 +5,12 @@ Copyright (c) A5 contributors
 """
 
 import math
-from typing import cast
+from typing import cast, Literal, TypedDict, Dict
 from .coordinate_systems import Radians
 
 # Golden ratio
 PHI = (1 + math.sqrt(5)) / 2
 
-# Basic angle constants
 TWO_PI = cast(Radians, 2 * math.pi)
 TWO_PI_OVER_5 = cast(Radians, 2 * math.pi / 5)
 PI_OVER_5 = cast(Radians, math.pi / 5)
@@ -27,8 +26,32 @@ distance_to_edge = PHI - 1
 # TODO cleaner derivation?
 distance_to_vertex = distance_to_edge / math.cos(PI_OVER_5)
 
-# Warping parameters
-WARP_FACTOR = 0.515  # Set to near 0 to disable warping
+# Warp factor for beta scaling
+WARP_FACTOR = 0.5
+
+# Warp factor types and constants
+WarpType = Literal['high', 'low']
+
+class WarpFactors(TypedDict):
+    BETA_SCALE: float
+    RHO_SHIFT: float
+    RHO_SCALE: float
+    RHO_SCALE2: float
+
+WARP_FACTORS: Dict[WarpType, WarpFactors] = {
+    'high': {
+        'BETA_SCALE': 0.5115918059668587,
+        'RHO_SHIFT': 0.9461616498962347,
+        'RHO_SCALE': 0.04001633808056544,
+        'RHO_SCALE2': 0.008305829720486808,
+    },
+    'low': {
+        'BETA_SCALE': 0.5170052913652168,
+        'RHO_SHIFT': 0.939689240972851,
+        'RHO_SCALE': 0.008891290305379163,
+        'RHO_SCALE2': 0.03962853541477156,
+    }
+}
 
 # Dodecahedron sphere radii (normalized to unit radius for inscribed sphere)
 """
@@ -58,6 +81,9 @@ __all__ = [
     'distance_to_edge',
     'distance_to_vertex',
     'WARP_FACTOR',
+    'WarpType',
+    'WarpFactors',
+    'WARP_FACTORS',
     'R_INSCRIBED',
     'R_MIDEDGE',
     'R_CIRCUMSCRIBED'
