@@ -78,36 +78,39 @@ def test_generates_correct_sequence():
     # Test that sequence length grows exponentially
     anchors = [s_to_anchor(i, 20, 'uv') for i in range(16)]
     unique_offsets = {tuple(a.offset) for a in anchors}
-    assert len(unique_offsets) == 13
+    assert len(unique_offsets) == 12
     unique_anchors = {(tuple(a.offset), a.flips) for a in anchors}
-    assert len(unique_anchors) == 16
+    assert len(unique_anchors) == 15
 
 def test_neighboring_anchors_are_adjacent():
     # Test that combining anchors preserves orientation rules
-    anchor1 = s_to_anchor(5, 20, 'uv')
-    anchor2 = s_to_anchor(6, 20, 'uv')
+    anchor1 = s_to_anchor(0, 20, 'uv')
+    anchor2 = s_to_anchor(1, 20, 'uv')
+    anchor3 = s_to_anchor(2, 20, 'uv')
     
     # Check that relative positions make sense
     diff = anchor2.offset - anchor1.offset
     assert np.linalg.norm(diff) == 1  # Should be adjacent
+    diff2 = anchor3.offset - anchor2.offset
+    assert np.linalg.norm(diff2) == np.sqrt(2)  # Should be adjacent
 
 def test_generates_correct_anchors():
     EXPECTED_ANCHORS = [
         {'s': 0, 'offset': [0, 0], 'flips': (NO, NO)},
-        {'s': 9, 'offset': [1, 2], 'flips': (NO, YES)},
-        {'s': 16, 'offset': [4, 0], 'flips': (NO, YES)},
-        {'s': 17, 'offset': [3, 1], 'flips': (NO, NO)},
-        {'s': 31, 'offset': [1, 3], 'flips': (NO, YES)},
-        {'s': 77, 'offset': [5, 4], 'flips': (YES, NO)},
-        {'s': 100, 'offset': [6, 6], 'flips': (NO, NO)},
-        {'s': 101, 'offset': [7, 6], 'flips': (NO, YES)},
-        {'s': 170, 'offset': [0, 15], 'flips': (NO, NO)},
-        {'s': 411, 'offset': [13, 15], 'flips': (YES, NO)},
-        {'s': 1762, 'offset': [24, 27], 'flips': (YES, YES)},
-        {'s': 481952, 'offset': [192, 388], 'flips': (YES, YES)},
-        {'s': 192885192, 'offset': [4280, 10098], 'flips': (NO, NO)},
-        {'s': 4719283155, 'offset': [51227, 27554], 'flips': (YES, YES)},
-        {'s': 7123456789, 'offset': [64685, 60853], 'flips': (NO, NO)},
+        {'s': 9, 'offset': [3, 1], 'flips': (YES, YES)},
+        {'s': 16, 'offset': [2, 2], 'flips': (NO, NO)},
+        {'s': 17, 'offset': [3, 2], 'flips': (NO, YES)},
+        {'s': 31, 'offset': [1, 3], 'flips': (YES, NO)},
+        {'s': 77, 'offset': [7, 5], 'flips': (NO, NO)},
+        {'s': 100, 'offset': [3, 7], 'flips': (YES, YES)},
+        {'s': 101, 'offset': [2, 7], 'flips': (YES, NO)},
+        {'s': 170, 'offset': [10, 1], 'flips': (NO, NO)},
+        {'s': 411, 'offset': [7, 13], 'flips': (YES, NO)},
+        {'s': 1762, 'offset': [7, 31], 'flips': (YES, NO)},
+        {'s': 481952, 'offset': [96, 356], 'flips': (YES, YES)},
+        {'s': 192885192, 'offset': [13183, 1043], 'flips': (NO, NO)},
+        {'s': 4719283155, 'offset': [37190, 46076], 'flips': (NO, YES)},
+        {'s': 7123456789, 'offset': [29822, 40293], 'flips': (NO, YES)},
     ]
 
     for test_case in EXPECTED_ANCHORS:
@@ -193,41 +196,41 @@ def test_ij_to_s():
         {'s': 0, 'offset': [0, 0]},
         {'s': 0, 'offset': [0.999, 0]},
         {'s': 1, 'offset': [0.6, 0.6]},
-        {'s': 2, 'offset': [0.000001, 1.1]},
-        {'s': 3, 'offset': [1.2, 0.5]},
-        {'s': 3, 'offset': [1.9999, 0]},
+        {'s': 7, 'offset': [0.000001, 1.1]},
+        {'s': 2, 'offset': [1.2, 0.5]},
+        {'s': 2, 'offset': [1.9999, 0]},
 
         # Recursive cases, 2nd quadrant, flipY
-        {'s': 4, 'offset': [1.9999, 0.001]},
-        {'s': 5, 'offset': [1.1, 1.1]},
-        {'s': 6, 'offset': [1.999, 1.999]},
-        {'s': 7, 'offset': [0.99, 1.99]},
+        {'s': 3, 'offset': [1.9999, 0.001]},
+        {'s': 4, 'offset': [1.1, 1.1]},
+        {'s': 5, 'offset': [1.999, 1.999]},
+        {'s': 6, 'offset': [0.99, 1.99]},
 
         # 3rd quadrant, no flips
-        {'s': 8, 'offset': [0.999, 2.000001]},
-        {'s': 9, 'offset': [0.9, 2.5]},
-        {'s': 10, 'offset': [0.5, 3.1]},
-        {'s': 11, 'offset': [1.3, 2.5]},
+        {'s': 28, 'offset': [0.999, 2.000001]},
+        {'s': 29, 'offset': [0.9, 2.5]},
+        {'s': 30, 'offset': [0.5, 3.1]},
+        {'s': 31, 'offset': [1.3, 2.5]},
 
         # 4th quadrant, flipX
-        {'s': 12, 'offset': [2.00001, 1.001]},
-        {'s': 13, 'offset': [2.8, 0.5]},
-        {'s': 14, 'offset': [2.00001, 0.5]},
-        {'s': 15, 'offset': [3.5, 0.2]},
+        {'s': 8, 'offset': [2.00001, 1.001]},
+        {'s': 9, 'offset': [2.8, 0.5]},
+        {'s': 10, 'offset': [2.00001, 0.5]},
+        {'s': 11, 'offset': [3.5, 0.2]},
 
         # Next level
-        {'s': 19, 'offset': [2.5, 1.5]},
-        {'s': 26, 'offset': [3.999, 3.999]},
+        {'s': 15, 'offset': [2.5, 1.5]},
+        {'s': 21, 'offset': [3.999, 3.999]},
 
         # Both flips
-        {'s': 28, 'offset': [1.999, 3.999]},
-        {'s': 29, 'offset': [1.2, 3.5]},
-        {'s': 30, 'offset': [1.9, 2.2]},
-        {'s': 31, 'offset': [0.1, 3.9]}
+        {'s': 24, 'offset': [1.999, 3.999]},
+        {'s': 25, 'offset': [1.2, 3.5]},
+        {'s': 26, 'offset': [1.9, 2.2]},
+        {'s': 27, 'offset': [0.1, 3.9]}
     ]
 
     for test_case in test_values:
-        result = ij_to_s(np.array(test_case['offset']), 20, 'uv')
+        result = ij_to_s(np.array(test_case['offset']), 3, 'uv')
         assert result == test_case['s']
 
 @pytest.mark.parametrize('orientation', ['uv', 'vu', 'uw', 'wu', 'vw', 'wv'])

@@ -18,6 +18,16 @@ class Anchor:
         self.offset = offset
         self.flips = flips
 
+def reverse_pattern(pattern: List[int]) -> List[int]:
+    """Reverse a pattern by finding the index of each position."""
+    return [pattern.index(i) for i in range(len(pattern))]
+
+# Patterns used to rearrange the cells when shifting
+PATTERN = [0, 1, 3, 4, 5, 6, 7, 2]
+PATTERN_FLIPPED = [0, 1, 2, 7, 3, 4, 5, 6]
+PATTERN_REVERSED = reverse_pattern(PATTERN)
+PATTERN_FLIPPED_REVERSED = reverse_pattern(PATTERN_FLIPPED)
+
 # Anchor offset is specified in ij units, the eigenbasis of the Hilbert curve
 # Define k as the vector i + j, as it means vectors u & v are of unit length
 def ij_to_kj(ij: IJ) -> KJ:
@@ -82,6 +92,37 @@ def quaternary_to_flips(n: Quaternary) -> Tuple[Flip, Flip]:
 
 FLIP_SHIFT = np.array([-1, 1])
 
+def _shift_digits(digits: List[Quaternary], i: int, flips: List[Flip], invert_j: bool, pattern: List[int]) -> None:
+    """Shift digits based on pattern to adjust cell layout."""
+    if i <= 0:
+        return
+
+    parent_k = digits[i] if i < len(digits) else 0
+    child_k = digits[i - 1]
+    F = flips[0] + flips[1]
+
+    # Detect when cells need to be shifted
+    needs_shift = True
+    first = True
+
+    # The value of F which cells need to be shifted
+    # The rule is flipped depending on the orientation, specifically on the value of invert_j
+    if invert_j != (F == 0):
+        needs_shift = parent_k in (1, 2)  # Second & third pentagons only
+        first = parent_k == 1  # Second pentagon is first
+    else:
+        needs_shift = parent_k < 2  # First two pentagons only
+        first = parent_k == 0  # First pentagon is first
+
+    if not needs_shift:
+        return
+
+    # Apply the pattern by setting the digits based on the value provided
+    src = child_k if first else child_k + 4
+    dst = pattern[src]
+    digits[i - 1] = dst % 4
+    digits[i] = (parent_k + 4 + (dst // 4) - (src // 4)) % 4
+
 def s_to_anchor(s: Union[int, str], resolution: int, orientation: Orientation) -> Anchor:
     """Convert s-value to anchor with orientation."""
     input_val = int(s)
@@ -92,7 +133,7 @@ def s_to_anchor(s: Union[int, str], resolution: int, orientation: Orientation) -
     if reverse:
         input_val = (1 << (2 * resolution)) - input_val - 1
         
-    anchor = _s_to_anchor(input_val)
+    anchor = _s_to_anchor(input_val, resolution, invert_j, flip_ij)
     
     if flip_ij:
         i, j = anchor.offset
@@ -112,32 +153,45 @@ def s_to_anchor(s: Union[int, str], resolution: int, orientation: Orientation) -
         
     return anchor
 
-def _s_to_anchor(s: int) -> Anchor:
+def _s_to_anchor(s: int, resolution: int, invert_j: bool, flip_ij: bool) -> Anchor:
     """Internal function to convert s-value to anchor."""
-    k = s % 4
     offset = np.zeros(2)
     flips = [NO, NO]
     
     # Get quaternary digits
     digits = []
-    while s > 0:
+    while s > 0 or len(digits) < resolution:
         digits.append(s % 4)
         s >>= 2
+    
+    # Pad with zeros if needed
+    while len(digits) < resolution:
+        digits.append(0)
         
+    pattern = PATTERN_FLIPPED if flip_ij else PATTERN
+
     # Process digits from left to right (most significant first)
-    for digit in reversed(digits):
+    for i in range(len(digits) - 1, -1, -1):
+        _shift_digits(digits, i, flips, invert_j, pattern)
+        new_flips = quaternary_to_flips(digits[i])
+        flips[0] *= new_flips[0]
+        flips[1] *= new_flips[1]
+
+    flips = [NO, NO]  # Reset flips for the next loop
+    for i in range(len(digits) - 1, -1, -1):
         # Scale up existing anchor
         offset *= 2
         
         # Get child anchor and combine with current anchor
-        child_offset = quaternary_to_kj(digit, tuple(flips))
+        child_offset = quaternary_to_kj(digits[i], tuple(flips))
         offset += child_offset
         
-        # Update flips
-        new_flips = quaternary_to_flips(digit)
+        new_flips = quaternary_to_flips(digits[i])
         flips[0] *= new_flips[0]
         flips[1] *= new_flips[1]
         
+    k = digits[0] if digits else 0
+
     return Anchor(k, kj_to_ij(offset), tuple(flips))
 
 # Get the number of digits needed to represent the offset
@@ -196,24 +250,25 @@ def ij_to_s(input_ij: IJ, resolution: int, orientation: str = 'uv') -> int:
         i, j = ij
         ij[1] = (1 << resolution) - (i + j)
         
-    s = _ij_to_s(ij)
+    s = _ij_to_s(ij, invert_j, flip_ij, resolution)
     if reverse:
         s = (1 << (2 * resolution)) - s - 1
         
     return s
 
-def _ij_to_s(input_ij: IJ) -> int:
+def _ij_to_s(input_ij: IJ, invert_j: bool, flip_ij: bool, resolution: int) -> int:
+    """Internal function to convert IJ coordinates to s-value."""
     # Get number of digits we need to process
-    num_digits = get_required_digits(input_ij)
+    num_digits = resolution
     digits = [0] * num_digits
     
     flips = [NO, NO]
     pivot = np.zeros(2)
     
     # Process digits from left to right (most significant first)
-    for i in range(num_digits):
+    for i in range(num_digits - 1, -1, -1):
         relative_offset = input_ij - pivot
-        scale = 1 << (num_digits - 1 - i)
+        scale = 1 << i
         scaled_offset = relative_offset / scale
         
         digit = ij_to_quaternary(scaled_offset, tuple(flips))
@@ -228,10 +283,19 @@ def _ij_to_s(input_ij: IJ) -> int:
         flips[0] *= new_flips[0]
         flips[1] *= new_flips[1]
         
+    pattern = PATTERN_FLIPPED_REVERSED if flip_ij else PATTERN_REVERSED
+
+    flips = [NO, NO]  # Reset flips for the next loop
+    for i in range(num_digits):
+        new_flips = quaternary_to_flips(digits[i])
+        flips[0] *= new_flips[0]
+        flips[1] *= new_flips[1]
+        _shift_digits(digits, i, flips, invert_j, pattern)
+        
     # Convert digits to s-value
     output = 0
-    for i, digit in enumerate(digits):
+    for i in range(num_digits):
         scale = 1 << (2 * (num_digits - 1 - i))
-        output += digit * scale
+        output += digits[i] * scale
         
     return output
