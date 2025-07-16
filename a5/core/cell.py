@@ -1,19 +1,32 @@
+# A5
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) A5 contributors
+
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, TypedDict
 from .coordinate_systems import Face, LonLat, Spherical
-from .coordinate_transforms import face_to_ij, from_lonlat, to_face
+from .coordinate_transforms import (
+    face_to_ij, from_lonlat, to_cartesian, to_face, to_lonlat, 
+    to_spherical, to_polar, normalize_longitudes
+)
 from .origin import find_nearest_origin, quintant_to_segment, segment_to_quintant
-from .dodecahedron import unproject_dodecahedron
+from ..projections.dodecahedron import DodecahedronProjection
 from .utils import A5Cell
 from ..geometry.pentagon import PentagonShape
-from .tiling import get_face_vertices, get_pentagon_vertices, get_quintant, get_quintant_vertices
+from .tiling import get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
 from .constants import PI_OVER_5
 from .hilbert import ij_to_s, s_to_anchor
-from .project import project_pentagon, project_point
 from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from .utils import Origin
-# Reuse rotation matrix to avoid allocation
-_rotation = None
+from ..geometry.spherical_polygon import SphericalPolygonShape
+
+# Reuse these objects to avoid allocation
+_rotation = np.zeros((2, 2))
+_dodecahedron = DodecahedronProjection()
+
+class CellToBoundaryOptions(TypedDict, total=False):
+    """Options for cell_to_boundary function."""
+    closed_ring: bool
+    segments: int
 
 def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
     """
@@ -26,6 +39,10 @@ def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
     Returns:
         Cell ID as a big integer
     """
+    if resolution < FIRST_HILBERT_RESOLUTION:
+        # For low resolutions there is no Hilbert curve, so we can just return as the result is exact
+        return serialize(_lonlat_to_estimate(lon_lat, resolution))
+
     hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
     samples: List[LonLat] = [lon_lat]
     N = 25
@@ -37,32 +54,31 @@ def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
             np.cos(i) * R + lon_lat[0],
             np.sin(i) * R + lon_lat[1]
         ])
-        samples.append(tuple(coordinate))
+        samples.append((coordinate[0], coordinate[1]))
 
-    cells: List[A5Cell] = []
+    # Deduplicate estimates
+    estimate_set = set()
+    unique_estimates = []
+
+    cells = []
     for sample in samples:
         estimate = _lonlat_to_estimate(sample, resolution)
+        estimate_key = serialize(estimate)
+        if estimate_key not in estimate_set:
+            # Have new estimate, add to set and list
+            estimate_set.add(estimate_key)
+            unique_estimates.append(estimate)
 
-        # For resolution 0 there is no Hilbert curve, so we can just return as the result is exact
-        if resolution < FIRST_HILBERT_RESOLUTION or a5cell_contains_point(estimate, lon_lat):
-            return serialize(estimate)
-        else:
-            cells.append(estimate)
+            # Check if we have a hit, storing distance if not
+            distance = a5cell_contains_point(estimate, lon_lat)
+            if distance > 0:
+                return serialize(estimate)
+            else:
+                cells.append({'cell': estimate, 'distance': distance})
 
-    # Failed to find based on hit test, just return the closest cell
-    D = float('inf')
-    best_cell: Optional[A5Cell] = None
-    for cell in cells:
-        pentagon = _get_pentagon(cell)
-        center = project_point(pentagon.get_center(), cell["origin"])
-        distance = np.linalg.norm(np.array(center) - np.array(lon_lat))
-        if distance < D:
-            D = distance
-            best_cell = cell
-
-    if best_cell:
-        return serialize(best_cell)
-    raise ValueError('No cell found')
+    # As fallback, sort cells by distance and use the closest one
+    cells.sort(key=lambda x: x['distance'], reverse=True)
+    return serialize(cells[0]['cell'])
 
 def _lonlat_to_estimate(lon_lat: LonLat, resolution: int) -> A5Cell:
     """
@@ -77,22 +93,12 @@ def _lonlat_to_estimate(lon_lat: LonLat, resolution: int) -> A5Cell:
     Returns:
         Approximate A5Cell
     """
-    global _rotation
-    if _rotation is None:
-        _rotation = np.zeros((2, 2))
-        
     spherical = from_lonlat(lon_lat)
     origin = find_nearest_origin(spherical)
-    
-    # Create rotation matrix
-    angle = -origin.angle
-    c, s = np.cos(angle), np.sin(angle)
-    _rotation[0, 0], _rotation[0, 1] = c, -s
-    _rotation[1, 0], _rotation[1, 1] = s, c
 
-    polar = unproject_dodecahedron(spherical, origin.quat, origin.angle)
-    dodec_point = to_face(polar)
-    quintant = get_quintant(dodec_point)
+    dodec_point = _dodecahedron.forward(spherical, origin.id)
+    polar = to_polar(dodec_point)
+    quintant = get_quintant_polar(polar)
     segment, orientation = quintant_to_segment(quintant, origin)
     
     if resolution < FIRST_HILBERT_RESOLUTION:
@@ -108,11 +114,12 @@ def _lonlat_to_estimate(lon_lat: LonLat, resolution: int) -> A5Cell:
         dodec_point = np.dot(_rotation, dodec_point)
 
     hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
-    dodec_point *= (2 ** hilbert_resolution)
+    dodec_point = dodec_point * (2 ** hilbert_resolution)
 
     ij = face_to_ij(dodec_point)
     S = ij_to_s(ij, hilbert_resolution, orientation)
-    return A5Cell(S=S, segment=segment, origin=origin, resolution=resolution)
+    estimate = A5Cell(S=S, segment=segment, origin=origin, resolution=resolution)
+    return estimate
 
 def _get_pentagon(cell: A5Cell) -> PentagonShape:
     """
@@ -126,7 +133,8 @@ def _get_pentagon(cell: A5Cell) -> PentagonShape:
     """
     quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
     if cell["resolution"] == (FIRST_HILBERT_RESOLUTION - 1):
-        return get_quintant_vertices(quintant)
+        out = get_quintant_vertices(quintant)
+        return out
     elif cell["resolution"] == (FIRST_HILBERT_RESOLUTION - 2):
         return get_face_vertices()
 
@@ -146,24 +154,58 @@ def cell_to_lonlat(cell_id: int) -> LonLat:
     """
     cell = deserialize(cell_id)
     pentagon = _get_pentagon(cell)
-    lon_lat = project_point(pentagon.get_center(), cell["origin"])
-    return PentagonShape.normalize_longitudes([lon_lat])[0]
+    point = _dodecahedron.inverse(pentagon.get_center(), cell["origin"].id)
+    return to_lonlat(point)
 
-def cell_to_boundary(cell_id: int) -> List[LonLat]:
+def cell_to_boundary(
+    cell_id: int, 
+    options: Optional[CellToBoundaryOptions] = None
+) -> List[LonLat]:
     """
     Get the boundary coordinates of a cell.
     
     Args:
         cell_id: Cell ID as a big integer
+        options: Dictionary with optional parameters:
+            - closed_ring: Pass True to close the ring with the first point (default True)
+            - segments: Number of segments to use for each edge. Pass 'auto' to use the resolution of the cell (default 'auto')
         
     Returns:
         List of (longitude, latitude) coordinates forming the cell boundary
     """
+    if options is None:
+        options = {}
+    
+    closed_ring = options.get('closed_ring', True)
+    segments = options.get('segments', 'auto')
+    
     cell = deserialize(cell_id)
-    pentagon = _get_pentagon(cell)
-    return project_pentagon(pentagon, cell["origin"])
+    if segments == 'auto' or segments is None:
+        segments = max(1, 2 ** (6 - cell["resolution"]))
 
-def a5cell_contains_point(cell: A5Cell, point: LonLat) -> bool:
+    pentagon = _get_pentagon(cell)
+
+    # Split each edge into segments before projection
+    # Important to do before projection to obtain equal area cells
+    split_pentagon = pentagon.split_edges(segments)
+    vertices = split_pentagon.get_vertices()
+
+    # Unproject to obtain lon/lat coordinates
+    unprojected_vertices = [_dodecahedron.inverse(vertex, cell["origin"].id) for vertex in vertices]
+    boundary = [to_lonlat(vertex) for vertex in unprojected_vertices]
+
+    # Normalize longitudes to handle antimeridian crossing
+    normalized_boundary = normalize_longitudes(boundary)
+
+    if closed_ring:
+        normalized_boundary.append(normalized_boundary[0])
+    
+    # TODO: This is a patch to make the boundary CCW, but we should fix the winding order of the pentagon
+    # throughout the whole codebase
+    normalized_boundary.reverse()
+    return normalized_boundary
+
+def a5cell_contains_point(cell: A5Cell, point: LonLat) -> float:
     """
     Check if a point is contained within a cell.
     
@@ -172,9 +214,13 @@ def a5cell_contains_point(cell: A5Cell, point: LonLat) -> bool:
         point: Tuple of (longitude, latitude) in degrees
         
     Returns:
-        True if the point is contained within the cell, False otherwise
+        Positive number if the point is contained within the cell, negative otherwise
     """
-    pentagon = _get_pentagon(cell)
-    projected_pentagon_vertices = project_pentagon(pentagon, cell["origin"])
-    proj_pentagon = PentagonShape(projected_pentagon_vertices)
-    return proj_pentagon.contains_point(point) 
+    boundary = cell_to_boundary(serialize(cell), {'closed_ring': False, 'segments': 1})
+
+    cartesian = to_cartesian(from_lonlat(point))
+    spherical_boundary = [to_cartesian(from_lonlat(vertex)) for vertex in boundary]
+
+    # TODO should project to dodecahedron and then check if point is inside
+    spherical_pentagon = SphericalPolygonShape(spherical_boundary)
+    return spherical_pentagon.contains_point(cartesian) 
