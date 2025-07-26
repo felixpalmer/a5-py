@@ -46,7 +46,6 @@ from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_fac
 from ..geometry.spherical_triangle import SphericalTriangleShape
 from ..utils.vector import vector_difference, quadruple_product, slerp
 
-
 class PolyhedralProjection:
     """
     Polyhedral Equal Area projection using Slice & Dice algorithm

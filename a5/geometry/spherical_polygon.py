@@ -7,6 +7,7 @@ from typing import List, Tuple, Union
 import math
 from ..core.coordinate_systems import Cartesian
 from ..utils.vector import slerp, triple_product
+from ..utils.vector_np import triple_product_np
 
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
