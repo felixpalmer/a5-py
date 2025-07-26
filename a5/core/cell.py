@@ -3,7 +3,7 @@
 # Copyright (c) A5 contributors
 
 import numpy as np
-from typing import List, Tuple, Optional, Dict, TypedDict
+from typing import List, Tuple, Optional, Dict, TypedDict, Union
 from .coordinate_systems import Face, LonLat, Spherical
 from .coordinate_transforms import (
     face_to_ij, from_lonlat, to_cartesian, to_face, to_lonlat, 
@@ -26,7 +26,7 @@ _dodecahedron = DodecahedronProjection()
 class CellToBoundaryOptions(TypedDict, total=False):
     """Options for cell_to_boundary function."""
     closed_ring: bool
-    segments: int
+    segments: Union[int, str]
 
 def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
     """
