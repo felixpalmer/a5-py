@@ -39,7 +39,6 @@ Copyright (c) A5 contributors
 """
 
 import math
-import numpy as np
 from typing import cast
 from ..core.coordinate_systems import Cartesian, Face, Barycentric, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_face
@@ -63,25 +62,23 @@ class PolyhedralProjection:
         Returns:
             The face coordinates
         """
-        # Convert inputs to numpy arrays
-        v = np.array(v, dtype=np.float64)
-        face_triangle_arr = tuple(np.array(vertex, dtype=np.float64) for vertex in face_triangle)
-        A, B, C = [np.array(vertex, dtype=np.float64) for vertex in spherical_triangle]
-        triangle_shape = SphericalTriangleShape([A, B, C])
+        # Use inputs directly
+        A, B, C = spherical_triangle
+        triangle_shape = SphericalTriangleShape(spherical_triangle)
 
         # When v is close to A, the quadruple product is unstable.
         # As we just need the intersection of two great circles we can use difference
         # between A and v, as it lies in the same plane of the great circle containing A & v
-        Z = v - A
+        Z = (v[0] - A[0], v[1] - A[1], v[2] - A[2])
         Z_norm = vector_magnitude(Z)
         
         # Handle case where v is exactly A (or very close)
         if Z_norm < 1e-14:
             # v is at vertex A, return the corresponding face coordinate
             # This should be the first vertex of the face triangle for barycentric coord [1,0,0]
-            return face_triangle_arr[0]
+            return face_triangle[0]
         
-        Z = Z / Z_norm
+        Z = (Z[0] / Z_norm, Z[1] / Z_norm, Z[2] / Z_norm)
         Z = cast(Cartesian, Z)
         
         p = quadruple_product(A, Z, B, C)
@@ -99,7 +96,7 @@ class PolyhedralProjection:
             scaled_area * SphericalTriangleShape([A, B, p]).get_area()
         ))
         
-        return barycentric_to_face(b, face_triangle_arr)
+        return barycentric_to_face(b, face_triangle)
 
     def inverse(self, face_point: Face, face_triangle: FaceTriangle, spherical_triangle: SphericalTriangle) -> Cartesian:
         """
@@ -113,12 +110,9 @@ class PolyhedralProjection:
         Returns:
             The spherical coordinates
         """
-        # Convert inputs to numpy arrays
-        face_point = np.array(face_point, dtype=np.float64)
-        face_triangle_arr = tuple(np.array(vertex, dtype=np.float64) for vertex in face_triangle)
-        A, B, C = [np.array(vertex, dtype=np.float64) for vertex in spherical_triangle]
-        triangle_shape = SphericalTriangleShape([A, B, C])
-        b = face_to_barycentric(face_point, face_triangle_arr)
+        A, B, C = spherical_triangle
+        triangle_shape = SphericalTriangleShape(spherical_triangle)
+        b = face_to_barycentric(face_point, face_triangle)
 
         threshold = 1 - 1e-14
         if b[0] > threshold:
