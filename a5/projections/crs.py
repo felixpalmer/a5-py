@@ -5,7 +5,6 @@ Copyright (c) A5 contributors
 """
 
 import math
-import numpy as np
 from typing import List, cast
 from ..core.coordinate_systems import Cartesian, Radians, Spherical
 from ..core.coordinate_transforms import to_cartesian
@@ -52,7 +51,12 @@ class CRS:
             print('Too many CRS invocations, results should be cached')
         
         for vertex in self._vertices:
-            if np.linalg.norm(point - vertex) < 1e-5:
+            # Calculate distance manually
+            dx = point[0] - vertex[0]
+            dy = point[1] - vertex[1] 
+            dz = point[2] - vertex[2]
+            distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+            if distance < 1e-5:
                 return vertex
         
         raise ValueError("Failed to find vertex in CRS")
@@ -89,12 +93,23 @@ class CRS:
     
     def _add(self, new_vertex: Cartesian) -> bool:
         """Add a new vertex if it doesn't already exist."""
-        normalized = new_vertex / np.linalg.norm(new_vertex)
-        normalized = cast(Cartesian, normalized)
+        # Normalize manually
+        norm = math.sqrt(new_vertex[0] * new_vertex[0] + 
+                        new_vertex[1] * new_vertex[1] + 
+                        new_vertex[2] * new_vertex[2])
+        normalized = cast(Cartesian, (
+            new_vertex[0] / norm,
+            new_vertex[1] / norm, 
+            new_vertex[2] / norm
+        ))
         
         # Check if vertex already exists
         for existing_vertex in self._vertices:
-            if np.linalg.norm(normalized - existing_vertex) < 1e-5:
+            dx = normalized[0] - existing_vertex[0]
+            dy = normalized[1] - existing_vertex[1]
+            dz = normalized[2] - existing_vertex[2]
+            distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+            if distance < 1e-5:
                 return False
         
         self._vertices.append(normalized)

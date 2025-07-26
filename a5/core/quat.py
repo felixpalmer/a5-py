@@ -12,9 +12,11 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-import numpy as np
+import math
+from typing import Tuple
+from .coordinate_systems import Cartesian
 
-def conjugate(q: np.ndarray) -> np.ndarray:
+def conjugate(q: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
     """
     Calculate the conjugate of a quaternion.
     
@@ -24,9 +26,9 @@ def conjugate(q: np.ndarray) -> np.ndarray:
     Returns:
         The conjugate quaternion [-x, -y, -z, w]
     """
-    return np.array([-q[0], -q[1], -q[2], q[3]])
+    return (-q[0], -q[1], -q[2], q[3])
 
-def transform_quat(a: np.ndarray, q: np.ndarray) -> np.ndarray:
+def transform_quat(a: Cartesian, q: Tuple[float, float, float, float]) -> Cartesian:
     """
     Transform a vector by a quaternion.
     
@@ -62,13 +64,13 @@ def transform_quat(a: np.ndarray, q: np.ndarray) -> np.ndarray:
     uuvz *= 2
 
     # Add all components
-    return np.array([
+    return (
         x + uvx + uuvx,
         y + uvy + uuvy,
         z + uvz + uuvz
-    ])
+    )
 
-def set_axis_angle(axis: np.ndarray, rad: float) -> np.ndarray:
+def set_axis_angle(axis: Cartesian, rad: float) -> Tuple[float, float, float, float]:
     """
     Sets a quaternion from the given angle and rotation axis.
     
@@ -80,15 +82,36 @@ def set_axis_angle(axis: np.ndarray, rad: float) -> np.ndarray:
         The quaternion [x, y, z, w]
     """
     rad = rad * 0.5
-    s = np.sin(rad)
-    return np.array([
+    s = math.sin(rad)
+    return (
         s * axis[0],
         s * axis[1],
         s * axis[2],
-        np.cos(rad)
-    ])
+        math.cos(rad)
+    )
 
-def rotation_to(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+def _cross_product(a: Cartesian, b: Cartesian) -> Cartesian:
+    """Cross product of two 3D vectors."""
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2], 
+        a[0] * b[1] - a[1] * b[0]
+    )
+
+def _dot_product(a: Cartesian, b: Cartesian) -> float:
+    """Dot product of two 3D vectors."""
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+def _norm(v: Cartesian) -> float:
+    """Magnitude of a 3D vector."""
+    return math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+
+def _normalize(v: Cartesian) -> Cartesian:
+    """Normalize a 3D vector."""
+    norm = _norm(v)
+    return (v[0] / norm, v[1] / norm, v[2] / norm)
+
+def rotation_to(a: Cartesian, b: Cartesian) -> Tuple[float, float, float, float]:
     """
     Sets a quaternion to represent the shortest rotation from one vector to another.
     Both vectors are assumed to be unit length.
@@ -100,22 +123,23 @@ def rotation_to(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     Returns:
         The quaternion [x, y, z, w]
     """
-    dot = np.dot(a, b)
+    dot = _dot_product(a, b)
     
     if dot < -0.999999:
         # Vectors are nearly opposite, use x-axis as reference
-        tmpvec = np.cross(np.array([1, 0, 0]), a)
-        if np.linalg.norm(tmpvec) < 0.000001:
+        tmpvec = _cross_product((1, 0, 0), a)
+        if _norm(tmpvec) < 0.000001:
             # If x-axis is parallel to a, use y-axis
-            tmpvec = np.cross(np.array([0, 1, 0]), a)
-        tmpvec = tmpvec / np.linalg.norm(tmpvec)
-        return set_axis_angle(tmpvec, np.pi)
+            tmpvec = _cross_product((0, 1, 0), a)
+        tmpvec = _normalize(tmpvec)
+        return set_axis_angle(tmpvec, math.pi)
     elif dot > 0.999999:
         # Vectors are nearly parallel, return identity quaternion
-        return np.array([0, 0, 0, 1])
+        return (0, 0, 0, 1)
     else:
         # Normal case
-        tmpvec = np.cross(a, b)
-        out = np.array([tmpvec[0], tmpvec[1], tmpvec[2], 1 + dot])
+        tmpvec = _cross_product(a, b)
+        out = (tmpvec[0], tmpvec[1], tmpvec[2], 1 + dot)
         # Normalize
-        return out / np.linalg.norm(out) 
+        norm = math.sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + out[3] * out[3])
+        return (out[0] / norm, out[1] / norm, out[2] / norm, out[3] / norm)

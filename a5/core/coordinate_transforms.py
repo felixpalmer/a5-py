@@ -5,7 +5,6 @@ Copyright (c) A5 contributors
 """
 
 import math
-import numpy as np
 from typing import cast, List, Tuple
 from .coordinate_systems import (
     Degrees, Radians, Face, Polar, IJ, Cartesian, Spherical, LonLat,
@@ -40,19 +39,27 @@ def to_face(polar: Polar) -> Face:
     rho, gamma = polar
     x = rho * math.cos(gamma)
     y = rho * math.sin(gamma)
-    return cast(Face, np.array([x, y], dtype=np.float64))
+    return cast(Face, (x, y))
 
 def face_to_ij(face: Face) -> IJ:
     """Convert face coordinates to IJ coordinates."""
     # Note: BASIS_INVERSE needs to be defined in pentagon.py
-    ij_array = np.dot(BASIS_INVERSE, face)
-    return cast(IJ, ij_array)
+    # Manual dot product: BASIS_INVERSE @ face
+    result = (
+        BASIS_INVERSE[0][0] * face[0] + BASIS_INVERSE[0][1] * face[1],
+        BASIS_INVERSE[1][0] * face[0] + BASIS_INVERSE[1][1] * face[1]
+    )
+    return cast(IJ, result)
 
 def ij_to_face(ij: IJ) -> Face:
     """Convert IJ coordinates to face coordinates."""
     # Note: BASIS needs to be defined in pentagon.py
-    face_array = np.dot(BASIS, ij)
-    return cast(Face, face_array)
+    # Manual dot product: BASIS @ ij
+    result = (
+        BASIS[0][0] * ij[0] + BASIS[0][1] * ij[1],
+        BASIS[1][0] * ij[0] + BASIS[1][1] * ij[1]
+    )
+    return cast(Face, result)
 
 def to_spherical(xyz: Cartesian) -> Spherical:
     """Convert Cartesian coordinates to spherical coordinates."""
@@ -67,7 +74,7 @@ def to_cartesian(spherical: Spherical) -> Cartesian:
     x = math.sin(phi) * math.cos(theta)
     y = math.sin(phi) * math.sin(theta)
     z = math.cos(phi)
-    return cast(Cartesian, np.array([x, y, z], dtype=np.float64))
+    return cast(Cartesian, (x, y, z))
 
 def from_lonlat(lon_lat: LonLat) -> Spherical:
     """Convert longitude/latitude to spherical coordinates.
@@ -125,10 +132,10 @@ def face_to_barycentric(p: Face, triangle: FaceTriangle) -> Barycentric:
 def barycentric_to_face(b: Barycentric, triangle: FaceTriangle) -> Face:
     """Convert barycentric coordinates to face coordinates."""
     p1, p2, p3 = triangle
-    return cast(Face, np.array([
+    return cast(Face, (
         b[0] * p1[0] + b[1] * p2[0] + b[2] * p3[0],
         b[0] * p1[1] + b[1] * p2[1] + b[2] * p3[1]
-    ], dtype=np.float64))
+    ))
 
 Contour = List[LonLat]
 
@@ -143,10 +150,15 @@ def normalize_longitudes(contour: Contour) -> Contour:
     """
     # Calculate center in Cartesian space to avoid poles & antimeridian crossing issues
     points = [to_cartesian(from_lonlat(lonlat)) for lonlat in contour]
-    center = np.zeros(3, dtype=np.float64)
+    center_x, center_y, center_z = 0.0, 0.0, 0.0
     for point in points:
-        center += point
-    center /= np.linalg.norm(center)
+        center_x += point[0]
+        center_y += point[1]
+        center_z += point[2]
+    
+    # Normalize the center
+    center_norm = math.sqrt(center_x * center_x + center_y * center_y + center_z * center_z)
+    center = (center_x / center_norm, center_y / center_norm, center_z / center_norm)
     center_lon, center_lat = to_lonlat(to_spherical(cast(Cartesian, center)))
     
     if center_lat > 89.99 or center_lat < -89.99:
@@ -170,7 +182,7 @@ def normalize_longitudes(contour: Contour) -> Contour:
     
     return result 
 
-def quat_from_spherical(axis: Spherical) -> np.ndarray:
+def quat_from_spherical(axis: Spherical) -> tuple:
     """
     Creates a quaternion representing a rotation from the north pole to a given axis.
     
@@ -181,4 +193,4 @@ def quat_from_spherical(axis: Spherical) -> np.ndarray:
         quaternion [x, y, z, w]
     """
     cartesian = to_cartesian(axis)
-    return rotation_to(np.array([0, 0, 1], dtype=np.float64), cartesian) 
+    return rotation_to((0, 0, 1), cartesian) 
