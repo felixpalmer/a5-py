@@ -44,7 +44,7 @@ from typing import cast
 from ..core.coordinate_systems import Cartesian, Face, Barycentric, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_face
 from ..geometry.spherical_triangle import SphericalTriangleShape
-from ..utils.vector import vector_difference, quadruple_product, slerp
+from ..utils.vector import vector_difference, quadruple_product, slerp, dot_product, cross_product, vector_magnitude
 
 class PolyhedralProjection:
     """
@@ -73,7 +73,7 @@ class PolyhedralProjection:
         # As we just need the intersection of two great circles we can use difference
         # between A and v, as it lies in the same plane of the great circle containing A & v
         Z = v - A
-        Z_norm = np.linalg.norm(Z)
+        Z_norm = vector_magnitude(Z)
         
         # Handle case where v is exactly A (or very close)
         if Z_norm < 1e-14:
@@ -85,7 +85,8 @@ class PolyhedralProjection:
         Z = cast(Cartesian, Z)
         
         p = quadruple_product(A, Z, B, C)
-        p = p / np.linalg.norm(p)
+        p_norm = vector_magnitude(p)
+        p = (p[0] / p_norm, p[1] / p_norm, p[2] / p_norm)
         p = cast(Cartesian, p)
 
         h = vector_difference(A, v) / vector_difference(A, p)
@@ -127,7 +128,7 @@ class PolyhedralProjection:
         if b[2] > threshold:
             return C
         
-        c1 = np.cross(B, C)
+        c1 = cross_product(B, C)
         area_abc = triangle_shape.get_area()
         h = 1 - b[0]
         R = b[2] / h
@@ -136,12 +137,12 @@ class PolyhedralProjection:
         half_c = math.sin(alpha / 2)
         CC = 2 * half_c * half_c  # Half angle formula
 
-        c01 = np.dot(A, B)
-        c12 = np.dot(B, C)
-        c20 = np.dot(C, A)
-        s12 = np.linalg.norm(c1)
+        c01 = dot_product(A, B)
+        c12 = dot_product(B, C)
+        c20 = dot_product(C, A)
+        s12 = vector_magnitude(c1)
 
-        V = np.dot(A, c1)  # Triple product of A, B, C. Constant??
+        V = dot_product(A, c1)  # Triple product of A, B, C. Constant??
         f = S * V + CC * (c01 * c12 - c20)
         g = CC * s12 * (1 + c01)
         q = (2 / math.acos(c12)) * math.atan2(g, f)
