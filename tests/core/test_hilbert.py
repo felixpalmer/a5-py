@@ -1,5 +1,3 @@
-import numpy as np
-from numpy import base_repr
 import pytest
 from a5.core.hilbert import (
     quaternary_to_kj,
@@ -89,10 +87,11 @@ def test_neighboring_anchors_are_adjacent():
     anchor3 = s_to_anchor(2, 1, 'uv')
     
     # Check that relative positions make sense
-    diff = anchor2.offset - anchor1.offset
-    assert np.linalg.norm(diff) == 1  # Should be adjacent
-    diff2 = anchor3.offset - anchor2.offset
-    assert np.linalg.norm(diff2) == np.sqrt(2)  # Should be adjacent
+    diff = (anchor2.offset[0] - anchor1.offset[0], anchor2.offset[1] - anchor1.offset[1])
+    import math
+    assert math.sqrt(diff[0]**2 + diff[1]**2) == 1  # Should be adjacent
+    diff2 = (anchor3.offset[0] - anchor2.offset[0], anchor3.offset[1] - anchor2.offset[1])
+    assert math.sqrt(diff2[0]**2 + diff2[1]**2) == math.sqrt(2)  # Should be adjacent
 
 def test_generates_correct_anchors():
     EXPECTED_ANCHORS = [
@@ -186,7 +185,13 @@ def test_required_digits_matches_s_to_anchor():
     for s in test_values:
         anchor = s_to_anchor(s, 20, 'uv')
         required_digits = get_required_digits(anchor.offset)
-        actual_digits = len(base_repr(s, base=4))
+        # Convert to base 4 manually
+        temp_s = s
+        digits = 0
+        while temp_s > 0:
+            digits += 1
+            temp_s //= 4
+        actual_digits = digits if digits > 0 else 1
         assert required_digits >= actual_digits
         assert required_digits <= actual_digits + 1
 

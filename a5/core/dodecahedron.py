@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import numpy as np
+# NumPy removed
+from typing import Tuple
 from .quat import transform_quat, conjugate
 from .coordinate_transforms import Radians, Spherical, Cartesian, Polar, to_cartesian, to_spherical
 from .warp import warp_polar, unwarp_polar
@@ -10,7 +11,7 @@ from ..projections.gnomonic import GnomonicProjection
 
 gnomonic = GnomonicProjection()
 
-def project_dodecahedron(unwarped: Polar, origin_transform: np.ndarray, origin_rotation: Radians) -> Spherical:
+def project_dodecahedron(unwarped: Polar, origin_transform: Tuple[float, float, float, float], origin_rotation: Radians) -> Spherical:
     # Warp in polar space to minimize area variation across sphere
     rho, gamma = warp_polar(unwarped)
 
@@ -22,18 +23,18 @@ def project_dodecahedron(unwarped: Polar, origin_transform: np.ndarray, origin_r
     projected = to_cartesian(projected_spherical)  # [x, y, z]
 
     # Rotate to correct orientation on globe and return spherical coordinates
-    rotated = transform_quat(np.array(projected), origin_transform)
-    return to_spherical(tuple(rotated))
+    rotated = transform_quat(projected, origin_transform)
+    return to_spherical(rotated)
 
 
-def unproject_dodecahedron(spherical: Spherical, origin_transform: np.ndarray, origin_rotation: Radians) -> Polar:
+def unproject_dodecahedron(spherical: Spherical, origin_transform: Tuple[float, float, float, float], origin_rotation: Radians) -> Polar:
     # Transform back to origin space
-    x, y, z = to_cartesian(spherical)
+    cartesian = to_cartesian(spherical)
     inverse_quat = conjugate(origin_transform)
-    rotated = transform_quat(np.array([x, y, z]), inverse_quat)
+    rotated = transform_quat(cartesian, inverse_quat)
 
     # Unproject gnomonically to polar coordinates in origin space
-    projected_spherical = to_spherical(tuple(rotated))
+    projected_spherical = to_spherical(rotated)
     polar = gnomonic.inverse(projected_spherical)
 
     # Rotate around face axis to remove origin rotation

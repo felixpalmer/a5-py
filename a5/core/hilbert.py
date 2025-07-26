@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import numpy as np
+# import numpy as np  # Removed
+import math
 from typing import Tuple, List, Union, Literal, Final
 from .coordinate_systems import IJ, KJ
 
@@ -33,12 +34,12 @@ PATTERN_FLIPPED_REVERSED = reverse_pattern(PATTERN_FLIPPED)
 def ij_to_kj(ij: IJ) -> KJ:
     """Convert from IJ coordinates to KJ coordinates."""
     i, j = ij
-    return np.array([i + j, j], dtype=np.float64)
+    return (i + j, j)
 
 def kj_to_ij(kj: KJ) -> IJ:
     """Convert from KJ coordinates to IJ coordinates."""
     k, j = kj
-    return np.array([k - j, j], dtype=np.float64)
+    return (k - j, j)
 
 #  Orientation of the Hilbert curve. The curve fills a space defined by the triangle with vertices
 #  u, v & w. The orientation describes which corner the curve starts and ends at, e.g. wv is a
@@ -90,7 +91,7 @@ def quaternary_to_flips(n: Quaternary) -> Tuple[Flip, Flip]:
     flips = [(NO, NO), (NO, YES), (NO, NO), (YES, NO)]
     return flips[n]
 
-FLIP_SHIFT = np.array([-1, 1])
+FLIP_SHIFT = (-1, 1)
 
 def _shift_digits(digits: List[Quaternary], i: int, flips: List[Flip], invert_j: bool, pattern: List[int]) -> None:
     """Shift digits based on pattern to adjust cell layout."""
@@ -137,25 +138,25 @@ def s_to_anchor(s: Union[int, str], resolution: int, orientation: Orientation) -
     
     if flip_ij:
         i, j = anchor.offset
-        anchor.offset = np.array([j, i])
+        anchor.offset = (j, i)
         
         # Compensate for origin shift
         if anchor.flips[0] == YES:
-            anchor.offset += FLIP_SHIFT
+            anchor.offset = (anchor.offset[0] + FLIP_SHIFT[0], anchor.offset[1] + FLIP_SHIFT[1])
         if anchor.flips[1] == YES:
-            anchor.offset -= FLIP_SHIFT
+            anchor.offset = (anchor.offset[0] - FLIP_SHIFT[0], anchor.offset[1] - FLIP_SHIFT[1])
             
     if invert_j:
         i, j = anchor.offset
         new_j = (1 << resolution) - (i + j)
         anchor.flips = (-anchor.flips[0], anchor.flips[1])
-        anchor.offset[1] = new_j
+        anchor.offset = (anchor.offset[0], new_j)
         
     return anchor
 
 def _s_to_anchor(s: int, resolution: int, invert_j: bool, flip_ij: bool) -> Anchor:
     """Internal function to convert s-value to anchor."""
-    offset = np.zeros(2)
+    offset = [0.0, 0.0]
     flips = [NO, NO]
     
     # Get quaternary digits
@@ -180,11 +181,11 @@ def _s_to_anchor(s: int, resolution: int, invert_j: bool, flip_ij: bool) -> Anch
     flips = [NO, NO]  # Reset flips for the next loop
     for i in range(len(digits) - 1, -1, -1):
         # Scale up existing anchor
-        offset *= 2
+        offset = [offset[0] * 2, offset[1] * 2]
         
         # Get child anchor and combine with current anchor
         child_offset = quaternary_to_kj(digits[i], tuple(flips))
-        offset += child_offset
+        offset = [offset[0] + child_offset[0], offset[1] + child_offset[1]]
         
         new_flips = quaternary_to_flips(digits[i])
         flips[0] *= new_flips[0]
@@ -192,16 +193,16 @@ def _s_to_anchor(s: int, resolution: int, invert_j: bool, flip_ij: bool) -> Anch
         
     k = digits[0] if digits else 0
 
-    return Anchor(k, kj_to_ij(offset), tuple(flips))
+    return Anchor(k, kj_to_ij(tuple(offset)), tuple(flips))
 
 # Get the number of digits needed to represent the offset
 # As we don't know the flips we need to add 2 to include the next row
-def get_required_digits(offset: np.ndarray) -> int:
+def get_required_digits(offset: Tuple[float, float]) -> int:
     """Calculate required number of digits to represent the offset."""
-    index_sum = np.ceil(offset[0]) + np.ceil(offset[1])
+    index_sum = math.ceil(offset[0]) + math.ceil(offset[1])
     if index_sum == 0:
         return 1
-    return 1 + int(np.floor(np.log2(index_sum)))
+    return 1 + int(math.floor(math.log2(index_sum)))
 
 # This function uses the ij basis, unlike its inverse!
 def ij_to_quaternary(ij: IJ, flips: Tuple[Flip, Flip]) -> Quaternary:
@@ -266,21 +267,21 @@ def _ij_to_s(input_ij: IJ, invert_j: bool, flip_ij: bool, resolution: int) -> in
     digits = [0] * num_digits
     
     flips = [NO, NO]
-    pivot = np.zeros(2)
+    pivot = [0.0, 0.0]
     
     # Process digits from left to right (most significant first)
     for i in range(num_digits - 1, -1, -1):
-        relative_offset = input_ij - pivot
+        relative_offset = (input_ij[0] - pivot[0], input_ij[1] - pivot[1])
         scale = 1 << i
-        scaled_offset = relative_offset / scale
+        scaled_offset = (relative_offset[0] / scale, relative_offset[1] / scale)
         
         digit = ij_to_quaternary(scaled_offset, tuple(flips))
         digits[i] = digit
         
         # Update running state
         child_offset = kj_to_ij(quaternary_to_kj(digit, tuple(flips)))
-        upscaled_child_offset = child_offset * scale
-        pivot += upscaled_child_offset
+        upscaled_child_offset = (child_offset[0] * scale, child_offset[1] * scale)
+        pivot = [pivot[0] + upscaled_child_offset[0], pivot[1] + upscaled_child_offset[1]]
         
         new_flips = quaternary_to_flips(digit)
         flips[0] *= new_flips[0]

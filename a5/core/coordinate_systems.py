@@ -5,16 +5,14 @@ Copyright (c) A5 contributors
 """
 
 from typing import NewType, Tuple, TypeVar, Union
-import numpy as np
-from numpy.typing import NDArray
 
 # Base types
 Degrees = NewType('Degrees', float)
 Radians = NewType('Radians', float)
 
 # Vector types
-Vec2 = NDArray[np.float64]  # 2D vector
-Vec3 = NDArray[np.float64]  # 3D vector
+Vec2 = Tuple[float, float]  # 2D vector
+Vec3 = Tuple[float, float, float]  # 3D vector
 
 # 2D coordinate systems
 """

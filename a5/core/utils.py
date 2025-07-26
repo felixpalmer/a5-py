@@ -1,29 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import numpy as np
-from typing import List, Tuple, Optional, TypedDict,NamedTuple
-from .coordinate_systems import Radians,LonLat,Face, Spherical
+import math
+from typing import List, Tuple, Optional, TypedDict, NamedTuple
+from .coordinate_systems import Radians, LonLat, Face, Spherical
 from .hilbert import Orientation
 from dataclasses import dataclass
 
-vec2 = np.array
-vec3 = np.array
-mat2 = np.ndarray
-mat2d = np.ndarray
+# Type aliases for vectors and matrices (now pure Python)
+vec2 = Tuple[float, float]
+vec3 = Tuple[float, float, float]
+mat2 = Tuple[Tuple[float, float], Tuple[float, float]]
+mat2d = Tuple[Tuple[float, float, float], Tuple[float, float, float]]
 
 class Origin(NamedTuple):
     id: int
     axis: Spherical
-    quat: np.ndarray
+    quat: Tuple[float, float, float, float]
     angle: Radians
     orientation: List[Orientation]
     first_quintant: int
 
 Contour = List[LonLat]
-
-
-
 
 class A5Cell(TypedDict):
     origin: Origin
@@ -31,17 +29,25 @@ class A5Cell(TypedDict):
     S: int
     resolution: int
 
-
 def triangle_area(v1: vec3, v2: vec3, v3: vec3) -> float:
-    edge1 = v2 - v1
-    edge2 = v3 - v1
+    """Calculate the area of a triangle given three 3D vertices."""
+    # Calculate edge vectors
+    edge1 = (v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2])
+    edge2 = (v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2])
+    
     # Calculate cross product
-    cross = np.cross(edge1, edge2)
+    cross_x = edge1[1] * edge2[2] - edge1[2] * edge2[1]
+    cross_y = edge1[2] * edge2[0] - edge1[0] * edge2[2]
+    cross_z = edge1[0] * edge2[1] - edge1[1] * edge2[0]
+    
+    # Calculate magnitude of cross product
+    magnitude = math.sqrt(cross_x * cross_x + cross_y * cross_y + cross_z * cross_z)
+    
     # Area is half the magnitude of the cross product
-    return 0.5 * np.linalg.norm(cross)
-
+    return 0.5 * magnitude
 
 def pentagon_area(pentagon: List[vec3]) -> float:
+    """Calculate the area of a pentagon by triangulation."""
     area = 0.0
     v1 = pentagon[0]
     for i in range(1, 4):
