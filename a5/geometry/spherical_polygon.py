@@ -2,27 +2,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import numpy as np
 from typing import List, Tuple, Union
 import math
 from ..core.coordinate_systems import Cartesian
-from ..utils.vector import slerp, triple_product
-from ..utils.vector_np import triple_product_np
+from ..utils.vector import slerp, triple_product, dot_product, cross_product, vector_magnitude
 
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
 
 # Use Cartesian system for all calculations for greater accuracy
 # Using [x, y, z] gives equal precision in all directions, unlike spherical coordinates
-UP = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+UP = (0.0, 0.0, 1.0)
 
 
 class SphericalPolygonShape:
     def __init__(self, vertices: SphericalPolygon):
-        # Convert all vertices to numpy arrays and ensure they're float64
-        self.vertices = [np.array(v, dtype=np.float64) for v in vertices]
-        # Make vertices immutable
-        self.vertices = tuple(self.vertices)
+        # Store vertices as tuples for immutability and consistency
+        self.vertices = tuple(tuple(v) if not isinstance(v, tuple) else v for v in vertices)
         # self._is_winding_correct()  # Debug check only, don't correct
 
     def get_boundary(self, n_segments: int = 1, closed_ring: bool = True) -> SphericalPolygon:
@@ -87,9 +83,9 @@ class SphericalPolygonShape:
         k = (i + N - 1) % N
 
         # Points A & B (vertex before and after)
-        V = self.vertices[i].copy()
-        VA = self.vertices[j].copy() - V  # Directly subtract to match JS vec3.sub
-        VB = self.vertices[k].copy() - V
+        V = self.vertices[i]
+        VA = (self.vertices[j][0] - V[0], self.vertices[j][1] - V[1], self.vertices[j][2] - V[2])
+        VB = (self.vertices[k][0] - V[0], self.vertices[k][1] - V[1], self.vertices[k][2] - V[2])
         
         return V, VA, VB
 
@@ -112,12 +108,12 @@ class SphericalPolygonShape:
         for i in range(N):
             # Transform point and neighboring vertices into coordinate system centered on vertex
             V, VA, VB = self.get_transformed_vertices(i)
-            VP = point - V
+            VP = (point[0] - V[0], point[1] - V[1], point[2] - V[2])
 
             # Normalize to obtain unit direction vectors
-            norm_VP = np.linalg.norm(VP)
-            norm_VA = np.linalg.norm(VA)
-            norm_VB = np.linalg.norm(VB)
+            norm_VP = vector_magnitude(VP)
+            norm_VA = vector_magnitude(VA)
+            norm_VB = vector_magnitude(VB)
             
             # Handle case where point is identical to vertex (zero-length vector)
             if norm_VP < 1e-14:
@@ -125,20 +121,20 @@ class SphericalPolygonShape:
             if norm_VA < 1e-14 or norm_VB < 1e-14:
                 continue  # Skip degenerate edge
                 
-            VP = VP / norm_VP
-            VA = VA / norm_VA
-            VB = VB / norm_VB
+            VP = (VP[0] / norm_VP, VP[1] / norm_VP, VP[2] / norm_VP)
+            VA = (VA[0] / norm_VA, VA[1] / norm_VA, VA[2] / norm_VA)
+            VB = (VB[0] / norm_VB, VB[1] / norm_VB, VB[2] / norm_VB)
 
             # Cross products will point away from the center of the sphere when
             # point P is within arc formed by VA and VB
-            cross_ap = np.cross(VA, VP)
-            cross_pb = np.cross(VP, VB)
+            cross_ap = cross_product(VA, VP)
+            cross_pb = cross_product(VP, VB)
 
             # Dot product will be positive when point P is within arc formed by VA and VB
             # The magnitude of the dot product is the sine of the angle between the two vectors
             # which is the same as the angle for small angles.
-            sin_ap = np.dot(V, cross_ap)
-            sin_pb = np.dot(V, cross_pb)
+            sin_ap = dot_product(V, cross_ap)
+            sin_pb = dot_product(V, cross_pb)
 
             # By returning the minimum value we find the arc where the point is closest to being outside
             theta_delta_min = min(theta_delta_min, sin_ap, sin_pb)
@@ -158,14 +154,17 @@ class SphericalPolygonShape:
             Area of the spherical triangle in radians
         """
         # Calculate midpoints
-        mid_a = (v2 + v3) * 0.5
-        mid_b = (v3 + v1) * 0.5
-        mid_c = (v1 + v2) * 0.5
+        mid_a = ((v2[0] + v3[0]) * 0.5, (v2[1] + v3[1]) * 0.5, (v2[2] + v3[2]) * 0.5)
+        mid_b = ((v3[0] + v1[0]) * 0.5, (v3[1] + v1[1]) * 0.5, (v3[2] + v1[2]) * 0.5)
+        mid_c = ((v1[0] + v2[0]) * 0.5, (v1[1] + v2[1]) * 0.5, (v1[2] + v2[2]) * 0.5)
         
         # Normalize midpoints
-        mid_a = mid_a / np.linalg.norm(mid_a)
-        mid_b = mid_b / np.linalg.norm(mid_b)
-        mid_c = mid_c / np.linalg.norm(mid_c)
+        norm_a = vector_magnitude(mid_a)
+        mid_a = (mid_a[0] / norm_a, mid_a[1] / norm_a, mid_a[2] / norm_a)
+        norm_b = vector_magnitude(mid_b)
+        mid_b = (mid_b[0] / norm_b, mid_b[1] / norm_b, mid_b[2] / norm_b)
+        norm_c = vector_magnitude(mid_c)
+        mid_c = (mid_c[0] / norm_c, mid_c[1] / norm_c, mid_c[2] / norm_c)
         
         # Calculate area using triple product
         S = triple_product(mid_a, mid_b, mid_c)
@@ -202,10 +201,16 @@ class SphericalPolygonShape:
             return self.get_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2])
 
         # Calculate center of polygon
-        center = np.zeros(3, dtype=np.float64)
+        center = [0.0, 0.0, 0.0]
         for vertex in self.vertices:
-            center += vertex
-        center = center / np.linalg.norm(center)
+            center[0] += vertex[0]
+            center[1] += vertex[1]
+            center[2] += vertex[2]
+        center = tuple(center)
+        
+        # Normalize center
+        center_norm = vector_magnitude(center)
+        center = (center[0] / center_norm, center[1] / center_norm, center[2] / center_norm)
 
         # Sum fan of triangles around center
         area = 0.0
