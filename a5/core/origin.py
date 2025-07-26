@@ -4,7 +4,7 @@ SPDX-License-Identifier: Apache-2.0
 Copyright (c) A5 contributors
 """
 
-import numpy as np
+import math
 from typing import List, Tuple, NamedTuple
 from .coordinate_transforms import to_cartesian, quat_from_spherical
 from .coordinate_systems import Radians, Spherical, Face
@@ -13,13 +13,13 @@ from .hilbert import Orientation
 from .quat import conjugate, transform_quat, rotation_to
 from .utils import Origin
 
-UP = np.array([0, 0, 1], dtype=np.float64)
+UP = (0, 0, 1)
 origins: List[Origin] = []
 
 
 class FaceTransform(NamedTuple):
     point: Face
-    quat: np.ndarray
+    quat: Tuple[float, float, float, float]
 
 # Quintant layouts (clockwise & counterclockwise)
 clockwise_fan = ['vu', 'uw', 'vw', 'vw', 'vw']
@@ -59,10 +59,10 @@ def generate_origins() -> None:
         alpha = i * TWO_PI_OVER_5
         alpha2 = alpha + PI_OVER_5
         add_origin((alpha, interhedral_angle), PI_OVER_5)
-        add_origin((alpha2, np.pi - interhedral_angle), PI_OVER_5)
+        add_origin((alpha2, math.pi - interhedral_angle), PI_OVER_5)
 
     # South pole
-    add_origin((0, np.pi), 0)
+    add_origin((0, math.pi), 0)
 
 def add_origin(axis: Spherical, angle: Radians) -> None:
     """Add a new origin point."""
@@ -136,7 +136,7 @@ def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> F
         FaceTransform containing the new point and the quaternion representing the transform
     """
     # Get inverse quaternion
-    from_quat = from_origin.quat.flatten()
+    from_quat = from_origin.quat
     inverse_quat = conjugate(from_quat)
 
     to_axis = to_cartesian(to_origin.axis)
@@ -145,18 +145,29 @@ def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> F
     local_to_axis = transform_quat(to_axis, inverse_quat)
 
     # Flatten axis to XY plane to obtain direction, scale to get distance to new origin
-    direction = np.array([local_to_axis[0], local_to_axis[1]], dtype=np.float64)
-    direction = direction / np.linalg.norm(direction)
-    direction *= 2 * distance_to_edge
+    direction_x, direction_y = local_to_axis[0], local_to_axis[1]
+    direction_norm = math.sqrt(direction_x * direction_x + direction_y * direction_y)
+    direction = (
+        (direction_x / direction_norm) * 2 * distance_to_edge,
+        (direction_y / direction_norm) * 2 * distance_to_edge
+    )
 
     # Move point to be relative to new origin
-    offset_point = point - direction
+    offset_point = (point[0] - direction[0], point[1] - direction[1])
 
     # Construct relative transform from old origin to new origin
     interface_quat = rotation_to(UP, local_to_axis)
-    interface_quat = np.dot(from_origin.quat.flatten(), interface_quat)
+    
+    # Quaternion multiplication manually
+    from_quat = from_origin.quat
+    qx = from_quat[3] * interface_quat[0] + from_quat[0] * interface_quat[3] + from_quat[1] * interface_quat[2] - from_quat[2] * interface_quat[1]
+    qy = from_quat[3] * interface_quat[1] - from_quat[0] * interface_quat[2] + from_quat[1] * interface_quat[3] + from_quat[2] * interface_quat[0]
+    qz = from_quat[3] * interface_quat[2] + from_quat[0] * interface_quat[1] - from_quat[1] * interface_quat[0] + from_quat[2] * interface_quat[3]
+    qw = from_quat[3] * interface_quat[3] - from_quat[0] * interface_quat[0] - from_quat[1] * interface_quat[1] - from_quat[2] * interface_quat[2]
+    
+    final_quat = (qx, qy, qz, qw)
 
-    return FaceTransform(point=offset_point, quat=interface_quat)
+    return FaceTransform(point=offset_point, quat=final_quat)
 
 def find_nearest_origin(point: Spherical) -> Origin:
     """
@@ -192,7 +203,7 @@ def haversine(point: Spherical, axis: Spherical) -> float:
     theta2, phi2 = axis
     dtheta = theta2 - theta
     dphi = phi2 - phi
-    a1 = np.sin(dphi / 2)
-    a2 = np.sin(dtheta / 2)
-    angle = a1 * a1 + a2 * a2 * np.sin(phi) * np.sin(phi2)
-    return angle 
+    a1 = math.sin(dphi / 2)
+    a2 = math.sin(dtheta / 2)
+    angle = a1 * a1 + a2 * a2 * math.sin(phi) * math.sin(phi2)
+    return angle

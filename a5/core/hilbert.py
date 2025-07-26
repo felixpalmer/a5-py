@@ -46,17 +46,17 @@ def kj_to_ij(kj: KJ) -> IJ:
 Orientation = Literal['uv', 'vu', 'uw', 'wu', 'vw', 'wv']
 
 # Using KJ allows simplification of definitions
-k_pos = np.array([1.0, 0.0])  # k
-j_pos = np.array([0.0, 1.0])  # j
-k_neg = -k_pos
-j_neg = -j_pos
-ZERO = np.array([0.0, 0.0])
+k_pos = (1.0, 0.0)  # k
+j_pos = (0.0, 1.0)  # j
+k_neg = (-k_pos[0], -k_pos[1])
+j_neg = (-j_pos[0], -j_pos[1])
+ZERO = (0.0, 0.0)
 
 def quaternary_to_kj(n: Quaternary, flips: Tuple[Flip, Flip]) -> KJ:
     """Indirection to allow for flips"""
     flip_x, flip_y = flips
-    p = ZERO.copy()
-    q = ZERO.copy()
+    p = ZERO
+    q = ZERO
     
     if flip_x == NO and flip_y == NO:
         p = k_pos
@@ -75,13 +75,13 @@ def quaternary_to_kj(n: Quaternary, flips: Tuple[Flip, Flip]) -> KJ:
         q = j_neg
 
     if n == 0:
-        return ZERO.copy()
+        return ZERO
     elif n == 1:
-        return p.copy()
+        return p
     elif n == 2:
-        return p + q
+        return (p[0] + q[0], p[1] + q[1])
     elif n == 3:
-        return q + 2 * p
+        return (q[0] + 2 * p[0], q[1] + 2 * p[1])
     else:
         raise ValueError(f"Invalid Quaternary value: {n}")
 
@@ -243,12 +243,15 @@ def ij_to_s(input_ij: IJ, resolution: int, orientation: str = 'uv') -> int:
     invert_j = orientation in ('wv', 'vw')
     flip_ij = orientation in ('wu', 'uw')
     
-    ij = input_ij.copy()
+    # Convert tuple to list for modification, then back to tuple
+    ij = list(input_ij)
     if flip_ij:
         ij[0], ij[1] = ij[1], ij[0]
     if invert_j:
         i, j = ij
         ij[1] = (1 << resolution) - (i + j)
+    
+    ij = tuple(ij)  # Convert back to tuple
         
     s = _ij_to_s(ij, invert_j, flip_ij, resolution)
     if reverse:

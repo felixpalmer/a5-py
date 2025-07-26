@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import numpy as np
+import math
 from typing import List, Tuple, Optional, Literal, NamedTuple
 from ..core.coordinate_systems import Radians, Face, Spherical
 from ..core.hilbert import Orientation
@@ -12,7 +12,7 @@ OriginId = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 class Origin(NamedTuple):
     id: OriginId
     axis: Spherical
-    quat: np.ndarray
+    quat: Tuple[float, float, float, float]
     angle: Radians
     orientation: List[Orientation]
     first_quintant: int
@@ -21,7 +21,7 @@ Pentagon = List[Face]
 
 class PentagonShape:
     def __init__(self, vertices: Pentagon):
-        self.vertices = vertices
+        self.vertices = list(vertices)  # Make a copy to avoid mutating original
         self.id = {"i": 0, "j": 0, "k": 0, "resolution": 1, "segment": None, "origin": None}
         if not self._is_winding_correct():
             self.vertices.reverse()
@@ -45,14 +45,14 @@ class PentagonShape:
 
     def scale(self, scale: float) -> "PentagonShape":
         """Scale the pentagon by the given factor."""
-        for vertex in self.vertices:
-            vertex *= scale
+        for i, vertex in enumerate(self.vertices):
+            self.vertices[i] = (vertex[0] * scale, vertex[1] * scale)
         return self
 
     def rotate180(self) -> "PentagonShape":
         """Rotate the pentagon 180 degrees (equivalent to negating x & y)."""
-        for vertex in self.vertices:
-            vertex *= -1
+        for i, vertex in enumerate(self.vertices):
+            self.vertices[i] = (-vertex[0], -vertex[1])
         return self
 
     def reflect_y(self) -> "PentagonShape":
@@ -61,41 +61,49 @@ class PentagonShape:
         and reverse the winding order to maintain consistent orientation.
         """
         # First reflect all vertices
-        for vertex in self.vertices:
-            vertex[1] = -vertex[1]
+        for i, vertex in enumerate(self.vertices):
+            self.vertices[i] = (vertex[0], -vertex[1])
         
         # Then reverse the winding order to maintain consistent orientation
         self.vertices.reverse()
         
         return self
 
-    def translate(self, translation: np.ndarray) -> "PentagonShape":
+    def translate(self, translation: Tuple[float, float]) -> "PentagonShape":
         """Translate the pentagon by the given vector."""
-        for vertex in self.vertices:
-            vertex += translation
+        for i, vertex in enumerate(self.vertices):
+            self.vertices[i] = (vertex[0] + translation[0], vertex[1] + translation[1])
         return self
 
-    def transform(self, transform: np.ndarray) -> "PentagonShape":
+    def transform(self, transform: Tuple[Tuple[float, float], Tuple[float, float]]) -> "PentagonShape":
         """Apply a 2x2 transformation matrix to the pentagon."""
         for i, vertex in enumerate(self.vertices):
-            self.vertices[i] = np.dot(transform, vertex)
+            # Manual matrix multiplication: transform @ vertex
+            new_x = transform[0][0] * vertex[0] + transform[0][1] * vertex[1]
+            new_y = transform[1][0] * vertex[0] + transform[1][1] * vertex[1]
+            self.vertices[i] = (new_x, new_y)
         return self
 
-    def transform2d(self, transform: np.ndarray) -> "PentagonShape":
+    def transform2d(self, transform: Tuple[Tuple[float, float, float], Tuple[float, float, float]]) -> "PentagonShape":
         """Apply a 2x3 transformation matrix to the pentagon."""
         for i, vertex in enumerate(self.vertices):
-            self.vertices[i] = np.dot(transform[:, :2], vertex) + transform[:, 2]
+            # Manual matrix multiplication for 2x3 matrix: transform[:, :2] @ vertex + transform[:, 2]
+            new_x = transform[0][0] * vertex[0] + transform[0][1] * vertex[1] + transform[0][2]
+            new_y = transform[1][0] * vertex[0] + transform[1][1] * vertex[1] + transform[1][2]
+            self.vertices[i] = (new_x, new_y)
         return self
 
     def clone(self) -> "PentagonShape":
         """Create a deep copy of the pentagon."""
-        return PentagonShape([np.copy(v) for v in self.vertices])
+        return PentagonShape([vertex for vertex in self.vertices])
 
     def get_center(self) -> Face:
         """Get the center point of the pentagon."""
-        return np.sum(self.vertices, axis=0) / 5.0
+        sum_x = sum(vertex[0] for vertex in self.vertices)
+        sum_y = sum(vertex[1] for vertex in self.vertices)
+        return (sum_x / 5.0, sum_y / 5.0)
 
-    def contains_point(self, point: np.ndarray) -> float:
+    def contains_point(self, point: Tuple[float, float]) -> float:
         """
         Test if a point is inside the pentagon by checking if it's on the correct side of all edges.
         Assumes consistent winding order (counter-clockwise).
@@ -129,7 +137,7 @@ class PentagonShape:
             if cross_product > 0:
                 # Only normalize by distance of point to edge as we can assume the edges of the
                 # pentagon are all the same length
-                p_length = np.sqrt(px * px + py * py)
+                p_length = math.sqrt(px * px + py * py)
                 return cross_product / p_length
         
         return -1
@@ -155,12 +163,15 @@ class PentagonShape:
             v2 = self.vertices[(i + 1) % n]
             
             # Add the current vertex
-            new_vertices.append(np.copy(v1))
+            new_vertices.append(v1)
             
             # Add interpolated points along the edge (excluding the endpoints)
             for j in range(1, segments):
                 t = j / segments
-                interpolated = v1 + t * (v2 - v1)
+                interpolated = (
+                    v1[0] + t * (v2[0] - v1[0]),
+                    v1[1] + t * (v2[1] - v1[1])
+                )
                 new_vertices.append(interpolated)
         
-        return PentagonShape(new_vertices) 
+        return PentagonShape(new_vertices)

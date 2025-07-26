@@ -4,7 +4,7 @@ SPDX-License-Identifier: Apache-2.0
 Copyright (c) A5 contributors
 """
 
-import numpy as np
+import math
 from typing import List, cast
 from .coordinate_systems import Degrees, Face, Vec2
 from .constants import distance_to_edge, PI_OVER_10, PI_OVER_5
@@ -18,31 +18,45 @@ D = cast(Degrees, 82.29202980963508)
 E = cast(Degrees, 149.7625318412527)
 
 # Initialize vertices
-a = cast(Face, np.array([0.0, 0.0], dtype=np.float64))
-b = cast(Face, np.array([0.0, 1.0], dtype=np.float64))
+a = cast(Face, (0.0, 0.0))
+b = cast(Face, (0.0, 1.0))
 # c & d calculated by circle intersections. Perhaps can obtain geometrically.
-c = cast(Face, np.array([0.7885966681787006, 1.6149108024237764], dtype=np.float64))
-d = cast(Face, np.array([1.6171013659387945, 1.054928690397459], dtype=np.float64))
-e = cast(Face, np.array([np.cos(PI_OVER_10), np.sin(PI_OVER_10)], dtype=np.float64))
+c = cast(Face, (0.7885966681787006, 1.6149108024237764))
+d = cast(Face, (1.6171013659387945, 1.054928690397459))
+e = cast(Face, (math.cos(PI_OVER_10), math.sin(PI_OVER_10)))
 
 # Distance to edge midpoint
-edge_midpoint_d = 2 * np.linalg.norm(c) * np.cos(PI_OVER_5)
+c_norm = math.sqrt(c[0] * c[0] + c[1] * c[1])
+edge_midpoint_d = 2 * c_norm * math.cos(PI_OVER_5)
 
 # Lattice growth direction is AC, want to rotate it so that it is parallel to x-axis
-BASIS_ROTATION = PI_OVER_5 - np.arctan2(c[1], c[0])  # -27.97 degrees
+BASIS_ROTATION = PI_OVER_5 - math.atan2(c[1], c[0])  # -27.97 degrees
 
 # Scale to match unit sphere
 scale = 2 * distance_to_edge / edge_midpoint_d
 
 # Apply transformations to vertices
-for v in [a, b, c, d, e]:
-    v *= scale
+def transform_vertex(vertex: Face, scale: float, rotation: float) -> Face:
+    """Apply scale and rotation to a vertex."""
+    # Scale
+    scaled_x = vertex[0] * scale
+    scaled_y = vertex[1] * scale
+    
     # Rotate around origin
-    cos_rot = np.cos(BASIS_ROTATION)
-    sin_rot = np.sin(BASIS_ROTATION)
-    x, y = v
-    v[0] = x * cos_rot - y * sin_rot
-    v[1] = x * sin_rot + y * cos_rot
+    cos_rot = math.cos(rotation)
+    sin_rot = math.sin(rotation)
+    
+    return cast(Face, (
+        scaled_x * cos_rot - scaled_y * sin_rot,
+        scaled_x * sin_rot + scaled_y * cos_rot
+    ))
+
+# Apply transformations
+a = transform_vertex(a, scale, BASIS_ROTATION)
+b = transform_vertex(b, scale, BASIS_ROTATION)
+c = transform_vertex(c, scale, BASIS_ROTATION)
+d = transform_vertex(d, scale, BASIS_ROTATION)
+e = transform_vertex(e, scale, BASIS_ROTATION)
 
 """
 Definition of pentagon used for tiling the plane.
@@ -51,28 +65,35 @@ rotational symmetry and thus can be used to tile a regular pentagon.
 """
 PENTAGON = PentagonShape([a, b, c, d, e])
 
-bisector_angle = np.arctan2(c[1], c[0]) - PI_OVER_5
+bisector_angle = math.atan2(c[1], c[0]) - PI_OVER_5
 
 # Define triangle also, as UVW
-u = cast(Face, np.array([0.0, 0.0], dtype=np.float64))
-L = distance_to_edge / np.cos(PI_OVER_5)
+u = cast(Face, (0.0, 0.0))
+L = distance_to_edge / math.cos(PI_OVER_5)
 
 V = bisector_angle + PI_OVER_5
-v = cast(Face, np.array([L * np.cos(V), L * np.sin(V)], dtype=np.float64))
+v = cast(Face, (L * math.cos(V), L * math.sin(V)))
 
 W = bisector_angle - PI_OVER_5
-w = cast(Face, np.array([L * np.cos(W), L * np.sin(W)], dtype=np.float64))
+w = cast(Face, (L * math.cos(W), L * math.sin(W)))
 TRIANGLE = PentagonShape([u, v, w, w, w])  # TODO hacky, don't pretend this is pentagon
 
 """
 Basis vectors used to layout primitive unit
 """
-BASIS = np.array([
-    [v[0], w[0]],
-    [v[1], w[1]]
-], dtype=np.float64)
+# Basis matrix represented as nested tuples
+BASIS = (
+    (v[0], w[0]),
+    (v[1], w[1])
+)
 
-BASIS_INVERSE = np.linalg.inv(BASIS)
+# Calculate matrix inverse manually for 2x2 matrix
+# For matrix [[a, b], [c, d]], inverse is [[d, -b], [-c, a]] / (ad - bc)
+det = BASIS[0][0] * BASIS[1][1] - BASIS[0][1] * BASIS[1][0]
+BASIS_INVERSE = (
+    (BASIS[1][1] / det, -BASIS[0][1] / det),
+    (-BASIS[1][0] / det, BASIS[0][0] / det)
+)
 
 __all__ = [
     'A', 'B', 'C', 'D', 'E',
@@ -81,4 +102,4 @@ __all__ = [
     'u', 'v', 'w', 'V',
     'TRIANGLE',
     'BASIS', 'BASIS_INVERSE'
-] 
+]

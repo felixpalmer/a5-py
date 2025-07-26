@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import numpy as np
+import math
 from typing import List, Tuple
 from ..geometry.pentagon import PentagonShape, Pentagon
 from .pentagon import a, BASIS, PENTAGON, TRIANGLE, v, V, w
@@ -11,18 +11,18 @@ from .hilbert import NO, Anchor, YES
 
 TRIANGLE_MODE = False
 
-shift_right = w.copy()
-shift_left = -w
+shift_right = w  # No need to copy, just reference
+shift_left = (-w[0], -w[1])
 
 # Define transforms for each pentagon in the primitive unit
 # Using pentagon vertices and angle as the basis for the transform
 QUINTANT_ROTATIONS = [
-    np.array([[np.cos(TWO_PI_OVER_5 * quintant), -np.sin(TWO_PI_OVER_5 * quintant)],
-              [np.sin(TWO_PI_OVER_5 * quintant), np.cos(TWO_PI_OVER_5 * quintant)]])
+    (
+        (math.cos(TWO_PI_OVER_5 * quintant), -math.sin(TWO_PI_OVER_5 * quintant)),
+        (math.sin(TWO_PI_OVER_5 * quintant), math.cos(TWO_PI_OVER_5 * quintant))
+    )
     for quintant in range(5)
 ]
-
-translation = np.zeros(2)
 
 def get_pentagon_vertices(resolution: int, quintant: int, anchor: Anchor) -> PentagonShape:
     """
@@ -38,7 +38,11 @@ def get_pentagon_vertices(resolution: int, quintant: int, anchor: Anchor) -> Pen
     """
     pentagon = (TRIANGLE if TRIANGLE_MODE else PENTAGON).clone()
     
-    translation[:] = np.dot(BASIS, anchor.offset)
+    # Manual matrix-vector multiplication: BASIS @ anchor.offset
+    translation = (
+        BASIS[0][0] * anchor.offset[0] + BASIS[0][1] * anchor.offset[1],
+        BASIS[1][0] * anchor.offset[0] + BASIS[1][1] * anchor.offset[1]
+    )
 
     # Apply transformations based on anchor properties
     if anchor.flips[0] == NO and anchor.flips[1] == YES:
@@ -76,27 +80,24 @@ def get_quintant_vertices(quintant: int) -> PentagonShape:
 def get_face_vertices() -> PentagonShape:
     vertices = []
     for rotation in QUINTANT_ROTATIONS:
-        vertices.append(np.dot(rotation, v))
-    
-    # Need to reverse to obtain correct winding order
-    vertices.reverse()
+        # Manual matrix-vector multiplication: rotation @ v
+        new_vertex = (
+            rotation[0][0] * v[0] + rotation[0][1] * v[1],
+            rotation[1][0] * v[0] + rotation[1][1] * v[1]
+        )
+        vertices.append(new_vertex)
     return PentagonShape(vertices)
 
-def get_quintant(point: np.ndarray) -> int:
-    # TODO perhaps quicker way without trigonometry
-    angle = np.arctan2(point[1], point[0])
-    normalized_angle = (angle - V + TWO_PI) % TWO_PI
-    return int(np.ceil(normalized_angle / TWO_PI_OVER_5) % 5)
-
-def get_quintant_polar(polar) -> int:
+def get_quintant_polar(polar: Tuple[float, float]) -> int:
     """
-    Get quintant index from polar coordinates.
+    Determines which quintant a polar coordinate belongs to.
     
     Args:
-        polar: Polar coordinates (rho, gamma)
+        polar: Polar coordinates (r, theta)
         
     Returns:
         Quintant index (0-4)
     """
-    _, gamma = polar
-    return (round(gamma / TWO_PI_OVER_5) + 5) % 5 
+    rho, gamma = polar
+    normalized_gamma = (gamma % TWO_PI) / TWO_PI_OVER_5
+    return int(normalized_gamma) % 5

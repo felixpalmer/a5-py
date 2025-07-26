@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import numpy as np
+import math
 from typing import List, Tuple, Optional, Dict, TypedDict, Union
 from .coordinate_systems import Face, LonLat, Spherical
 from .coordinate_transforms import (
@@ -19,8 +19,7 @@ from .hilbert import ij_to_s, s_to_anchor
 from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
 from ..geometry.spherical_polygon import SphericalPolygonShape
 
-# Reuse these objects to avoid allocation
-_rotation = np.zeros((2, 2))
+# Reuse this object to avoid allocation
 _dodecahedron = DodecahedronProjection()
 
 class CellToBoundaryOptions(TypedDict, total=False):
@@ -50,11 +49,11 @@ def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
     
     for i in range(N):
         R = (i / N) * scale
-        coordinate = np.array([
-            np.cos(i) * R + lon_lat[0],
-            np.sin(i) * R + lon_lat[1]
-        ])
-        samples.append((coordinate[0], coordinate[1]))
+        coordinate = (
+            math.cos(i) * R + lon_lat[0],
+            math.sin(i) * R + lon_lat[1]
+        )
+        samples.append(coordinate)
 
     # Deduplicate estimates
     estimate_set = set()
@@ -108,13 +107,15 @@ def _lonlat_to_estimate(lon_lat: LonLat, resolution: int) -> A5Cell:
     # Rotate into right fifth
     if quintant != 0:
         extra_angle = 2 * PI_OVER_5 * quintant
-        c, s = np.cos(-extra_angle), np.sin(-extra_angle)
-        _rotation[0, 0], _rotation[0, 1] = c, -s
-        _rotation[1, 0], _rotation[1, 1] = s, c
-        dodec_point = np.dot(_rotation, dodec_point)
+        c, s = math.cos(-extra_angle), math.sin(-extra_angle)
+        # Manual 2x2 matrix multiplication
+        new_x = c * dodec_point[0] - s * dodec_point[1]
+        new_y = s * dodec_point[0] + c * dodec_point[1]
+        dodec_point = (new_x, new_y)
 
     hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
-    dodec_point = dodec_point * (2 ** hilbert_resolution)
+    scale_factor = 2 ** hilbert_resolution
+    dodec_point = (dodec_point[0] * scale_factor, dodec_point[1] * scale_factor)
 
     ij = face_to_ij(dodec_point)
     S = ij_to_s(ij, hilbert_resolution, orientation)
