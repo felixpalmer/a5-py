@@ -11,6 +11,7 @@ from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
 from .quat import conjugate, transform_quat, rotation_to
+from ..math import quat as quat_glm, vec2
 from .utils import Origin
 
 UP = (0, 0, 1)
@@ -152,20 +153,19 @@ def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> F
         (direction_y / direction_norm) * 2 * distance_to_edge
     )
 
-    # Move point to be relative to new origin
-    offset_point = (point[0] - direction[0], point[1] - direction[1])
+    # Move point to be relative to new origin using gl-matrix style
+    offset_vec = vec2.create()
+    vec2.subtract(offset_vec, point, direction)
+    offset_point = (offset_vec[0], offset_vec[1])
 
     # Construct relative transform from old origin to new origin
     interface_quat = rotation_to(UP, local_to_axis)
     
-    # Quaternion multiplication manually
+    # Quaternion multiplication using gl-matrix style
     from_quat = from_origin.quat
-    qx = from_quat[3] * interface_quat[0] + from_quat[0] * interface_quat[3] + from_quat[1] * interface_quat[2] - from_quat[2] * interface_quat[1]
-    qy = from_quat[3] * interface_quat[1] - from_quat[0] * interface_quat[2] + from_quat[1] * interface_quat[3] + from_quat[2] * interface_quat[0]
-    qz = from_quat[3] * interface_quat[2] + from_quat[0] * interface_quat[1] - from_quat[1] * interface_quat[0] + from_quat[2] * interface_quat[3]
-    qw = from_quat[3] * interface_quat[3] - from_quat[0] * interface_quat[0] - from_quat[1] * interface_quat[1] - from_quat[2] * interface_quat[2]
-    
-    final_quat = (qx, qy, qz, qw)
+    final_quat_vec = quat_glm.create()
+    quat_glm.multiply(final_quat_vec, from_quat, interface_quat)
+    final_quat = (final_quat_vec[0], final_quat_vec[1], final_quat_vec[2], final_quat_vec[3])
 
     return FaceTransform(point=offset_point, quat=final_quat)
 

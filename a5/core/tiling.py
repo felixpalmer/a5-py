@@ -8,6 +8,7 @@ from ..geometry.pentagon import PentagonShape, Pentagon
 from .pentagon import a, BASIS, PENTAGON, TRIANGLE, v, V, w
 from .constants import TWO_PI, TWO_PI_OVER_5
 from .hilbert import NO, Anchor, YES
+from ..math import vec2
 
 TRIANGLE_MODE = False
 
@@ -38,11 +39,12 @@ def get_pentagon_vertices(resolution: int, quintant: int, anchor: Anchor) -> Pen
     """
     pentagon = (TRIANGLE if TRIANGLE_MODE else PENTAGON).clone()
     
-    # Manual matrix-vector multiplication: BASIS @ anchor.offset
-    translation = (
-        BASIS[0][0] * anchor.offset[0] + BASIS[0][1] * anchor.offset[1],
-        BASIS[1][0] * anchor.offset[0] + BASIS[1][1] * anchor.offset[1]
-    )
+    # Matrix-vector multiplication using gl-matrix style: BASIS @ anchor.offset
+    # Convert 2x2 matrix from ((a,b),(c,d)) to [a,c,b,d] (column-major)
+    basis_flat = [BASIS[0][0], BASIS[1][0], BASIS[0][1], BASIS[1][1]]
+    translation_vec = vec2.create()
+    vec2.transformMat2(translation_vec, anchor.offset, basis_flat)
+    translation = (translation_vec[0], translation_vec[1])
 
     # Apply transformations based on anchor properties
     if anchor.flips[0] == NO and anchor.flips[1] == YES:
@@ -80,11 +82,12 @@ def get_quintant_vertices(quintant: int) -> PentagonShape:
 def get_face_vertices() -> PentagonShape:
     vertices = []
     for rotation in QUINTANT_ROTATIONS:
-        # Manual matrix-vector multiplication: rotation @ v
-        new_vertex = (
-            rotation[0][0] * v[0] + rotation[0][1] * v[1],
-            rotation[1][0] * v[0] + rotation[1][1] * v[1]
-        )
+        # Matrix-vector multiplication using gl-matrix style: rotation @ v
+        # Convert 2x2 matrix from ((a,b),(c,d)) to [a,c,b,d] (column-major)
+        rotation_flat = [rotation[0][0], rotation[1][0], rotation[0][1], rotation[1][1]]
+        vertex_vec = vec2.create()
+        vec2.transformMat2(vertex_vec, v, rotation_flat)
+        new_vertex = (vertex_vec[0], vertex_vec[1])
         vertices.append(new_vertex)
     return PentagonShape(vertices)
 

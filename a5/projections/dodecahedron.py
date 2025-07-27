@@ -13,6 +13,7 @@ from ..core.tiling import get_quintant_vertices
 from .gnomonic import GnomonicProjection
 from .polyhedral import PolyhedralProjection
 from .crs import CRS
+from ..math import vec2, vec3, quat as quat_glm
 
 # Type definitions
 FaceTriangleIndex = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -48,8 +49,11 @@ class DodecahedronProjection:
 
         # Transform back to origin space
         unprojected = to_cartesian(spherical)
-        inverse_quat = conjugate(origin.quat)
-        out = transform_quat(unprojected, inverse_quat)
+        inverse_quat = quat_glm.create()
+        quat_glm.invert(inverse_quat, origin.quat)
+        out = vec3.create()
+        vec3.transformQuat(out, unprojected, inverse_quat)
+        out = (out[0], out[1], out[2])
 
         # Unproject gnomonically to polar coordinates in origin space
         projected_spherical = to_spherical(out)
@@ -139,11 +143,11 @@ class DodecahedronProjection:
         vertices = get_quintant_vertices(quintant).get_vertices()
         v_center, v_corner1, v_corner2 = vertices[0], vertices[1], vertices[2]
         
-        # Calculate edge midpoint
-        v_edge_midpoint = cast(Face, (
-            (v_corner1[0] + v_corner2[0]) * 0.5,
-            (v_corner1[1] + v_corner2[1]) * 0.5
-        ))
+        # Calculate edge midpoint using gl-matrix style
+        edge_midpoint = vec2.create()
+        vec2.add(edge_midpoint, v_corner1, v_corner2)
+        vec2.scale(edge_midpoint, edge_midpoint, 0.5)
+        v_edge_midpoint = cast(Face, (edge_midpoint[0], edge_midpoint[1]))
 
         # Sign of gamma determines which triangle we want to use, and thus vertex order
         even = face_triangle_index % 2 == 0
@@ -207,7 +211,9 @@ class DodecahedronProjection:
             rho, gamma = to_polar(face)
             rotated_polar = cast(Polar, (rho, gamma + origin.angle))
             rotated = to_cartesian(self.gnomonic.inverse(rotated_polar))
-            transformed = transform_quat(rotated, origin.quat)
+            transformed_vec = vec3.create()
+            vec3.transformQuat(transformed_vec, rotated, origin.quat)
+            transformed = (transformed_vec[0], transformed_vec[1], transformed_vec[2])
             vertex = crs.get_vertex(transformed)
             spherical_triangle.append(vertex)
 

@@ -39,11 +39,11 @@ Copyright (c) A5 contributors
 """
 
 import math
-from typing import cast
+from typing import cast, Dict, Tuple
 from ..core.coordinate_systems import Cartesian, Face, Barycentric, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_face
 from ..geometry.spherical_triangle import SphericalTriangleShape
-from ..utils.vector import vector_difference, quadruple_product, slerp, dot_product, cross_product, vector_magnitude
+from ..math import vec3, vector_magnitude, quadruple_product, vector_difference
 
 class PolyhedralProjection:
     """
@@ -52,7 +52,17 @@ class PolyhedralProjection:
     
     def __init__(self):
         # Cache for triangle-dependent calculations in inverse projection
-        self._inverse_triangle_cache = {}
+        self._inverse_triangle_cache: Dict[Tuple, Dict] = {}
+        
+        # Pre-allocated temporary vectors for performance
+        self._temp_v = vec3.create()
+        self._temp_a = vec3.create()
+        self._temp_b = vec3.create()
+        self._temp_c = vec3.create()
+        self._temp_c1 = vec3.create()
+        self._temp_p = vec3.create()
+        self._temp_k = vec3.create()
+        self._temp_out = vec3.create()
     
     def forward(self, v: Cartesian, spherical_triangle: SphericalTriangle, face_triangle: FaceTriangle) -> Face:
         """
@@ -73,8 +83,10 @@ class PolyhedralProjection:
         # When v is close to A, the quadruple product is unstable.
         # As we just need the intersection of two great circles we can use difference
         # between A and v, as it lies in the same plane of the great circle containing A & v
-        Z = (v[0] - A[0], v[1] - A[1], v[2] - A[2])
-        Z_norm = vector_magnitude(Z)
+        vec3.copy(self._temp_v, v)
+        vec3.copy(self._temp_a, A)
+        vec3.subtract(self._temp_v, self._temp_v, self._temp_a)  # Z = v - A
+        Z_norm = vec3.length(self._temp_v)
         
         # Handle case where v is exactly A (or very close)
         if Z_norm < 1e-14:
@@ -82,13 +94,12 @@ class PolyhedralProjection:
             # This should be the first vertex of the face triangle for barycentric coord [1,0,0]
             return face_triangle[0]
         
-        Z = (Z[0] / Z_norm, Z[1] / Z_norm, Z[2] / Z_norm)
-        Z = cast(Cartesian, Z)
+        vec3.normalize(self._temp_v, self._temp_v)  # Normalize Z
+        Z = cast(Cartesian, (self._temp_v[0], self._temp_v[1], self._temp_v[2]))
         
-        p = quadruple_product(A, Z, B, C)
-        p_norm = vector_magnitude(p)
-        p = (p[0] / p_norm, p[1] / p_norm, p[2] / p_norm)
-        p = cast(Cartesian, p)
+        quadruple_product(self._temp_p, A, Z, B, C)
+        vec3.normalize(self._temp_p, self._temp_p)
+        p = cast(Cartesian, (self._temp_p[0], self._temp_p[1], self._temp_p[2]))
 
         h = vector_difference(A, v) / vector_difference(A, p)
         area_abc = triangle_shape.get_area()
@@ -146,11 +157,42 @@ class PolyhedralProjection:
         f = S * V + CC * (c01 * c12 - c20)
         g = CC * s12 * (1 + c01)
         q = (2 / math.acos(c12)) * math.atan2(g, f)
-        P = slerp(B, C, q)
-        K = vector_difference(A, P)
-        t = self._safe_acos(h * K) / self._safe_acos(K)
-        out = slerp(A, P, t)
-        return cast(Cartesian, out)
+        
+        # Copy vertices to temp vectors
+        vec3.copy(self._temp_a, A)
+        vec3.copy(self._temp_b, B)
+        vec3.copy(self._temp_c, C)
+        
+        # Use gl-matrix style slerp for P = slerp(B, C, q)
+        # Calculate gamma between B and C
+        gamma = vec3.angle(self._temp_b, self._temp_c)
+        if gamma < 1e-12:
+            vec3.lerp(self._temp_p, self._temp_b, self._temp_c, q)
+        else:
+            weight_b = math.sin((1 - q) * gamma) / math.sin(gamma)
+            weight_c = math.sin(q * gamma) / math.sin(gamma)
+            vec3.scale(self._temp_b, self._temp_b, weight_b)
+            vec3.scale(self._temp_c, self._temp_c, weight_c)
+            vec3.add(self._temp_p, self._temp_b, self._temp_c)
+        
+        # K = A - P
+        vec3.subtract(self._temp_k, self._temp_a, self._temp_p)
+        k_mag = vec3.length(self._temp_k)
+        
+        t = self._safe_acos(h * k_mag) / self._safe_acos(k_mag)
+        
+        # Final slerp: out = slerp(A, P, t)
+        gamma2 = vec3.angle(self._temp_a, self._temp_p)
+        if gamma2 < 1e-12:
+            vec3.lerp(self._temp_out, self._temp_a, self._temp_p, t)
+        else:
+            weight_a = math.sin((1 - t) * gamma2) / math.sin(gamma2)
+            weight_p = math.sin(t * gamma2) / math.sin(gamma2)
+            vec3.scale(self._temp_a, self._temp_a, weight_a)
+            vec3.scale(self._temp_p, self._temp_p, weight_p)
+            vec3.add(self._temp_out, self._temp_a, self._temp_p)
+        
+        return cast(Cartesian, (self._temp_out[0], self._temp_out[1], self._temp_out[2]))
 
     def _get_triangle_constants(self, spherical_triangle: SphericalTriangle):
         """
@@ -163,17 +205,22 @@ class PolyhedralProjection:
         cache_key = (tuple(A), tuple(B), tuple(C))
         
         if cache_key not in self._inverse_triangle_cache:
+            # Copy vertices to temporary vectors
+            vec3.copy(self._temp_a, A)
+            vec3.copy(self._temp_b, B)
+            vec3.copy(self._temp_c, C)
+            
             triangle_shape = SphericalTriangleShape(spherical_triangle)
-            c1 = cross_product(B, C)
+            vec3.cross(self._temp_c1, self._temp_b, self._temp_c)
             
             constants = {
                 'area_abc': triangle_shape.get_area(),
-                'c1': c1,
-                'c01': dot_product(A, B),
-                'c12': dot_product(B, C), 
-                'c20': dot_product(C, A),
-                's12': vector_magnitude(c1),
-                'V': dot_product(A, c1)  # Triple product of A, B, C
+                'c1': (self._temp_c1[0], self._temp_c1[1], self._temp_c1[2]),  # Store as tuple
+                'c01': vec3.dot(self._temp_a, self._temp_b),
+                'c12': vec3.dot(self._temp_b, self._temp_c),
+                'c20': vec3.dot(self._temp_c, self._temp_a),
+                's12': vec3.length(self._temp_c1),
+                'V': vec3.dot(self._temp_a, self._temp_c1)  # Triple product of A, B, C
             }
             self._inverse_triangle_cache[cache_key] = constants
         

@@ -6,6 +6,7 @@ from typing import List, Tuple, Union
 import math
 from ..core.coordinate_systems import Cartesian
 from ..utils.vector import slerp, triple_product, dot_product, cross_product, vector_magnitude
+from ..math import vec3
 
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
@@ -84,8 +85,19 @@ class SphericalPolygonShape:
 
         # Points A & B (vertex before and after)
         V = self.vertices[i]
-        VA = (self.vertices[j][0] - V[0], self.vertices[j][1] - V[1], self.vertices[j][2] - V[2])
-        VB = (self.vertices[k][0] - V[0], self.vertices[k][1] - V[1], self.vertices[k][2] - V[2])
+        temp_j = vec3.create()
+        temp_k = vec3.create()
+        temp_v = vec3.create()
+        
+        vec3.copy(temp_j, self.vertices[j])
+        vec3.copy(temp_k, self.vertices[k])
+        vec3.copy(temp_v, V)
+        
+        vec3.subtract(temp_j, temp_j, temp_v)  # VA
+        vec3.subtract(temp_k, temp_k, temp_v)  # VB
+        
+        VA = (temp_j[0], temp_j[1], temp_j[2])
+        VB = (temp_k[0], temp_k[1], temp_k[2])
         
         return V, VA, VB
 
@@ -108,7 +120,12 @@ class SphericalPolygonShape:
         for i in range(N):
             # Transform point and neighboring vertices into coordinate system centered on vertex
             V, VA, VB = self.get_transformed_vertices(i)
-            VP = (point[0] - V[0], point[1] - V[1], point[2] - V[2])
+            temp_point = vec3.create()
+            temp_v_local = vec3.create()
+            vec3.copy(temp_point, point)
+            vec3.copy(temp_v_local, V)
+            vec3.subtract(temp_point, temp_point, temp_v_local)
+            VP = (temp_point[0], temp_point[1], temp_point[2])
 
             # Normalize to obtain unit direction vectors
             norm_VP = vector_magnitude(VP)
@@ -153,18 +170,31 @@ class SphericalPolygonShape:
         Returns:
             Area of the spherical triangle in radians
         """
-        # Calculate midpoints
-        mid_a = ((v2[0] + v3[0]) * 0.5, (v2[1] + v3[1]) * 0.5, (v2[2] + v3[2]) * 0.5)
-        mid_b = ((v3[0] + v1[0]) * 0.5, (v3[1] + v1[1]) * 0.5, (v3[2] + v1[2]) * 0.5)
-        mid_c = ((v1[0] + v2[0]) * 0.5, (v1[1] + v2[1]) * 0.5, (v1[2] + v2[2]) * 0.5)
+        # Calculate midpoints using gl-matrix style
+        temp_a = vec3.create()
+        temp_b = vec3.create() 
+        temp_c = vec3.create()
+        
+        # mid_a = (v2 + v3) * 0.5
+        vec3.add(temp_a, v2, v3)
+        vec3.scale(temp_a, temp_a, 0.5)
+        
+        # mid_b = (v3 + v1) * 0.5
+        vec3.add(temp_b, v3, v1)
+        vec3.scale(temp_b, temp_b, 0.5)
+        
+        # mid_c = (v1 + v2) * 0.5
+        vec3.add(temp_c, v1, v2)
+        vec3.scale(temp_c, temp_c, 0.5)
         
         # Normalize midpoints
-        norm_a = vector_magnitude(mid_a)
-        mid_a = (mid_a[0] / norm_a, mid_a[1] / norm_a, mid_a[2] / norm_a)
-        norm_b = vector_magnitude(mid_b)
-        mid_b = (mid_b[0] / norm_b, mid_b[1] / norm_b, mid_b[2] / norm_b)
-        norm_c = vector_magnitude(mid_c)
-        mid_c = (mid_c[0] / norm_c, mid_c[1] / norm_c, mid_c[2] / norm_c)
+        vec3.normalize(temp_a, temp_a)
+        vec3.normalize(temp_b, temp_b)
+        vec3.normalize(temp_c, temp_c)
+        
+        mid_a = (temp_a[0], temp_a[1], temp_a[2])
+        mid_b = (temp_b[0], temp_b[1], temp_b[2])
+        mid_c = (temp_c[0], temp_c[1], temp_c[2])
         
         # Calculate area using triple product
         S = triple_product(mid_a, mid_b, mid_c)
@@ -200,17 +230,14 @@ class SphericalPolygonShape:
         if len(self.vertices) == 3:
             return self.get_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2])
 
-        # Calculate center of polygon
-        center = [0.0, 0.0, 0.0]
+        # Calculate center of polygon using gl-matrix style
+        center = vec3.create()
         for vertex in self.vertices:
-            center[0] += vertex[0]
-            center[1] += vertex[1]
-            center[2] += vertex[2]
-        center = tuple(center)
+            vec3.add(center, center, vertex)
         
         # Normalize center
-        center_norm = vector_magnitude(center)
-        center = (center[0] / center_norm, center[1] / center_norm, center[2] / center_norm)
+        vec3.normalize(center, center)
+        center = (center[0], center[1], center[2])
 
         # Sum fan of triangles around center
         area = 0.0

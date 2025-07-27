@@ -11,8 +11,10 @@ from .coordinate_systems import (
     Vec2, Vec3, Barycentric, FaceTriangle
 )
 from .quat import rotation_to
+from ..math import quat as quat_glm
 from .pentagon import BASIS_INVERSE, BASIS
 from ..projections.authalic import AuthalicProjection
+from ..math import vec2, vec3
 
 # Create singleton instance like TypeScript
 authalic = AuthalicProjection()
@@ -30,7 +32,7 @@ def rad_to_deg(rad: Radians) -> Degrees:
 
 def to_polar(xy: Face) -> Polar:
     """Convert face coordinates to polar coordinates."""
-    rho = math.sqrt(xy[0]**2 + xy[1]**2)  # Radial distance from face center
+    rho = vec2.length(xy)  # Radial distance from face center
     gamma = cast(Radians, math.atan2(xy[1], xy[0]))  # Azimuthal angle
     return cast(Polar, (rho, gamma))
 
@@ -43,28 +45,26 @@ def to_face(polar: Polar) -> Face:
 
 def face_to_ij(face: Face) -> IJ:
     """Convert face coordinates to IJ coordinates."""
-    # Note: BASIS_INVERSE needs to be defined in pentagon.py
-    # Manual dot product: BASIS_INVERSE @ face
-    result = (
-        BASIS_INVERSE[0][0] * face[0] + BASIS_INVERSE[0][1] * face[1],
-        BASIS_INVERSE[1][0] * face[0] + BASIS_INVERSE[1][1] * face[1]
-    )
-    return cast(IJ, result)
+    # Use gl-matrix style transformation
+    # Convert 2x2 matrix from ((a,b),(c,d)) to [a,c,b,d] (column-major)
+    basis_flat = [BASIS_INVERSE[0][0], BASIS_INVERSE[1][0], BASIS_INVERSE[0][1], BASIS_INVERSE[1][1]]
+    out = vec2.create()
+    vec2.transformMat2(out, face, basis_flat)
+    return cast(IJ, (out[0], out[1]))
 
 def ij_to_face(ij: IJ) -> Face:
     """Convert IJ coordinates to face coordinates."""
-    # Note: BASIS needs to be defined in pentagon.py
-    # Manual dot product: BASIS @ ij
-    result = (
-        BASIS[0][0] * ij[0] + BASIS[0][1] * ij[1],
-        BASIS[1][0] * ij[0] + BASIS[1][1] * ij[1]
-    )
-    return cast(Face, result)
+    # Use gl-matrix style transformation
+    # Convert 2x2 matrix from ((a,b),(c,d)) to [a,c,b,d] (column-major)
+    basis_flat = [BASIS[0][0], BASIS[1][0], BASIS[0][1], BASIS[1][1]]
+    out = vec2.create()
+    vec2.transformMat2(out, ij, basis_flat)
+    return cast(Face, (out[0], out[1]))
 
 def to_spherical(xyz: Cartesian) -> Spherical:
     """Convert Cartesian coordinates to spherical coordinates."""
     theta = cast(Radians, math.atan2(xyz[1], xyz[0]))
-    r = math.sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)
+    r = vec3.length(xyz)
     phi = cast(Radians, math.acos(xyz[2] / r))
     return cast(Spherical, (theta, phi))
 
@@ -150,16 +150,13 @@ def normalize_longitudes(contour: Contour) -> Contour:
     """
     # Calculate center in Cartesian space to avoid poles & antimeridian crossing issues
     points = [to_cartesian(from_lonlat(lonlat)) for lonlat in contour]
-    center_x, center_y, center_z = 0.0, 0.0, 0.0
+    center = vec3.create()
     for point in points:
-        center_x += point[0]
-        center_y += point[1]
-        center_z += point[2]
+        vec3.add(center, center, point)
     
     # Normalize the center
-    center_norm = math.sqrt(center_x * center_x + center_y * center_y + center_z * center_z)
-    center = (center_x / center_norm, center_y / center_norm, center_z / center_norm)
-    center_lon, center_lat = to_lonlat(to_spherical(cast(Cartesian, center)))
+    vec3.normalize(center, center)
+    center_lon, center_lat = to_lonlat(to_spherical(cast(Cartesian, (center[0], center[1], center[2]))))
     
     if center_lat > 89.99 or center_lat < -89.99:
         # Near poles, use first point's longitude
@@ -193,4 +190,6 @@ def quat_from_spherical(axis: Spherical) -> tuple:
         quaternion [x, y, z, w]
     """
     cartesian = to_cartesian(axis)
-    return rotation_to((0, 0, 1), cartesian) 
+    Q = quat_glm.create()
+    quat_glm.rotationTo(Q, [0, 0, 1], cartesian)
+    return (Q[0], Q[1], Q[2], Q[3]) 

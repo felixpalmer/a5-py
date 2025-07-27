@@ -6,6 +6,7 @@ import math
 from typing import List, Tuple, Optional, Literal, NamedTuple
 from ..core.coordinate_systems import Radians, Face, Spherical
 from ..core.hilbert import Orientation
+from ..math import vec2
 
 OriginId = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
@@ -99,9 +100,11 @@ class PentagonShape:
 
     def get_center(self) -> Face:
         """Get the center point of the pentagon."""
-        sum_x = sum(vertex[0] for vertex in self.vertices)
-        sum_y = sum(vertex[1] for vertex in self.vertices)
-        return (sum_x / 5.0, sum_y / 5.0)
+        center = vec2.create()
+        for vertex in self.vertices:
+            vec2.add(center, center, vertex)
+        vec2.scale(center, center, 1.0 / len(self.vertices))
+        return (center[0], center[1])
 
     def contains_point(self, point: Tuple[float, float]) -> float:
         """
