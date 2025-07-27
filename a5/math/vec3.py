@@ -7,10 +7,16 @@ for the result, and return the 'out' parameter for chaining.
 """
 
 import math
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, cast
 
 # Type alias for 3D vectors - can be list or tuple
 Vec3 = Union[List[float], Tuple[float, float, float]]
+
+# Pre-allocated temporary vectors for performance (like TypeScript gl-matrix)
+_temp_cross = [0.0, 0.0, 0.0]
+_temp_scaled_a = [0.0, 0.0, 0.0]
+_temp_scaled_b = [0.0, 0.0, 0.0]
+_temp_midpoint = [0.0, 0.0, 0.0]
 
 def create() -> List[float]:
     """
@@ -48,6 +54,18 @@ def copy(out: Vec3, a: Vec3) -> Vec3:
     out[1] = a[1]
     out[2] = a[2]
     return out
+
+def clone(a: Vec3) -> List[float]:
+    """
+    Creates a new vec3 initialized with values from an existing vector
+    
+    Args:
+        a: vector to clone
+        
+    Returns:
+        a new vec3
+    """
+    return [a[0], a[1], a[2]]
 
 def set(out: Vec3, x: float, y: float, z: float) -> Vec3:
     """
@@ -101,7 +119,7 @@ def subtract(out: Vec3, a: Vec3, b: Vec3) -> Vec3:
     out[2] = a[2] - b[2]
     return out
 
-# Alias for subtract
+# Alias for TypeScript compatibility
 sub = subtract
 
 def multiply(out: Vec3, a: Vec3, b: Vec3) -> Vec3:
@@ -421,12 +439,11 @@ def zero(out: Vec3) -> Vec3:
     out[2] = 0.0
     return out
 
-def tripleProduct(out: Vec3, a: Vec3, b: Vec3, c: Vec3) -> float:
+def tripleProduct(a: Vec3, b: Vec3, c: Vec3) -> float:
     """
     Computes the triple product of three vectors: a · (b × c)
     
     Args:
-        out: temporary vector for computation
         a: first vector
         b: second vector  
         c: third vector
@@ -434,79 +451,87 @@ def tripleProduct(out: Vec3, a: Vec3, b: Vec3, c: Vec3) -> float:
     Returns:
         scalar result a · (b × c)
     """
-    # Compute cross product b × c
-    cross(out, b, c)
+    # Compute cross product b × c using global temp vector
+    cross(_temp_cross, b, c)
     # Return dot product a · (b × c)
-    return dot(a, out)
+    return dot(a, _temp_cross)
 
-def vectorDifference(temp_a: Vec3, temp_b: Vec3, temp_midpoint: Vec3, temp_cross: Vec3, temp_out: Vec3, 
-                    A: "Cartesian", B: "Cartesian") -> float:
+def vectorDifference(A: "Cartesian", B: "Cartesian") -> float:
     """
-    Returns a difference measure between two vectors
+    Returns a difference measure between two vectors, a - b
     D = sqrt(1 - dot(a,b)) / sqrt(2)
+    D = 1: a and b are perpendicular
+    D = 0: a and b are the same
+    D = NaN: a and b are opposite (shouldn't happen in IVEA as we're using normalized vectors in the same hemisphere)
+    
+    D is a measure of the angle between the two vectors. sqrt(2) can be ignored when comparing ratios.
     
     Args:
-        temp_a, temp_b, temp_midpoint, temp_cross, temp_out: temporary vectors
         A: first vector
         B: second vector
         
     Returns:
         difference measure between A and B
     """
-    copy(temp_a, A)
-    copy(temp_b, B)
-    
-    # Compute midpoint of A and B
-    lerp(temp_midpoint, temp_a, temp_b, 0.5)
-    
-    # Normalize the midpoint
-    normalize(temp_midpoint, temp_midpoint)
-    
-    # Compute cross product: A × normalized_midpoint
-    cross(temp_cross, temp_a, temp_midpoint)
-    
-    # Compute magnitude of cross product
-    D = length(temp_cross)
-    
-    # Handle case when A and B are very close
+    # Original implementation is unstable for small angles as dot(A, B) approaches 1
+    # dot(A, B) = cos(x) as A and B are normalized
+    # Using double angle formula for cos(2x) = 1 - 2sin(x)^2, can rewrite as:
+    # 1 - cos(x) = 2 * sin(x/2)^2)
+    #            = 2 * sin(x/2)^2
+    # ⇒ sqrt(1 - cos(x)) = sqrt(2) * sin(x/2) 
+    # Angle x/2 can be obtained as the angle between A and the normalized midpoint of A and B
+    # ⇒ sin(x/2) = |cross(A, midpointAB)|
+    lerp(_temp_midpoint, A, B, 0.5)
+    normalize(_temp_midpoint, _temp_midpoint)
+    cross(_temp_midpoint, A, _temp_midpoint)
+    D = length(_temp_midpoint)
+
+    # Math.sin(x) = x for x < 1e-8
     if D < 1e-8:
-        # When A and B are close, use half-distance
-        subtract(temp_out, temp_a, temp_b)
-        half_distance = 0.5 * length(temp_out)
+        # When A and B are close or equal sin(x/2) ≈ x/2, just take the half-distance between A and B
+        subtract(_temp_cross, A, B)
+        half_distance = 0.5 * length(_temp_cross)
         return half_distance
-    
     return D
 
-def quadrupleProduct(out: Vec3, temp_a: Vec3, temp_b: Vec3, temp_c: Vec3, temp_cross: Vec3, 
-                    temp_scaled_a: Vec3, temp_scaled_b: Vec3, 
-                    A: "Cartesian", B: "Cartesian", C: "Cartesian", D: "Cartesian") -> Vec3:
+def quadrupleProduct(out: Vec3, A: "Cartesian", B: "Cartesian", C: "Cartesian", D: "Cartesian") -> Vec3:
     """
     Computes the quadruple product of four vectors
     
     Args:
         out: output vector
-        temp_*: temporary vectors for computation
         A, B, C, D: input vectors
         
     Returns:
         out
     """
-    copy(temp_a, A)
-    copy(temp_b, B) 
-    copy(temp_c, C)
+    cross(_temp_cross, C, D)
+    triple_product_acd = dot(A, _temp_cross)
+    triple_product_bcd = dot(B, _temp_cross)
+    scale(_temp_scaled_a, A, triple_product_bcd)
+    scale(_temp_scaled_b, B, triple_product_acd)
+    return subtract(out, _temp_scaled_b, _temp_scaled_a)
+
+def slerp(out: Vec3, A: "Cartesian", B: "Cartesian", t: float) -> "Cartesian":
+    """
+    Spherical linear interpolation between two vectors
     
-    # Compute cross product C × D
-    cross(temp_cross, temp_c, D)
+    Args:
+        out: The target vector to write the result to
+        A: The first vector
+        B: The second vector
+        t: The interpolation parameter (0 to 1)
+        
+    Returns:
+        The interpolated vector (same as out)
+    """
+    gamma = angle(A, B)
+    if gamma < 1e-12:
+        return lerp(out, A, B, t)
     
-    # Compute triple products
-    triple_product_acd = dot(temp_a, temp_cross)
-    triple_product_bcd = dot(temp_b, temp_cross)
-    
-    # Scale vectors
-    scale(temp_scaled_a, temp_a, triple_product_bcd)
-    scale(temp_scaled_b, temp_b, triple_product_acd)
-    
-    # Compute scaled_b - scaled_a
-    subtract(out, temp_scaled_b, temp_scaled_a)
-    
-    return out
+    weight_a = math.sin((1 - t) * gamma) / math.sin(gamma)
+    weight_b = math.sin(t * gamma) / math.sin(gamma)
+    scale(_temp_scaled_a, A, weight_a)
+    scale(_temp_scaled_b, B, weight_b)
+    add(out, _temp_scaled_a, _temp_scaled_b)
+    return cast("Cartesian", (out[0], out[1], out[2]))

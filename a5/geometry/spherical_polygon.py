@@ -10,6 +10,12 @@ from ..math import vec3, quat
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
 
+# Pre-allocated vectors for midpoints. midA is the midpoint opposite the vertex A
+_mid_a = vec3.create()
+_mid_b = vec3.create()
+_mid_c = vec3.create()
+_center = vec3.create()
+
 # Use Cartesian system for all calculations for greater accuracy
 # Using [x, y, z] gives equal precision in all directions, unlike spherical coordinates
 UP = (0.0, 0.0, 1.0)
@@ -20,15 +26,6 @@ class SphericalPolygonShape:
         # Store vertices as tuples for immutability and consistency
         self.vertices = tuple(tuple(v) if not isinstance(v, tuple) else v for v in vertices)
         # self._is_winding_correct()  # Debug check only, don't correct
-        
-        # Pre-allocated temporary vectors for performance
-        self._temp_a = vec3.create()
-        self._temp_b = vec3.create()
-        self._temp_c = vec3.create()
-        self._temp_cross = vec3.create()
-        self._temp_out = vec3.create()
-        self._temp_scaled_a = vec3.create()
-        self._temp_scaled_b = vec3.create()
 
     def get_boundary(self, n_segments: int = 1, closed_ring: bool = True) -> SphericalPolygon:
         """
@@ -67,13 +64,9 @@ class SphericalPolygonShape:
         f = t % 1.0
         i = int(math.floor(t % N))
         j = (i + 1) % N
-
-        # Points A & B
-        A = self.vertices[i]
-        B = self.vertices[j]
         
-        # Spherical linear interpolation between A and B
-        return quat.slerp(self._temp_out, self._temp_a, self._temp_b, self._temp_scaled_a, self._temp_scaled_b, A, B, f)
+        out = vec3.create()
+        return vec3.slerp(out, self.vertices[i], self.vertices[j], f)
 
     def get_transformed_vertices(self, t: float) -> Tuple[Cartesian, Cartesian, Cartesian]:
         """
@@ -93,22 +86,17 @@ class SphericalPolygonShape:
         k = (i + N - 1) % N
 
         # Points A & B (vertex before and after)
-        V = self.vertices[i]
-        temp_j = vec3.create()
-        temp_k = vec3.create()
-        temp_v = vec3.create()
+        V = vec3.clone(self.vertices[i])
+        VA = vec3.clone(self.vertices[j])
+        VB = vec3.clone(self.vertices[k])
+        vec3.sub(VA, VA, V)
+        vec3.sub(VB, VB, V)
         
-        vec3.copy(temp_j, self.vertices[j])
-        vec3.copy(temp_k, self.vertices[k])
-        vec3.copy(temp_v, V)
+        V_tuple = (V[0], V[1], V[2])
+        VA_tuple = (VA[0], VA[1], VA[2])
+        VB_tuple = (VB[0], VB[1], VB[2])
         
-        vec3.subtract(temp_j, temp_j, temp_v)  # VA
-        vec3.subtract(temp_k, temp_k, temp_v)  # VB
-        
-        VA = (temp_j[0], temp_j[1], temp_j[2])
-        VB = (temp_k[0], temp_k[1], temp_k[2])
-        
-        return V, VA, VB
+        return V_tuple, VA_tuple, VB_tuple
 
     def contains_point(self, point: Cartesian) -> float:
         """
@@ -129,53 +117,26 @@ class SphericalPolygonShape:
         for i in range(N):
             # Transform point and neighboring vertices into coordinate system centered on vertex
             V, VA, VB = self.get_transformed_vertices(i)
-            temp_point = vec3.create()
-            temp_v_local = vec3.create()
-            vec3.copy(temp_point, point)
-            vec3.copy(temp_v_local, V)
-            vec3.subtract(temp_point, temp_point, temp_v_local)
-            VP = (temp_point[0], temp_point[1], temp_point[2])
+            VP = vec3.create()
+            vec3.sub(VP, point, V)
 
             # Normalize to obtain unit direction vectors
-            vec3.copy(self._temp_a, VP)
-            norm_VP = vec3.length(self._temp_a)
-            vec3.copy(self._temp_a, VA)
-            norm_VA = vec3.length(self._temp_a)
-            vec3.copy(self._temp_a, VB)
-            norm_VB = vec3.length(self._temp_a)
-            
-            # Handle case where point is identical to vertex (zero-length vector)
-            if norm_VP < 1e-14:
-                return 1.0  # Point is exactly on the vertex, so it's inside
-            if norm_VA < 1e-14 or norm_VB < 1e-14:
-                continue  # Skip degenerate edge
-                
-            VP = (VP[0] / norm_VP, VP[1] / norm_VP, VP[2] / norm_VP)
-            VA = (VA[0] / norm_VA, VA[1] / norm_VA, VA[2] / norm_VA)
-            VB = (VB[0] / norm_VB, VB[1] / norm_VB, VB[2] / norm_VB)
+            vec3.normalize(VP, VP)
+            vec3.normalize(VA, VA)
+            vec3.normalize(VB, VB)
 
             # Cross products will point away from the center of the sphere when
             # point P is within arc formed by VA and VB
-            vec3.copy(self._temp_a, VA)
-            vec3.copy(self._temp_b, VP)
-            vec3.cross(self._temp_cross, self._temp_a, self._temp_b)
-            cross_ap = (self._temp_cross[0], self._temp_cross[1], self._temp_cross[2])
-            
-            vec3.copy(self._temp_a, VP)
-            vec3.copy(self._temp_b, VB)
-            vec3.cross(self._temp_cross, self._temp_a, self._temp_b)
-            cross_pb = (self._temp_cross[0], self._temp_cross[1], self._temp_cross[2])
+            cross_ap = vec3.create()
+            vec3.cross(cross_ap, VA, VP)
+            cross_pb = vec3.create()
+            vec3.cross(cross_pb, VP, VB)
 
             # Dot product will be positive when point P is within arc formed by VA and VB
             # The magnitude of the dot product is the sine of the angle between the two vectors
             # which is the same as the angle for small angles.
-            vec3.copy(self._temp_a, V)
-            vec3.copy(self._temp_b, cross_ap)
-            sin_ap = vec3.dot(self._temp_a, self._temp_b)
-            
-            vec3.copy(self._temp_a, V)
-            vec3.copy(self._temp_b, cross_pb)
-            sin_pb = vec3.dot(self._temp_a, self._temp_b)
+            sin_ap = vec3.dot(V, cross_ap)
+            sin_pb = vec3.dot(V, cross_pb)
 
             # By returning the minimum value we find the arc where the point is closest to being outside
             theta_delta_min = min(theta_delta_min, sin_ap, sin_pb)
@@ -194,37 +155,16 @@ class SphericalPolygonShape:
         Returns:
             Area of the spherical triangle in radians
         """
-        # Calculate midpoints using gl-matrix style
-        temp_a = vec3.create()
-        temp_b = vec3.create() 
-        temp_c = vec3.create()
+        # Calculate midpoints
+        vec3.lerp(_mid_a, v2, v3, 0.5)
+        vec3.lerp(_mid_b, v3, v1, 0.5)
+        vec3.lerp(_mid_c, v1, v2, 0.5)
+        vec3.normalize(_mid_a, _mid_a)
+        vec3.normalize(_mid_b, _mid_b)
+        vec3.normalize(_mid_c, _mid_c)
         
-        # mid_a = (v2 + v3) * 0.5
-        vec3.add(temp_a, v2, v3)
-        vec3.scale(temp_a, temp_a, 0.5)
-        
-        # mid_b = (v3 + v1) * 0.5
-        vec3.add(temp_b, v3, v1)
-        vec3.scale(temp_b, temp_b, 0.5)
-        
-        # mid_c = (v1 + v2) * 0.5
-        vec3.add(temp_c, v1, v2)
-        vec3.scale(temp_c, temp_c, 0.5)
-        
-        # Normalize midpoints
-        vec3.normalize(temp_a, temp_a)
-        vec3.normalize(temp_b, temp_b)
-        vec3.normalize(temp_c, temp_c)
-        
-        mid_a = (temp_a[0], temp_a[1], temp_a[2])
-        mid_b = (temp_b[0], temp_b[1], temp_b[2])
-        mid_c = (temp_c[0], temp_c[1], temp_c[2])
-        
-        # Calculate area using triple product: mid_a · (mid_b × mid_c)
-        vec3.copy(self._temp_a, mid_a)
-        vec3.copy(self._temp_b, mid_b)
-        vec3.copy(self._temp_c, mid_c)
-        S = vec3.tripleProduct(self._temp_cross, self._temp_a, self._temp_b, self._temp_c)
+        # Calculate area using asin of dot product, clamped to valid range
+        S = vec3.tripleProduct(_mid_a, _mid_b, _mid_c)
         clamped = max(-1.0, min(1.0, S))
         
         # sin(x) = x for x < 1e-8
@@ -255,27 +195,26 @@ class SphericalPolygonShape:
             return 0.0
 
         if len(self.vertices) == 3:
-            return self.get_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2])
+            self._area = self.get_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2])
+            return self._area
 
-        # Calculate center of polygon using gl-matrix style
-        center = vec3.create()
+        # Calculate center of polygon
+        vec3.set(_center, 0, 0, 0)
         for vertex in self.vertices:
-            vec3.add(center, center, vertex)
-        
-        # Normalize center
-        vec3.normalize(center, center)
-        center = (center[0], center[1], center[2])
+            vec3.add(_center, _center, vertex)
+        vec3.normalize(_center, _center)
 
         # Sum fan of triangles around center
         area = 0.0
         for i in range(len(self.vertices)):
             v1 = self.vertices[i]
             v2 = self.vertices[(i + 1) % len(self.vertices)]
-            tri_area = self.get_triangle_area(center, v1, v2)
+            tri_area = self.get_triangle_area(_center, v1, v2)
             if not math.isnan(tri_area):
                 area += tri_area
 
-        return area
+        self._area = area
+        return self._area
 
     def _is_winding_correct(self) -> bool:
         """Check if the polygon vertices are in the correct winding order"""
