@@ -5,7 +5,7 @@
 import math
 from typing import Optional
 from ..core.coordinate_systems import Cartesian
-from ..math import vec3, vector_utils
+from ..math import vec3
 
 # Pre-allocated temporary vectors for performance
 _temp_a = vec3.create()
