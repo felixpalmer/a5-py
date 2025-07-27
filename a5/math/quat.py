@@ -423,3 +423,42 @@ def equals(a: Quat, b: Quat, epsilon: float = 1e-6) -> bool:
             abs(a[1] - b[1]) <= epsilon and
             abs(a[2] - b[2]) <= epsilon and
             abs(a[3] - b[3]) <= epsilon)
+
+def vectorSlerp(out: List[float], temp_a: List[float], temp_b: List[float], 
+               temp_scaled_a: List[float], temp_scaled_b: List[float],
+               A: "Cartesian", B: "Cartesian", t: float) -> "Cartesian":
+    """
+    Spherical linear interpolation between two 3D vectors
+    
+    Args:
+        out, temp_a, temp_b, temp_scaled_a, temp_scaled_b: temporary vectors
+        A: first vector
+        B: second vector
+        t: interpolation parameter (0 to 1)
+        
+    Returns:
+        interpolated vector as tuple
+    """
+    import math
+    from . import vec3
+    
+    vec3.copy(temp_a, A)
+    vec3.copy(temp_b, B)
+    
+    # Calculate angle between vectors
+    gamma = vec3.angle(temp_a, temp_b)
+    
+    if gamma < 1e-12:
+        # Vectors are very close, use linear interpolation
+        vec3.lerp(out, temp_a, temp_b, t)
+    else:
+        sin_gamma = math.sin(gamma)
+        weight_a = math.sin((1 - t) * gamma) / sin_gamma
+        weight_b = math.sin(t * gamma) / sin_gamma
+        
+        # Compute weighted sum
+        vec3.scale(temp_scaled_a, temp_a, weight_a)
+        vec3.scale(temp_scaled_b, temp_b, weight_b)
+        vec3.add(out, temp_scaled_a, temp_scaled_b)
+    
+    return (out[0], out[1], out[2])

@@ -420,3 +420,93 @@ def zero(out: Vec3) -> Vec3:
     out[1] = 0.0
     out[2] = 0.0
     return out
+
+def tripleProduct(out: Vec3, a: Vec3, b: Vec3, c: Vec3) -> float:
+    """
+    Computes the triple product of three vectors: a · (b × c)
+    
+    Args:
+        out: temporary vector for computation
+        a: first vector
+        b: second vector  
+        c: third vector
+        
+    Returns:
+        scalar result a · (b × c)
+    """
+    # Compute cross product b × c
+    cross(out, b, c)
+    # Return dot product a · (b × c)
+    return dot(a, out)
+
+def vectorDifference(temp_a: Vec3, temp_b: Vec3, temp_midpoint: Vec3, temp_cross: Vec3, temp_out: Vec3, 
+                    A: "Cartesian", B: "Cartesian") -> float:
+    """
+    Returns a difference measure between two vectors
+    D = sqrt(1 - dot(a,b)) / sqrt(2)
+    
+    Args:
+        temp_a, temp_b, temp_midpoint, temp_cross, temp_out: temporary vectors
+        A: first vector
+        B: second vector
+        
+    Returns:
+        difference measure between A and B
+    """
+    copy(temp_a, A)
+    copy(temp_b, B)
+    
+    # Compute midpoint of A and B
+    lerp(temp_midpoint, temp_a, temp_b, 0.5)
+    
+    # Normalize the midpoint
+    normalize(temp_midpoint, temp_midpoint)
+    
+    # Compute cross product: A × normalized_midpoint
+    cross(temp_cross, temp_a, temp_midpoint)
+    
+    # Compute magnitude of cross product
+    D = length(temp_cross)
+    
+    # Handle case when A and B are very close
+    if D < 1e-8:
+        # When A and B are close, use half-distance
+        subtract(temp_out, temp_a, temp_b)
+        half_distance = 0.5 * length(temp_out)
+        return half_distance
+    
+    return D
+
+def quadrupleProduct(out: Vec3, temp_a: Vec3, temp_b: Vec3, temp_c: Vec3, temp_cross: Vec3, 
+                    temp_scaled_a: Vec3, temp_scaled_b: Vec3, 
+                    A: "Cartesian", B: "Cartesian", C: "Cartesian", D: "Cartesian") -> Vec3:
+    """
+    Computes the quadruple product of four vectors
+    
+    Args:
+        out: output vector
+        temp_*: temporary vectors for computation
+        A, B, C, D: input vectors
+        
+    Returns:
+        out
+    """
+    copy(temp_a, A)
+    copy(temp_b, B) 
+    copy(temp_c, C)
+    
+    # Compute cross product C × D
+    cross(temp_cross, temp_c, D)
+    
+    # Compute triple products
+    triple_product_acd = dot(temp_a, temp_cross)
+    triple_product_bcd = dot(temp_b, temp_cross)
+    
+    # Scale vectors
+    scale(temp_scaled_a, temp_a, triple_product_bcd)
+    scale(temp_scaled_b, temp_b, triple_product_acd)
+    
+    # Compute scaled_b - scaled_a
+    subtract(out, temp_scaled_b, temp_scaled_a)
+    
+    return out

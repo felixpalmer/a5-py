@@ -5,8 +5,7 @@
 from typing import List, Tuple, Union
 import math
 from ..core.coordinate_systems import Cartesian
-from ..utils.vector import slerp, triple_product, dot_product, cross_product, vector_magnitude
-from ..math import vec3
+from ..math import vec3, quat
 
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
@@ -21,6 +20,15 @@ class SphericalPolygonShape:
         # Store vertices as tuples for immutability and consistency
         self.vertices = tuple(tuple(v) if not isinstance(v, tuple) else v for v in vertices)
         # self._is_winding_correct()  # Debug check only, don't correct
+        
+        # Pre-allocated temporary vectors for performance
+        self._temp_a = vec3.create()
+        self._temp_b = vec3.create()
+        self._temp_c = vec3.create()
+        self._temp_cross = vec3.create()
+        self._temp_out = vec3.create()
+        self._temp_scaled_a = vec3.create()
+        self._temp_scaled_b = vec3.create()
 
     def get_boundary(self, n_segments: int = 1, closed_ring: bool = True) -> SphericalPolygon:
         """
@@ -64,7 +72,8 @@ class SphericalPolygonShape:
         A = self.vertices[i]
         B = self.vertices[j]
         
-        return slerp(A, B, f)
+        # Spherical linear interpolation between A and B
+        return quat.vectorSlerp(self._temp_out, self._temp_a, self._temp_b, self._temp_scaled_a, self._temp_scaled_b, A, B, f)
 
     def get_transformed_vertices(self, t: float) -> Tuple[Cartesian, Cartesian, Cartesian]:
         """
@@ -128,9 +137,12 @@ class SphericalPolygonShape:
             VP = (temp_point[0], temp_point[1], temp_point[2])
 
             # Normalize to obtain unit direction vectors
-            norm_VP = vector_magnitude(VP)
-            norm_VA = vector_magnitude(VA)
-            norm_VB = vector_magnitude(VB)
+            vec3.copy(self._temp_a, VP)
+            norm_VP = vec3.length(self._temp_a)
+            vec3.copy(self._temp_a, VA)
+            norm_VA = vec3.length(self._temp_a)
+            vec3.copy(self._temp_a, VB)
+            norm_VB = vec3.length(self._temp_a)
             
             # Handle case where point is identical to vertex (zero-length vector)
             if norm_VP < 1e-14:
@@ -144,14 +156,26 @@ class SphericalPolygonShape:
 
             # Cross products will point away from the center of the sphere when
             # point P is within arc formed by VA and VB
-            cross_ap = cross_product(VA, VP)
-            cross_pb = cross_product(VP, VB)
+            vec3.copy(self._temp_a, VA)
+            vec3.copy(self._temp_b, VP)
+            vec3.cross(self._temp_cross, self._temp_a, self._temp_b)
+            cross_ap = (self._temp_cross[0], self._temp_cross[1], self._temp_cross[2])
+            
+            vec3.copy(self._temp_a, VP)
+            vec3.copy(self._temp_b, VB)
+            vec3.cross(self._temp_cross, self._temp_a, self._temp_b)
+            cross_pb = (self._temp_cross[0], self._temp_cross[1], self._temp_cross[2])
 
             # Dot product will be positive when point P is within arc formed by VA and VB
             # The magnitude of the dot product is the sine of the angle between the two vectors
             # which is the same as the angle for small angles.
-            sin_ap = dot_product(V, cross_ap)
-            sin_pb = dot_product(V, cross_pb)
+            vec3.copy(self._temp_a, V)
+            vec3.copy(self._temp_b, cross_ap)
+            sin_ap = vec3.dot(self._temp_a, self._temp_b)
+            
+            vec3.copy(self._temp_a, V)
+            vec3.copy(self._temp_b, cross_pb)
+            sin_pb = vec3.dot(self._temp_a, self._temp_b)
 
             # By returning the minimum value we find the arc where the point is closest to being outside
             theta_delta_min = min(theta_delta_min, sin_ap, sin_pb)
@@ -196,8 +220,11 @@ class SphericalPolygonShape:
         mid_b = (temp_b[0], temp_b[1], temp_b[2])
         mid_c = (temp_c[0], temp_c[1], temp_c[2])
         
-        # Calculate area using triple product
-        S = triple_product(mid_a, mid_b, mid_c)
+        # Calculate area using triple product: mid_a · (mid_b × mid_c)
+        vec3.copy(self._temp_a, mid_a)
+        vec3.copy(self._temp_b, mid_b)
+        vec3.copy(self._temp_c, mid_c)
+        S = vec3.tripleProduct(self._temp_cross, self._temp_a, self._temp_b, self._temp_c)
         clamped = max(-1.0, min(1.0, S))
         
         # sin(x) = x for x < 1e-8

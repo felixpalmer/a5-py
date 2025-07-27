@@ -43,7 +43,7 @@ from typing import cast, Dict, Tuple
 from ..core.coordinate_systems import Cartesian, Face, Barycentric, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_face
 from ..geometry.spherical_triangle import SphericalTriangleShape
-from ..math import vec3, vector_magnitude, quadruple_product, vector_difference
+from ..math import vec3, quat
 
 class PolyhedralProjection:
     """
@@ -63,6 +63,10 @@ class PolyhedralProjection:
         self._temp_p = vec3.create()
         self._temp_k = vec3.create()
         self._temp_out = vec3.create()
+        self._temp_cross = vec3.create()
+        self._temp_midpoint = vec3.create()
+        self._temp_scaled_a = vec3.create()
+        self._temp_scaled_b = vec3.create()
     
     def forward(self, v: Cartesian, spherical_triangle: SphericalTriangle, face_triangle: FaceTriangle) -> Face:
         """
@@ -97,11 +101,14 @@ class PolyhedralProjection:
         vec3.normalize(self._temp_v, self._temp_v)  # Normalize Z
         Z = cast(Cartesian, (self._temp_v[0], self._temp_v[1], self._temp_v[2]))
         
-        quadruple_product(self._temp_p, A, Z, B, C)
+        vec3.quadrupleProduct(self._temp_p, self._temp_a, self._temp_b, self._temp_c, self._temp_cross, 
+                             self._temp_scaled_a, self._temp_scaled_b, A, Z, B, C)
         vec3.normalize(self._temp_p, self._temp_p)
         p = cast(Cartesian, (self._temp_p[0], self._temp_p[1], self._temp_p[2]))
 
-        h = vector_difference(A, v) / vector_difference(A, p)
+        D_av = vec3.vectorDifference(self._temp_a, self._temp_b, self._temp_midpoint, self._temp_cross, self._temp_out, A, v)
+        D_ap = vec3.vectorDifference(self._temp_a, self._temp_b, self._temp_midpoint, self._temp_cross, self._temp_out, A, p)
+        h = D_av / D_ap
         area_abc = triangle_shape.get_area()
         scaled_area = h / area_abc
         
