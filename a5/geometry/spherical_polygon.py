@@ -73,7 +73,7 @@ class SphericalPolygonShape:
         B = self.vertices[j]
         
         # Spherical linear interpolation between A and B
-        return quat.vectorSlerp(self._temp_out, self._temp_a, self._temp_b, self._temp_scaled_a, self._temp_scaled_b, A, B, f)
+        return quat.slerp(self._temp_out, self._temp_a, self._temp_b, self._temp_scaled_a, self._temp_scaled_b, A, B, f)
 
     def get_transformed_vertices(self, t: float) -> Tuple[Cartesian, Cartesian, Cartesian]:
         """

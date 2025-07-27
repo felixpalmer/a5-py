@@ -424,9 +424,9 @@ def equals(a: Quat, b: Quat, epsilon: float = 1e-6) -> bool:
             abs(a[2] - b[2]) <= epsilon and
             abs(a[3] - b[3]) <= epsilon)
 
-def vectorSlerp(out: List[float], temp_a: List[float], temp_b: List[float], 
-               temp_scaled_a: List[float], temp_scaled_b: List[float],
-               A: "Cartesian", B: "Cartesian", t: float) -> "Cartesian":
+def slerp(out: List[float], temp_a: List[float], temp_b: List[float], 
+         temp_scaled_a: List[float], temp_scaled_b: List[float],
+         A: "Cartesian", B: "Cartesian", t: float) -> "Cartesian":
     """
     Spherical linear interpolation between two 3D vectors
     

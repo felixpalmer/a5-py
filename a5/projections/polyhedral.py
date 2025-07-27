@@ -98,7 +98,7 @@ class PolyhedralProjection:
             # This should be the first vertex of the face triangle for barycentric coord [1,0,0]
             return face_triangle[0]
         
-        vec3.normalize(self._temp_v, self._temp_v)  # Normalize Z
+        vec3.normalize(self._temp_v, self._temp_v)
         Z = cast(Cartesian, (self._temp_v[0], self._temp_v[1], self._temp_v[2]))
         
         vec3.quadrupleProduct(self._temp_p, self._temp_a, self._temp_b, self._temp_c, self._temp_cross, 
