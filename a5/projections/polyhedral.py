@@ -50,6 +50,10 @@ class PolyhedralProjection:
     Polyhedral Equal Area projection using Slice & Dice algorithm
     """
     
+    def __init__(self):
+        # Cache for triangle-dependent calculations in inverse projection
+        self._inverse_triangle_cache = {}
+    
     def forward(self, v: Cartesian, spherical_triangle: SphericalTriangle, face_triangle: FaceTriangle) -> Face:
         """
         Forward projection: converts a spherical point to face coordinates
@@ -111,7 +115,6 @@ class PolyhedralProjection:
             The spherical coordinates
         """
         A, B, C = spherical_triangle
-        triangle_shape = SphericalTriangleShape(spherical_triangle)
         b = face_to_barycentric(face_point, face_triangle)
 
         threshold = 1 - 1e-14
@@ -122,8 +125,17 @@ class PolyhedralProjection:
         if b[2] > threshold:
             return C
         
-        c1 = cross_product(B, C)
-        area_abc = triangle_shape.get_area()
+        # Get cached triangle-dependent constants
+        constants = self._get_triangle_constants(spherical_triangle)
+        area_abc = constants['area_abc']
+        c1 = constants['c1']
+        c01 = constants['c01']
+        c12 = constants['c12']
+        c20 = constants['c20']
+        s12 = constants['s12']
+        V = constants['V']
+        
+        # Point-dependent calculations
         h = 1 - b[0]
         R = b[2] / h
         alpha = R * area_abc
@@ -131,12 +143,6 @@ class PolyhedralProjection:
         half_c = math.sin(alpha / 2)
         CC = 2 * half_c * half_c  # Half angle formula
 
-        c01 = dot_product(A, B)
-        c12 = dot_product(B, C)
-        c20 = dot_product(C, A)
-        s12 = vector_magnitude(c1)
-
-        V = dot_product(A, c1)  # Triple product of A, B, C. Constant??
         f = S * V + CC * (c01 * c12 - c20)
         g = CC * s12 * (1 + c01)
         q = (2 / math.acos(c12)) * math.atan2(g, f)
@@ -145,6 +151,33 @@ class PolyhedralProjection:
         t = self._safe_acos(h * K) / self._safe_acos(K)
         out = slerp(A, P, t)
         return cast(Cartesian, out)
+
+    def _get_triangle_constants(self, spherical_triangle: SphericalTriangle):
+        """
+        Get cached triangle-dependent constants for inverse projection.
+        These values only depend on the spherical triangle, not the input point.
+        """
+        # Create a cache key from the triangle vertices
+        # Convert to tuples since lists aren't hashable
+        A, B, C = spherical_triangle
+        cache_key = (tuple(A), tuple(B), tuple(C))
+        
+        if cache_key not in self._inverse_triangle_cache:
+            triangle_shape = SphericalTriangleShape(spherical_triangle)
+            c1 = cross_product(B, C)
+            
+            constants = {
+                'area_abc': triangle_shape.get_area(),
+                'c1': c1,
+                'c01': dot_product(A, B),
+                'c12': dot_product(B, C), 
+                'c20': dot_product(C, A),
+                's12': vector_magnitude(c1),
+                'V': dot_product(A, c1)  # Triple product of A, B, C
+            }
+            self._inverse_triangle_cache[cache_key] = constants
+        
+        return self._inverse_triangle_cache[cache_key]
 
     def _safe_acos(self, x: float) -> float:
         """
