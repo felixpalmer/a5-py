@@ -13,10 +13,10 @@ from typing import Tuple, Union, List, cast
 Vec3 = Union[List[float], Tuple[float, float, float]]
 
 # Pre-allocated temporary vectors for performance (like TypeScript gl-matrix)
-_temp_cross = [0.0, 0.0, 0.0]
-_temp_scaled_a = [0.0, 0.0, 0.0]
-_temp_scaled_b = [0.0, 0.0, 0.0]
-_temp_midpoint = [0.0, 0.0, 0.0]
+midpointAB = [0.0, 0.0, 0.0]
+crossCD = [0.0, 0.0, 0.0]
+scaledA = [0.0, 0.0, 0.0]
+scaledB = [0.0, 0.0, 0.0]
 
 def create() -> List[float]:
     """
@@ -452,9 +452,9 @@ def tripleProduct(a: Vec3, b: Vec3, c: Vec3) -> float:
         scalar result a · (b × c)
     """
     # Compute cross product b × c using global temp vector
-    cross(_temp_cross, b, c)
+    cross(crossCD, b, c)
     # Return dot product a · (b × c)
-    return dot(a, _temp_cross)
+    return dot(a, crossCD)
 
 def vectorDifference(A: "Cartesian", B: "Cartesian") -> float:
     """
@@ -481,16 +481,16 @@ def vectorDifference(A: "Cartesian", B: "Cartesian") -> float:
     # ⇒ sqrt(1 - cos(x)) = sqrt(2) * sin(x/2) 
     # Angle x/2 can be obtained as the angle between A and the normalized midpoint of A and B
     # ⇒ sin(x/2) = |cross(A, midpointAB)|
-    lerp(_temp_midpoint, A, B, 0.5)
-    normalize(_temp_midpoint, _temp_midpoint)
-    cross(_temp_midpoint, A, _temp_midpoint)
-    D = length(_temp_midpoint)
+    lerp(midpointAB, A, B, 0.5)
+    normalize(midpointAB, midpointAB)
+    cross(midpointAB, A, midpointAB)
+    D = length(midpointAB)
 
     # Math.sin(x) = x for x < 1e-8
     if D < 1e-8:
         # When A and B are close or equal sin(x/2) ≈ x/2, just take the half-distance between A and B
-        subtract(_temp_cross, A, B)
-        half_distance = 0.5 * length(_temp_cross)
+        subtract(crossCD, A, B)
+        half_distance = 0.5 * length(crossCD)
         return half_distance
     return D
 
@@ -505,12 +505,12 @@ def quadrupleProduct(out: Vec3, A: "Cartesian", B: "Cartesian", C: "Cartesian", 
     Returns:
         out
     """
-    cross(_temp_cross, C, D)
-    triple_product_acd = dot(A, _temp_cross)
-    triple_product_bcd = dot(B, _temp_cross)
-    scale(_temp_scaled_a, A, triple_product_bcd)
-    scale(_temp_scaled_b, B, triple_product_acd)
-    return subtract(out, _temp_scaled_b, _temp_scaled_a)
+    cross(crossCD, C, D)
+    triple_product_acd = dot(A, crossCD)
+    triple_product_bcd = dot(B, crossCD)
+    scale(scaledA, A, triple_product_bcd)
+    scale(scaledB, B, triple_product_acd)
+    return subtract(out, scaledB, scaledA)
 
 def slerp(out: Vec3, A: "Cartesian", B: "Cartesian", t: float) -> "Cartesian":
     """
@@ -531,7 +531,7 @@ def slerp(out: Vec3, A: "Cartesian", B: "Cartesian", t: float) -> "Cartesian":
     
     weight_a = math.sin((1 - t) * gamma) / math.sin(gamma)
     weight_b = math.sin(t * gamma) / math.sin(gamma)
-    scale(_temp_scaled_a, A, weight_a)
-    scale(_temp_scaled_b, B, weight_b)
-    add(out, _temp_scaled_a, _temp_scaled_b)
+    scale(scaledA, A, weight_a)
+    scale(scaledB, B, weight_b)
+    add(out, scaledA, scaledB)
     return cast("Cartesian", (out[0], out[1], out[2]))

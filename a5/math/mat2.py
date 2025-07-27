@@ -7,7 +7,7 @@
 https://glmatrix.net/docs/module-mat2.html
 """
 
-from typing import List
+from typing import List, Union, Optional
 
 # Type alias for 2x2 matrix (4 elements in column-major order)
 Mat2 = List[float]
@@ -46,7 +46,7 @@ def transpose(out: Mat2, a: Mat2) -> Mat2:
         out[3] = a[3]
     return out
 
-def invert(out: Mat2, a: Mat2) -> Mat2 | None:
+def invert(out: Mat2, a: Mat2) -> Optional[Mat2]:
     """Inverts a mat2"""
     a0 = a[0]
     a1 = a[1] 

@@ -149,7 +149,7 @@ class PolyhedralProjection:
         t = self._safe_acos(h * K) / self._safe_acos(K)
         
         # Final slerp: out = slerp(A, P, t)
-        out = vec3.create()
+        out = [0.0, 0.0, 0.0]
         vec3.slerp(out, A, P, t)
         return cast(Cartesian, (out[0], out[1], out[2]))
 
