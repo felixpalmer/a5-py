@@ -35,7 +35,7 @@ def main():
         for cell_id in cell_ids:
             boundary = cell_to_boundary(cell_id, {
                 'closed_ring': True,
-                'segments': 10,
+                'segments': 1,
             })
             
             cells.append({
