@@ -92,11 +92,7 @@ class SphericalPolygonShape:
         vec3.sub(VA, VA, V)
         vec3.sub(VB, VB, V)
         
-        V_tuple = (V[0], V[1], V[2])
-        VA_tuple = (VA[0], VA[1], VA[2])
-        VB_tuple = (VB[0], VB[1], VB[2])
-        
-        return V_tuple, VA_tuple, VB_tuple
+        return V, VA, VB
 
     def contains_point(self, point: Cartesian) -> float:
         """
