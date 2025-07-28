@@ -9,8 +9,8 @@ from pathlib import Path
 import math
 from a5.geometry import SphericalPolygonShape
 from a5.core.coordinate_systems import Cartesian
-from a5.core.vec3 import length
-from tests.utils import is_close_array
+from a5.math.vec3 import length
+from tests.matchers import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

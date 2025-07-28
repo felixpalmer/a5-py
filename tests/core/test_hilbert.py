@@ -1,6 +1,5 @@
 import pytest
 import math
-from a5.core.vec3 import length
 from a5.core.hilbert import (
     quaternary_to_kj,
     quaternary_to_flips,
@@ -17,40 +16,40 @@ from a5.core.hilbert import (
 def test_hilbert_anchor_base_cases():
     # Test first corner (0)
     offset0 = quaternary_to_kj(0, (NO, NO))
-    assert offset0 == [0, 0]
+    assert offset0 == (0, 0)
     flips0 = quaternary_to_flips(0)
     assert flips0 == (NO, NO)
 
     # Test second corner (1)
     offset1 = quaternary_to_kj(1, (NO, NO))
-    assert offset1 == [1, 0]
+    assert offset1 == (1, 0)
     flips1 = quaternary_to_flips(1)
     assert flips1 == (NO, YES)
 
     # Test third corner (2)
     offset2 = quaternary_to_kj(2, (NO, NO))
-    assert offset2 == [1, 1]
+    assert offset2 == (1, 1)
     flips2 = quaternary_to_flips(2)
     assert flips2 == (NO, NO)
 
     # Test fourth corner (3)
     offset3 = quaternary_to_kj(3, (NO, NO))
-    assert offset3 == [2, 1]
+    assert offset3 == (2, 1)
     flips3 = quaternary_to_flips(3)
     assert flips3 == (YES, NO)
 
 def test_hilbert_anchor_respects_flips():
     # Test with x-flip
     offset_x = quaternary_to_kj(1, (YES, NO))
-    assert offset_x == [-0, -1]
+    assert offset_x == (0, -1)
 
     # Test with y-flip
     offset_y = quaternary_to_kj(1, (NO, YES))
-    assert offset_y == [0, 1]
+    assert offset_y == (0, 1)
 
     # Test with both flips
     offset_xy = quaternary_to_kj(1, (YES, YES))
-    assert offset_xy == [-1, -0]
+    assert offset_xy == (-1, 0)
 
 def test_output_flips_depend_only_on_input():
     EXPECTED_FLIPS = [
@@ -66,20 +65,20 @@ def test_output_flips_depend_only_on_input():
 def test_generates_correct_sequence():
     # Test first few indices
     anchor0 = s_to_anchor(0, 1, 'uv')
-    assert list(anchor0.offset) == [0, 0]
+    assert tuple(anchor0.offset) == (0, 0)
     assert anchor0.flips == (NO, NO)
 
     anchor1 = s_to_anchor(1, 1, 'uv')
     assert anchor1.flips[1] == YES
 
     anchor4 = s_to_anchor(4, 1, 'uv')
-    assert length(anchor4.offset) > 1  # Should be scaled up
+    assert math.sqrt(anchor4.offset[0]**2 + anchor4.offset[1]**2) > 1  # Should be scaled up
 
     # Test that sequence length grows exponentially
     anchors = [s_to_anchor(i, 1, 'uv') for i in range(16)]
-    unique_offsets = {tuple(list(a.offset)) for a in anchors}
+    unique_offsets = {tuple(a.offset) for a in anchors}
     assert len(unique_offsets) == 12
-    unique_anchors = {(tuple(list(a.offset)), a.flips) for a in anchors}
+    unique_anchors = {(tuple(a.offset), a.flips) for a in anchors}
     assert len(unique_anchors) == 15
 
 def test_neighboring_anchors_are_adjacent():

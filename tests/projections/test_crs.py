@@ -8,8 +8,8 @@ import math
 from pathlib import Path
 from a5.projections.crs import CRS
 from a5.core.coordinate_systems import Cartesian
-from a5.core.vec3 import length
-from tests.utils import is_close_array
+from a5.math.vec3 import length
+from tests.matchers import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

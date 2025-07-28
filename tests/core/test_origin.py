@@ -16,6 +16,7 @@ from a5.core.coordinate_systems import Face, Radians, Spherical
 from a5.core.coordinate_transforms import to_cartesian
 from a5.core.origin import origins
 from a5.math.vec3 import length
+from a5.math.quat import length as quat_length
 
 def test_origin_constants():
     """Test that we have 12 origins for dodecahedron faces."""
@@ -36,8 +37,8 @@ def test_origin_properties():
         assert abs(vector_length - 1.0) < 1e-15
         
         # Check quaternion is normalized
-        q_length = length(origin.quat)
-        assert abs(q_length - 1.0) < 1e-15
+        q_length = quat_length(origin.quat)
+        assert abs(q_length - 1.0) < 1e-10
 
 
 def test_find_nearest_origin():

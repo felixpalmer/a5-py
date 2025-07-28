@@ -8,8 +8,8 @@ import math
 from pathlib import Path
 from a5.geometry.spherical_triangle import SphericalTriangleShape
 from a5.core.coordinate_systems import Cartesian
-from a5.core.vec3 import length
-from tests.utils import is_close_array, is_close
+from a5.math.vec3 import length
+from tests.matchers import is_close_array, is_close
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

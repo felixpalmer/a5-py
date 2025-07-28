@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from a5.projections.gnomonic import GnomonicProjection
 from a5.core.coordinate_systems import Polar, Spherical
-from tests.utils import is_close_array
+from tests.matchers import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

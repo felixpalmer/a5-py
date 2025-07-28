@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from a5.projections.authalic import AuthalicProjection
 from a5.core.coordinate_systems import Radians
-from tests.utils import is_close
+from tests.matchers import is_close
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

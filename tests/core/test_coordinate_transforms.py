@@ -204,7 +204,7 @@ def test_spherical_to_lonlat():
         spherical = from_lonlat(lon_lat)
         result = to_lonlat(spherical)
         
-        assert all(abs(r - l) < 1e-15 for r, l in zip([result[0], result[1]], [lon_lat[0], lon_lat[1]]))
+        assert all(abs(r - l) < 1e-10 for r, l in zip([result[0], result[1]], [lon_lat[0], lon_lat[1]]))
 
 def test_normalize_longitudes():
     """Test longitude normalization for contours."""

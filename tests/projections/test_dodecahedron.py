@@ -6,7 +6,7 @@ import pytest
 import json
 from pathlib import Path
 from a5.projections.dodecahedron import DodecahedronProjection, OriginId
-from tests.utils import is_close_array
+from tests.matchers import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
