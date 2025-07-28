@@ -3,7 +3,11 @@ Tests for origin-related functionality.
 """
 
 import pytest
+import json
 import math
+from pathlib import Path
+from tests.matchers import is_close_array
+
 from a5.core.origin import (    
     find_nearest_origin,
     haversine,
@@ -18,10 +22,29 @@ from a5.core.origin import origins
 from a5.math.vec3 import length
 from a5.math.quat import length as quat_length
 
+# Load test fixtures
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+with open(FIXTURES_DIR / "origins.json") as f:
+    EXPECTED_ORIGINS = json.load(f)
+
 def test_origin_constants():
     """Test that we have 12 origins for dodecahedron faces."""
     assert len(origins) == 12
 
+
+def test_should_match_expected_origins_from_json_file():
+    """Test that origins match expected values from JSON fixture"""
+    assert len(origins) == len(EXPECTED_ORIGINS)
+    for i, origin in enumerate(origins):
+        expected = EXPECTED_ORIGINS[i]
+        assert origin.id == expected['id']
+        assert origin.angle == expected['angle']
+        assert origin.orientation == expected['orientation']
+        assert origin.first_quintant == expected['firstQuintant']
+        assert is_close_array(origin.axis, expected['axis']), \
+            f"Origin {i} axis wrong: expected {expected['axis']}, got {origin.axis}"
+        assert is_close_array(origin.quat, expected['quat']), \
+            f"Origin {i} quat wrong: expected {expected['quat']}, got {origin.quat}"
 
 def test_origin_properties():
     """Test that each origin has required properties."""
