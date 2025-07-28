@@ -3,7 +3,7 @@ Tests for origin-related functionality.
 """
 
 import pytest
-import numpy as np
+import math
 from a5.core.origin import (    
     find_nearest_origin,
     haversine,
@@ -31,12 +31,12 @@ def test_origin_properties():
         
         # Check axis is unit vector when converted to cartesian
         cartesian = to_cartesian(origin.axis)
-        length = np.linalg.norm(cartesian)
-        assert np.isclose(length, 1.0)
+        length = math.sqrt(sum(i*i for i in cartesian))
+        assert abs(length - 1.0) < 1e-15
         
         # Check quaternion is normalized
-        q_length = np.linalg.norm(origin.quat)
-        assert np.isclose(q_length, 1.0)
+        q_length = math.sqrt(sum(i*i for i in origin.quat))
+        assert abs(q_length - 1.0) < 1e-15
 
 
 def test_find_nearest_origin():
@@ -54,7 +54,7 @@ def test_find_nearest_origin():
         # Between equatorial faces
         {"point": [2*PI_OVER_5, PI_OVER_5], "expected_origins": [3, 4]},
         # Between equatorial and south pole
-        {"point": [0, np.pi - PI_OVER_5/2], "expected_origins": [9, 10]},
+        {"point": [0, math.pi - PI_OVER_5/2], "expected_origins": [9, 10]},
     ]
 
     for test_case in boundary_points:
@@ -65,7 +65,7 @@ def test_find_nearest_origin():
     for origin in origins:
         theta, phi = origin.axis
         # Add π to theta and π-phi to get antipodal point
-        antipodal = [theta + np.pi, np.pi - phi]
+        antipodal = [theta + math.pi, math.pi - phi]
         
         nearest = find_nearest_origin(antipodal)
         # Should find one of the faces near the antipodal point
@@ -78,25 +78,25 @@ def test_haversine():
     point = [0, 0]
     assert haversine(point, point) == 0
 
-    point2 = [np.pi/4, np.pi/3]
+    point2 = [math.pi/4, math.pi/3]
     assert haversine(point2, point2) == 0
 
     # Test symmetry
-    p1 = [0, np.pi/4]
-    p2 = [np.pi/2, np.pi/3]
+    p1 = [0, math.pi/4]
+    p2 = [math.pi/2, math.pi/3]
     
     d1 = haversine(p1, p2)
     d2 = haversine(p2, p1)
     
-    assert np.isclose(d1, d2)
+    assert abs(d1 - d2) < 1e-15
 
     # Test increasing distance
     origin = [0, 0]
     distances = [
-        [0, np.pi/6],      # 30°
-        [0, np.pi/4],      # 45°
-        [0, np.pi/3],      # 60°
-        [0, np.pi/2],      # 90°
+        [0, math.pi/6],      # 30°
+        [0, math.pi/4],      # 45°
+        [0, math.pi/3],      # 60°
+        [0, math.pi/2],      # 90°
     ]
 
     last_distance = 0
@@ -106,10 +106,10 @@ def test_haversine():
         last_distance = distance
 
     # Test longitude separation
-    lat = np.pi/4  # Fixed latitude
+    lat = math.pi/4  # Fixed latitude
     p1 = [0, lat]
-    p2 = [np.pi, lat]
-    p3 = [np.pi/2, lat]
+    p2 = [math.pi, lat]
+    p3 = [math.pi/2, lat]
 
     d1 = haversine(p1, p2)  # 180° separation
     d2 = haversine(p1, p3)  # 90° separation
@@ -120,29 +120,29 @@ def test_haversine():
     test_cases = [
         {
             "p1": [0, 0],
-            "p2": [0, np.pi/2],
+            "p2": [0, math.pi/2],
             "expected": 0.5  # sin²(π/4) = 0.5
         },
         {
-            "p1": [0, np.pi/4],
-            "p2": [np.pi/2, np.pi/4],
+            "p1": [0, math.pi/4],
+            "p2": [math.pi/2, math.pi/4],
             "expected": 0.25  # For points at same latitude
         }
     ]
 
     for case in test_cases:
-        assert np.isclose(haversine(case["p1"], case["p2"]), case["expected"], atol=1e-4)
+        assert abs(haversine(case["p1"], case["p2"]) - case["expected"]) < 1e-4
 
 def test_face_movement():
     """Test moving points between faces."""
     # First origin should be top
     origin1 = origins[0]
-    assert np.array_equal(origin1.axis, [0, 0])
+    assert origin1.axis == (0, 0)
 
     # Move all the way to next origin
     origin2 = origins[1]
-    direction = np.array([np.cos(origin2.axis[0]), np.sin(origin2.axis[0])])
-    point = direction * 2 * distance_to_edge
+    direction = [math.cos(origin2.axis[0]), math.sin(origin2.axis[0])]
+    point = (direction[0] * 2 * distance_to_edge, direction[1] * 2 * distance_to_edge)
     result = move_point_to_face(point, origin1, origin2)
     
     # Result should include new point and interface quaternion
@@ -150,7 +150,7 @@ def test_face_movement():
     assert result.quat is not None
     
     # New point should be on second origin
-    assert np.array_equal(result.point, [0, 0])
+    assert result.point == (0, 0)
 
 
 def test_quintant_conversion():

@@ -15,7 +15,7 @@ from a5.core.serialization import (
 from a5.core.utils import A5Cell
 from a5.core.origin import origins
 import json
-import numpy as np
+# numpy import removed
 from pathlib import Path
 import copy
 
@@ -68,7 +68,7 @@ def assert_cells_equal(actual: A5Cell, expected: A5Cell):
     """Compare A5Cell objects, handling numpy arrays properly."""
     assert actual["origin"].id == expected["origin"].id
     assert actual["origin"].axis == expected["origin"].axis
-    assert np.array_equal(actual["origin"].quat, expected["origin"].quat)
+    assert actual["origin"].quat == expected["origin"].quat
     assert actual["origin"].angle == expected["origin"].angle
     assert actual["origin"].orientation == expected["origin"].orientation
     assert actual["origin"].first_quintant == expected["origin"].first_quintant

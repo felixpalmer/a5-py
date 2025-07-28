@@ -1,5 +1,5 @@
 import pytest
-import numpy as np
+import math
 from a5.core.hilbert import (
     quaternary_to_kj,
     quaternary_to_flips,
@@ -16,40 +16,40 @@ from a5.core.hilbert import (
 def test_hilbert_anchor_base_cases():
     # Test first corner (0)
     offset0 = quaternary_to_kj(0, (NO, NO))
-    np.testing.assert_array_equal(offset0, [0, 0])
+    assert offset0 == [0, 0]
     flips0 = quaternary_to_flips(0)
     assert flips0 == (NO, NO)
 
     # Test second corner (1)
     offset1 = quaternary_to_kj(1, (NO, NO))
-    np.testing.assert_array_equal(offset1, [1, 0])
+    assert offset1 == [1, 0]
     flips1 = quaternary_to_flips(1)
     assert flips1 == (NO, YES)
 
     # Test third corner (2)
     offset2 = quaternary_to_kj(2, (NO, NO))
-    np.testing.assert_array_equal(offset2, [1, 1])
+    assert offset2 == [1, 1]
     flips2 = quaternary_to_flips(2)
     assert flips2 == (NO, NO)
 
     # Test fourth corner (3)
     offset3 = quaternary_to_kj(3, (NO, NO))
-    np.testing.assert_array_equal(offset3, [2, 1])
+    assert offset3 == [2, 1]
     flips3 = quaternary_to_flips(3)
     assert flips3 == (YES, NO)
 
 def test_hilbert_anchor_respects_flips():
     # Test with x-flip
     offset_x = quaternary_to_kj(1, (YES, NO))
-    np.testing.assert_array_equal(offset_x, [-0, -1])
+    assert offset_x == [-0, -1]
 
     # Test with y-flip
     offset_y = quaternary_to_kj(1, (NO, YES))
-    np.testing.assert_array_equal(offset_y, [0, 1])
+    assert offset_y == [0, 1]
 
     # Test with both flips
     offset_xy = quaternary_to_kj(1, (YES, YES))
-    np.testing.assert_array_equal(offset_xy, [-1, -0])
+    assert offset_xy == [-1, -0]
 
 def test_output_flips_depend_only_on_input():
     EXPECTED_FLIPS = [
@@ -65,20 +65,20 @@ def test_output_flips_depend_only_on_input():
 def test_generates_correct_sequence():
     # Test first few indices
     anchor0 = s_to_anchor(0, 1, 'uv')
-    np.testing.assert_array_equal(anchor0.offset, [0, 0])
+    assert list(anchor0.offset) == [0, 0]
     assert anchor0.flips == (NO, NO)
 
     anchor1 = s_to_anchor(1, 1, 'uv')
     assert anchor1.flips[1] == YES
 
     anchor4 = s_to_anchor(4, 1, 'uv')
-    assert np.linalg.norm(anchor4.offset) > 1  # Should be scaled up
+    assert math.sqrt(sum(x*x for x in anchor4.offset)) > 1  # Should be scaled up
 
     # Test that sequence length grows exponentially
     anchors = [s_to_anchor(i, 1, 'uv') for i in range(16)]
-    unique_offsets = {tuple(a.offset) for a in anchors}
+    unique_offsets = {tuple(list(a.offset)) for a in anchors}
     assert len(unique_offsets) == 12
-    unique_anchors = {(tuple(a.offset), a.flips) for a in anchors}
+    unique_anchors = {(tuple(list(a.offset)), a.flips) for a in anchors}
     assert len(unique_anchors) == 15
 
 def test_neighboring_anchors_are_adjacent():
@@ -89,7 +89,6 @@ def test_neighboring_anchors_are_adjacent():
     
     # Check that relative positions make sense
     diff = (anchor2.offset[0] - anchor1.offset[0], anchor2.offset[1] - anchor1.offset[1])
-    import math
     assert math.sqrt(diff[0]**2 + diff[1]**2) == 1  # Should be adjacent
     diff2 = (anchor3.offset[0] - anchor2.offset[0], anchor3.offset[1] - anchor2.offset[1])
     assert math.sqrt(diff2[0]**2 + diff2[1]**2) == math.sqrt(2)  # Should be adjacent
@@ -115,36 +114,36 @@ def test_generates_correct_anchors():
 
     for test_case in EXPECTED_ANCHORS:
         anchor = s_to_anchor(test_case['s'], 20, 'uv')
-        np.testing.assert_array_equal(anchor.offset, test_case['offset'])
+        assert list(anchor.offset) == test_case['offset']
         assert anchor.flips == test_case['flips']
 
 def test_ij_to_kj_conversion():
     # Test some basic conversions
     test_cases = [
-        (np.array([0, 0]), np.array([0, 0])),    # Origin
-        (np.array([1, 0]), np.array([1, 0])),    # Unit i
-        (np.array([0, 1]), np.array([1, 1])),    # Unit j -> k=i+j=1, j=1
-        (np.array([1, 1]), np.array([2, 1])),    # i + j -> k=2, j=1
-        (np.array([2, 3]), np.array([5, 3]))     # 2i + 3j -> k=5, j=3
+        ([0, 0], [0, 0]),    # Origin
+        ([1, 0], [1, 0]),    # Unit i
+        ([0, 1], [1, 1]),    # Unit j -> k=i+j=1, j=1
+        ([1, 1], [2, 1]),    # i + j -> k=2, j=1
+        ([2, 3], [5, 3])     # 2i + 3j -> k=5, j=3
     ]
 
     for input_ij, expected_kj in test_cases:
         result = ij_to_kj(input_ij)
-        np.testing.assert_array_equal(result, expected_kj)
+        assert list(result) == expected_kj
 
 def test_kj_to_ij_conversion():
     # Test some basic conversions
     test_cases = [
-        (np.array([0, 0]), np.array([0, 0])),     # Origin
-        (np.array([1, 0]), np.array([1, 0])),     # Pure k -> i=1, j=0
-        (np.array([1, 1]), np.array([0, 1])),     # k=1, j=1 -> i=0, j=1
-        (np.array([2, 1]), np.array([1, 1])),     # k=2, j=1 -> i=1, j=1
-        (np.array([5, 3]), np.array([2, 3]))      # k=5, j=3 -> i=2, j=3
+        ([0, 0], [0, 0]),     # Origin
+        ([1, 0], [1, 0]),     # Pure k -> i=1, j=0
+        ([1, 1], [0, 1]),     # k=1, j=1 -> i=0, j=1
+        ([2, 1], [1, 1]),     # k=2, j=1 -> i=1, j=1
+        ([5, 3], [2, 3])      # k=5, j=3 -> i=2, j=3
     ]
 
     for input_kj, expected_ij in test_cases:
         result = kj_to_ij(input_kj)
-        np.testing.assert_array_equal(result, expected_ij)
+        assert list(result) == expected_ij
 
 def test_ij_kj_inverse():
     # Test that converting back and forth gives the original coordinates
@@ -159,20 +158,19 @@ def test_ij_kj_inverse():
     ]
 
     for point in test_points:
-        point = np.array(point)
         kj = ij_to_kj(point)
         ij = kj_to_ij(kj)
-        np.testing.assert_array_equal(point, ij)
+        assert list(ij) == point
 
 def test_get_required_digits():
     test_cases = [
-        (np.array([0, 0]), 1),
-        (np.array([1, 0]), 1),
-        (np.array([2, 1]), 2),
-        (np.array([4, 0]), 3),
-        (np.array([8, 8]), 5),
-        (np.array([16, 0]), 5),
-        (np.array([32, 32]), 7)
+        ([0, 0], 1),
+        ([1, 0], 1),
+        ([2, 1], 2),
+        ([4, 0], 3),
+        ([8, 8], 5),
+        ([16, 0], 5),
+        ([32, 32], 7)
     ]
 
     for offset, expected in test_cases:
@@ -236,7 +234,7 @@ def test_ij_to_s():
     ]
 
     for test_case in test_values:
-        result = ij_to_s(np.array(test_case['offset']), 3, 'uv')
+        result = ij_to_s(test_case['offset'], 3, 'uv')
         assert result == test_case['s']
 
 @pytest.mark.parametrize('orientation', ['uv', 'vu', 'uw', 'wu', 'vw', 'wv'])
@@ -248,12 +246,12 @@ def test_ij_to_s_inverse_of_s_to_anchor(s, orientation):
     # Nudge the offset away from the edge of the triangle
     flip_x, flip_y = anchor.flips
     if flip_x == NO and flip_y == NO:
-        anchor.offset += np.array([0.1, 0.1])
+        anchor.offset = [anchor.offset[0] + 0.1, anchor.offset[1] + 0.1]
     elif flip_x == YES and flip_y == NO:
-        anchor.offset += np.array([0.1, -0.2])
+        anchor.offset = [anchor.offset[0] + 0.1, anchor.offset[1] - 0.2]
     elif flip_x == NO and flip_y == YES:
-        anchor.offset += np.array([-0.1, 0.2])
+        anchor.offset = [anchor.offset[0] - 0.1, anchor.offset[1] + 0.2]
     elif flip_x == YES and flip_y == YES:
-        anchor.offset += np.array([-0.1, -0.1])
+        anchor.offset = [anchor.offset[0] - 0.1, anchor.offset[1] - 0.1]
 
     assert ij_to_s(anchor.offset, resolution, orientation) == s 

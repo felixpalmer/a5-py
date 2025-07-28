@@ -3,7 +3,7 @@ Tests for a5.core.math module
 """
 
 import pytest
-import numpy as np
+import math
 from typing import cast, Tuple, List
 from a5.core.coordinate_transforms import (
     deg_to_rad,
@@ -38,21 +38,21 @@ TEST_POINTS_LONLAT: List[LonLat] = [
 
 # Test triangle for barycentric tests
 TEST_TRIANGLE = cast(FaceTriangle, (
-    cast(Face, np.array([0.0, 0.0])),
-    cast(Face, np.array([1.0, 0.0])),
-    cast(Face, np.array([0.0, 1.0]))
+    cast(Face, (0.0, 0.0)),
+    cast(Face, (1.0, 0.0)),
+    cast(Face, (0.0, 1.0))
 ))
 
 def test_angle_conversions():
     """Test degree to radian conversions and vice versa."""
     # Test degrees to radians
-    assert deg_to_rad(cast(Degrees, 180.0)) == pytest.approx(np.pi)
-    assert deg_to_rad(cast(Degrees, 90.0)) == pytest.approx(np.pi / 2)
+    assert deg_to_rad(cast(Degrees, 180.0)) == pytest.approx(math.pi)
+    assert deg_to_rad(cast(Degrees, 90.0)) == pytest.approx(math.pi / 2)
     assert deg_to_rad(cast(Degrees, 0.0)) == pytest.approx(0.0)
 
     # Test radians to degrees
-    assert rad_to_deg(cast(Radians, np.pi)) == pytest.approx(180.0)
-    assert rad_to_deg(cast(Radians, np.pi / 2)) == pytest.approx(90.0)
+    assert rad_to_deg(cast(Radians, math.pi)) == pytest.approx(180.0)
+    assert rad_to_deg(cast(Radians, math.pi / 2)) == pytest.approx(90.0)
     assert rad_to_deg(cast(Radians, 0.0)) == pytest.approx(0.0)
 
 def test_barycentric_coordinate_functions():
@@ -61,10 +61,10 @@ def test_barycentric_coordinate_functions():
 
     # Test round-trip conversion for test points
     test_points = [
-        cast(Face, np.array([0.1, 0.1])),
-        cast(Face, np.array([0.5, 0.2])),
-        cast(Face, np.array([0.3, 0.3])),
-        cast(Face, np.array([0.1, 0.8])),
+        cast(Face, (0.1, 0.1)),
+        cast(Face, (0.5, 0.2)),
+        cast(Face, (0.3, 0.3)),
+        cast(Face, (0.1, 0.8)),
     ]
 
     for point in test_points:
@@ -75,7 +75,7 @@ def test_barycentric_coordinate_functions():
         result = barycentric_to_face(bary, TEST_TRIANGLE)
         
         # Check round-trip accuracy
-        assert np.allclose(result, point, rtol=TOLERANCE)
+        assert all(abs(r - p) < TOLERANCE * max(abs(r), abs(p), 1.0) for r, p in zip(result, point))
         
         # Check that barycentric coordinates sum to 1
         assert abs(sum(bary) - 1.0) < TOLERANCE
@@ -105,7 +105,7 @@ def test_barycentric_specific_coordinates():
         result_bary = face_to_barycentric(face, TEST_TRIANGLE)
         
         # Check round-trip accuracy
-        assert np.allclose(result_bary, bary, rtol=TOLERANCE)
+        assert all(abs(r - b) < TOLERANCE * max(abs(r), abs(b), 1.0) for r, b in zip(result_bary, bary))
         
         # Check that barycentric coordinates sum to 1
         assert abs(sum(result_bary) - 1.0) < TOLERANCE
@@ -126,20 +126,20 @@ def test_barycentric_vertices():
         bary = face_to_barycentric(vertex, TEST_TRIANGLE)
         
         # Check barycentric coordinates
-        assert np.allclose(bary, expected, rtol=TOLERANCE)
+        assert all(abs(b - e) < TOLERANCE * max(abs(b), abs(e), 1.0) for b, e in zip(bary, expected))
         
         # Round-trip test
         result = barycentric_to_face(bary, TEST_TRIANGLE)
-        assert np.allclose(result, vertex, rtol=TOLERANCE)
+        assert all(abs(r - v) < TOLERANCE * max(abs(r), abs(v), 1.0) for r, v in zip(result, vertex))
 
 def test_barycentric_edge_midpoints():
     """Test barycentric coordinates at edge midpoints."""
     TOLERANCE = 1e-12
     
     edge_midpoints = [
-        cast(Face, np.array([0.5, 0.0])),    # Midpoint of first-second edge
-        cast(Face, np.array([0.0, 0.5])),    # Midpoint of first-third edge
-        cast(Face, np.array([0.5, 0.5])),    # Midpoint of second-third edge
+        cast(Face, (0.5, 0.0)),    # Midpoint of first-second edge
+        cast(Face, (0.0, 0.5)),    # Midpoint of first-third edge
+        cast(Face, (0.5, 0.5)),    # Midpoint of second-third edge
     ]
     
     expected_bary = [
@@ -152,34 +152,34 @@ def test_barycentric_edge_midpoints():
         bary = face_to_barycentric(midpoint, TEST_TRIANGLE)
         
         # Check barycentric coordinates
-        assert np.allclose(bary, expected, rtol=TOLERANCE)
+        assert all(abs(b - e) < TOLERANCE * max(abs(b), abs(e), 1.0) for b, e in zip(bary, expected))
         
         # Round-trip test
         result = barycentric_to_face(bary, TEST_TRIANGLE)
-        assert np.allclose(result, midpoint, rtol=TOLERANCE)
+        assert all(abs(r - m) < TOLERANCE * max(abs(r), abs(m), 1.0) for r, m in zip(result, midpoint))
 
 def test_spherical_to_cartesian():
     """Test conversion from spherical to cartesian coordinates."""
     # Test north pole
     north_pole = to_cartesian(cast(Spherical, (0.0, 0.0)))
-    assert np.allclose(north_pole, [0.0, 0.0, 1.0])
+    assert all(abs(n - e) < 1e-15 for n, e in zip(north_pole, [0.0, 0.0, 1.0]))
 
     # Test equator at 0 longitude
-    equator0 = to_cartesian(cast(Spherical, (0.0, np.pi/2)))
-    assert np.allclose(equator0, [1.0, 0.0, 0.0])
+    equator0 = to_cartesian(cast(Spherical, (0.0, math.pi/2)))
+    assert all(abs(e - ex) < 1e-15 for e, ex in zip(equator0, [1.0, 0.0, 0.0]))
 
     # Test equator at 90° longitude
-    equator90 = to_cartesian(cast(Spherical, (np.pi/2, np.pi/2)))
-    assert np.allclose(equator90, [0.0, 1.0, 0.0])
+    equator90 = to_cartesian(cast(Spherical, (math.pi/2, math.pi/2)))
+    assert all(abs(e - ex) < 1e-15 for e, ex in zip(equator90, [0.0, 1.0, 0.0]))
 
 def test_cartesian_to_spherical():
     """Test conversion from cartesian to spherical coordinates."""
     # Test round trip conversion
-    original = cast(Spherical, (np.pi/4, np.pi/6))
+    original = cast(Spherical, (math.pi/4, math.pi/6))
     cartesian = to_cartesian(original)
     spherical = to_spherical(cartesian)
     
-    assert np.allclose(spherical, original)
+    assert all(abs(s - o) < 1e-15 for s, o in zip(spherical, original))
 
 def test_lonlat_to_spherical():
     """Test conversion from longitude/latitude to spherical coordinates."""
@@ -187,7 +187,7 @@ def test_lonlat_to_spherical():
     greenwich = from_lonlat(cast(LonLat, (0.0, 0.0)))
     # Match OFFSET_LON: 93
     assert greenwich[0] == pytest.approx(deg_to_rad(cast(Degrees, 93.0)))
-    assert greenwich[1] == pytest.approx(np.pi/2)  # 90° colatitude = equator
+    assert greenwich[1] == pytest.approx(math.pi/2)  # 90° colatitude = equator
 
     # Test north pole
     north_pole = from_lonlat(cast(LonLat, (0.0, 90.0)))
@@ -195,7 +195,7 @@ def test_lonlat_to_spherical():
 
     # Test south pole
     south_pole = from_lonlat(cast(LonLat, (0.0, -90.0)))
-    assert south_pole[1] == pytest.approx(np.pi)  # 180° colatitude = south pole
+    assert south_pole[1] == pytest.approx(math.pi)  # 180° colatitude = south pole
 
 def test_spherical_to_lonlat():
     """Test conversion from spherical to longitude/latitude coordinates."""
@@ -204,7 +204,7 @@ def test_spherical_to_lonlat():
         spherical = from_lonlat(lon_lat)
         result = to_lonlat(spherical)
         
-        assert np.allclose([result[0], result[1]], [lon_lat[0], lon_lat[1]])
+        assert all(abs(r - l) < 1e-15 for r, l in zip([result[0], result[1]], [lon_lat[0], lon_lat[1]]))
 
 def test_normalize_longitudes():
     """Test longitude normalization for contours."""
