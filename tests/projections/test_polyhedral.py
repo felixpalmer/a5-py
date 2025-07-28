@@ -8,6 +8,8 @@ import math
 from pathlib import Path
 from a5.projections.polyhedral import PolyhedralProjection
 from a5.core.coordinate_systems import Cartesian
+from a5.core.vec3 import length
+from tests.utils import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -30,13 +32,6 @@ MAX_ANGLE = max(
 MAX_ARC_LENGTH_MM = AUTHALIC_RADIUS * MAX_ANGLE * 1e9
 DESIRED_MM_PRECISION = 0.01
 
-def is_close_to_array(actual: list, expected: list, decimal: int = 7) -> bool:
-    """Helper function to check if arrays are close within tolerance"""
-    # Use absolute tolerance - adjusted for cross-language floating point precision
-    tolerance = 10**(-decimal)
-    if len(actual) != len(expected):
-        return False
-    return all(abs(a - e) < tolerance for a, e in zip(actual, expected))
 
 @pytest.fixture
 def polyhedral():
@@ -53,7 +48,7 @@ class TestPolyhedralProjectionForward:
                 TEST_SPHERICAL_TRIANGLE, 
                 TEST_FACE_TRIANGLE
             )
-            assert is_close_to_array(list(result), test_case["expected"]), \
+            assert is_close_array(list(result), test_case["expected"]), \
                 f"Expected {test_case['expected']}, got {list(result)}"
 
     def test_round_trip_forward_projections(self, polyhedral):
@@ -64,9 +59,9 @@ class TestPolyhedralProjectionForward:
             spherical = test_case["input"]
             polar = polyhedral.forward(spherical, TEST_SPHERICAL_TRIANGLE, TEST_FACE_TRIANGLE)
             result = polyhedral.inverse(polar, TEST_FACE_TRIANGLE, TEST_SPHERICAL_TRIANGLE)
-            error = math.sqrt(sum((r - s)**2 for r, s in zip(result, spherical)))
+            error = length([r - s for r, s in zip(result, spherical)])
             largest_error = max(largest_error, error)
-            assert is_close_to_array(list(result), spherical), \
+            assert is_close_array(list(result), spherical), \
                 f"Round trip failed: expected {spherical}, got {list(result)}"
         
         # Check precision requirement
@@ -85,7 +80,7 @@ class TestPolyhedralProjectionInverse:
                 TEST_FACE_TRIANGLE,
                 TEST_SPHERICAL_TRIANGLE
             )
-            assert is_close_to_array(list(result), test_case["expected"]), \
+            assert is_close_array(list(result), test_case["expected"]), \
                 f"Expected {test_case['expected']}, got {list(result)}"
 
     def test_round_trip_inverse_projections(self, polyhedral):
@@ -94,5 +89,5 @@ class TestPolyhedralProjectionInverse:
             face_point = test_case["input"]
             spherical = polyhedral.inverse(face_point, TEST_FACE_TRIANGLE, TEST_SPHERICAL_TRIANGLE)
             result = polyhedral.forward(spherical, TEST_SPHERICAL_TRIANGLE, TEST_FACE_TRIANGLE)
-            assert is_close_to_array(list(result), face_point), \
+            assert is_close_array(list(result), face_point), \
                 f"Round trip failed: expected {face_point}, got {list(result)}" 

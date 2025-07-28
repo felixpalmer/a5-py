@@ -15,6 +15,7 @@ from a5.core.constants import distance_to_edge, PI_OVER_5, TWO_PI_OVER_5
 from a5.core.coordinate_systems import Face, Radians, Spherical
 from a5.core.coordinate_transforms import to_cartesian
 from a5.core.origin import origins
+from a5.math.vec3 import length
 
 def test_origin_constants():
     """Test that we have 12 origins for dodecahedron faces."""
@@ -31,11 +32,11 @@ def test_origin_properties():
         
         # Check axis is unit vector when converted to cartesian
         cartesian = to_cartesian(origin.axis)
-        length = math.sqrt(sum(i*i for i in cartesian))
-        assert abs(length - 1.0) < 1e-15
+        vector_length = length(cartesian)
+        assert abs(vector_length - 1.0) < 1e-15
         
         # Check quaternion is normalized
-        q_length = math.sqrt(sum(i*i for i in origin.quat))
+        q_length = length(origin.quat)
         assert abs(q_length - 1.0) < 1e-15
 
 

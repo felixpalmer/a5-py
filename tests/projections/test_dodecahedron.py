@@ -6,6 +6,7 @@ import pytest
 import json
 from pathlib import Path
 from a5.projections.dodecahedron import DodecahedronProjection, OriginId
+from tests.utils import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -15,13 +16,6 @@ with open(FIXTURES_DIR / "dodecahedron.json") as f:
 # Extract static data from test data
 ORIGIN_ID = TEST_DATA["static"]["ORIGIN_ID"]
 
-def is_close_to_array(actual: tuple, expected: list, decimal: int = 7) -> bool:
-    """Helper function to check if arrays are close within tolerance"""
-    # Use absolute tolerance - adjusted for cross-language floating point precision
-    tolerance = 10**(-decimal)
-    if len(actual) != len(expected):
-        return False
-    return all(abs(a - e) < tolerance for a, e in zip(actual, expected))
 
 @pytest.fixture
 def dodecahedron():
@@ -38,7 +32,7 @@ class TestDodecahedronProjectionForward:
                 tuple(test_case["input"]), 
                 ORIGIN_ID
             )
-            assert is_close_to_array(result, test_case["expected"]), \
+            assert is_close_array(result, test_case["expected"]), \
                 f"Expected {test_case['expected']}, got {result}"
 
     def test_round_trip_forward_projections(self, dodecahedron):
@@ -47,7 +41,7 @@ class TestDodecahedronProjectionForward:
             spherical = tuple(test_case["input"])
             face = dodecahedron.forward(spherical, ORIGIN_ID)
             result = dodecahedron.inverse(face, ORIGIN_ID)
-            assert is_close_to_array(result, list(spherical)), \
+            assert is_close_array(result, list(spherical)), \
                 f"Round trip failed: expected {spherical}, got {result}"
 
 
@@ -61,7 +55,7 @@ class TestDodecahedronProjectionInverse:
                 tuple(test_case["input"]),
                 ORIGIN_ID
             )
-            assert is_close_to_array(result, test_case["expected"]), \
+            assert is_close_array(result, test_case["expected"]), \
                 f"Expected {test_case['expected']}, got {result}"
 
     def test_round_trip_inverse_projections(self, dodecahedron):
@@ -70,5 +64,5 @@ class TestDodecahedronProjectionInverse:
             face_point = tuple(test_case["input"])
             spherical = dodecahedron.inverse(face_point, ORIGIN_ID)
             result = dodecahedron.forward(spherical, ORIGIN_ID)
-            assert is_close_to_array(result, list(face_point)), \
+            assert is_close_array(result, list(face_point)), \
                 f"Round trip failed: expected {face_point}, got {result}" 

@@ -1,5 +1,6 @@
 import pytest
 import math
+from a5.core.vec3 import length
 from a5.core.hilbert import (
     quaternary_to_kj,
     quaternary_to_flips,
@@ -72,7 +73,7 @@ def test_generates_correct_sequence():
     assert anchor1.flips[1] == YES
 
     anchor4 = s_to_anchor(4, 1, 'uv')
-    assert math.sqrt(sum(x*x for x in anchor4.offset)) > 1  # Should be scaled up
+    assert length(anchor4.offset) > 1  # Should be scaled up
 
     # Test that sequence length grows exponentially
     anchors = [s_to_anchor(i, 1, 'uv') for i in range(16)]

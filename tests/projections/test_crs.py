@@ -8,19 +8,14 @@ import math
 from pathlib import Path
 from a5.projections.crs import CRS
 from a5.core.coordinate_systems import Cartesian
+from a5.core.vec3 import length
+from tests.utils import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 with open(FIXTURES_DIR / "crs-vertices.json") as f:
     EXPECTED_VERTICES = json.load(f)
 
-def is_close_to_array(actual: list, expected: list, decimal: int = 7) -> bool:
-    """Helper function to check if arrays are close within tolerance"""
-    # Use absolute tolerance - adjusted for cross-language floating point precision
-    tolerance = 10**(-decimal)
-    if len(actual) != len(expected):
-        return False
-    return all(abs(a - e) < tolerance for a, e in zip(actual, expected))
 
 @pytest.fixture
 def crs():
@@ -38,7 +33,7 @@ def test_should_match_expected_vertices_from_json_file(crs):
     assert len(vertices) == len(EXPECTED_VERTICES)
     for i, vertex in enumerate(vertices):
         expected = EXPECTED_VERTICES[i]
-        assert is_close_to_array(list(vertex), expected), \
+        assert is_close_array(list(vertex), expected), \
             f"Vertex {i}: expected {expected}, got {list(vertex)}"
 
 def test_should_throw_error_for_non_existent_vertex(crs):
@@ -53,6 +48,6 @@ def test_should_validate_vertex_structure(crs):
     
     # All vertices should be normalized (unit length)
     for i, vertex in enumerate(vertices):
-        length = math.sqrt(sum(x*x for x in vertex))
-        assert abs(length - 1.0) < 1e-15, \
-            f"Vertex {i} is not normalized: length = {length}" 
+        vertex_length = length(vertex)
+        assert abs(vertex_length - 1.0) < 1e-15, \
+            f"Vertex {i} is not normalized: length = {vertex_length}" 

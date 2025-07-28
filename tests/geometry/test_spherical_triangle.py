@@ -8,22 +8,14 @@ import math
 from pathlib import Path
 from a5.geometry.spherical_triangle import SphericalTriangleShape
 from a5.core.coordinate_systems import Cartesian
+from a5.core.vec3 import length
+from tests.utils import is_close_array, is_close
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 with open(FIXTURES_DIR / "spherical-triangle.json") as f:
     FIXTURES = json.load(f)
 
-def is_close_to_array(actual: list, expected: list, decimal: int = 6) -> bool:
-    """Helper function to check if arrays are close within tolerance"""
-    tolerance = 10**(-decimal)
-    if len(actual) != len(expected):
-        return False
-    return all(abs(a - e) < tolerance for a, e in zip(actual, expected))
-
-def is_close_to(actual: float, expected: float, decimal: int = 6) -> bool:
-    """Helper function to check if values are close within tolerance"""
-    return abs(actual - expected) < 10**(-decimal)
 
 class TestSphericalTriangleConstructor:
     """Test constructor functionality"""
@@ -77,7 +69,7 @@ class TestSphericalTriangleGetBoundary:
                     f"Fixture {i}, segments {n_segments}: expected {len(expected_boundary)} points, got {len(boundary)}"
                 
                 for j, point in enumerate(boundary):
-                    assert is_close_to_array(list(point), expected_boundary[j], 6), \
+                    assert is_close_array(list(point), expected_boundary[j], 6), \
                         f"Fixture {i}, segments {n_segments}, point {j}: expected {expected_boundary[j]}, got {list(point)}"
 
 
@@ -96,13 +88,13 @@ class TestSphericalTriangleSlerp:
                 expected = test_case["result"]
                 
                 actual = triangle.slerp(t)
-                assert is_close_to_array(list(actual), expected, 6), \
+                assert is_close_array(list(actual), expected, 6), \
                     f"Fixture {i}, t={t}: expected {expected}, got {list(actual)}"
                 
                 # Should be normalized
-                length = math.sqrt(sum(x*x for x in actual))
-                assert abs(length - 1) < 1e-10, \
-                    f"Fixture {i}, t={t}: result not normalized, length={length}"
+                vector_length = length(actual)
+                assert abs(vector_length - 1) < 1e-10, \
+                    f"Fixture {i}, t={t}: result not normalized, length={vector_length}"
 
 
 class TestSphericalTriangleContainsPoint:
@@ -120,7 +112,7 @@ class TestSphericalTriangleContainsPoint:
                 expected = test_case["result"]
                 
                 actual = triangle.contains_point(point)
-                assert is_close_to(actual, expected, 6), \
+                assert is_close(actual, expected, 6), \
                     f"Fixture {i}, point={list(point)}: expected {expected}, got {actual}"
 
 
@@ -137,7 +129,7 @@ class TestSphericalTriangleGetArea:
             area = triangle.get_area()
             expected_area = fixture["area"]
             
-            assert is_close_to(area, expected_area, 6), \
+            assert is_close(area, expected_area, 6), \
                 f"Fixture {i}: expected area {expected_area}, got {area}"
             
             # Area can be negative for some winding orders, so check absolute value

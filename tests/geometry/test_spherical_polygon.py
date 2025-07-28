@@ -9,18 +9,14 @@ from pathlib import Path
 import math
 from a5.geometry import SphericalPolygonShape
 from a5.core.coordinate_systems import Cartesian
+from a5.core.vec3 import length
+from tests.utils import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 with open(FIXTURES_DIR / "spherical-polygon.json") as f:
     fixtures = json.load(f)
 
-def is_close_to_array(actual: list, expected: list, decimal: int = 6) -> bool:
-    """Helper function to check if arrays are close within tolerance"""
-    tolerance = 10**(-decimal)
-    if len(actual) != len(expected):
-        return False
-    return all(abs(a - e) < tolerance for a, e in zip(actual, expected))
 
 def test_get_boundary():
     """Test boundary points with different segment counts"""
@@ -33,7 +29,7 @@ def test_get_boundary():
             expected_boundary = fixture[f"boundary{n_segments}"]
             assert len(boundary) == len(expected_boundary)
             for point, expected in zip(boundary, expected_boundary):
-                assert is_close_to_array(list(point), expected, 6), \
+                assert is_close_array(list(point), expected, 6), \
                     f"Expected {expected}, got {list(point)}"
 
 def test_slerp():
@@ -43,10 +39,10 @@ def test_slerp():
         
         for test in fixture["slerpTests"]:
             actual = polygon.slerp(test["t"])
-            assert is_close_to_array(list(actual), test["result"], 6), \
+            assert is_close_array(list(actual), test["result"], 6), \
                 f"Expected {test['result']}, got {list(actual)}"
             # Should be normalized
-            magnitude = math.sqrt(sum(x*x for x in actual))
+            magnitude = length(actual)
             assert abs(magnitude - 1) < 1e-10, \
                 f"Vector not normalized, magnitude: {magnitude}"
 
