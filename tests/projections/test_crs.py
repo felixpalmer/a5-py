@@ -33,8 +33,8 @@ def test_should_match_expected_vertices_from_json_file(crs):
     assert len(vertices) == len(EXPECTED_VERTICES)
     for i, vertex in enumerate(vertices):
         expected = EXPECTED_VERTICES[i]
-        assert is_close_array(list(vertex), expected), \
-            f"Vertex {i}: expected {expected}, got {list(vertex)}"
+        assert is_close_array(vertex, expected), \
+            f"Vertex {i}: expected {expected}, got {vertex}"
 
 def test_should_throw_error_for_non_existent_vertex(crs):
     """Test that get_vertex raises error for non-existent vertex"""

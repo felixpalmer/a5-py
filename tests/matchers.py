@@ -4,7 +4,7 @@ Utility functions for test files - Python equivalent of tests/utils/matchers.ts
 from typing import List, Union
 
 # Default tolerance matching TypeScript version
-DEFAULT_TOLERANCE = 7
+DEFAULT_TOLERANCE = 13
 
 
 def is_close_array(actual: Union[List, tuple], expected: List, tolerance: int = DEFAULT_TOLERANCE) -> bool:
