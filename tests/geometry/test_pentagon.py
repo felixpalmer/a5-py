@@ -1,6 +1,5 @@
 import pytest
 import json
-import numpy as np
 from pathlib import Path
 
 from a5.geometry.pentagon import PentagonShape
@@ -21,10 +20,10 @@ class TestPentagonShape:
         fixtures = load_fixtures()
         
         for fixture in fixtures:
-            pentagon = PentagonShape([np.array(vertex) for vertex in fixture["vertices"]])
+            pentagon = PentagonShape([tuple(vertex) for vertex in fixture["vertices"]])
             
             for test_case in fixture["containsPointTests"]:
-                point = np.array(test_case["point"])
+                point = tuple(test_case["point"])
                 expected = test_case["result"]
                 actual = pentagon.contains_point(point)
                 assert abs(actual - expected) < 1e-6, f"Contains point test failed: expected {expected}, got {actual}"
@@ -34,7 +33,7 @@ class TestPentagonShape:
         fixtures = load_fixtures()
         
         for fixture in fixtures:
-            pentagon = PentagonShape([np.array(vertex) for vertex in fixture["vertices"]])
+            pentagon = PentagonShape([tuple(vertex) for vertex in fixture["vertices"]])
             area = pentagon.get_area()
             expected = fixture["area"]
             assert abs(area - expected) < 1e-6, f"Area test failed: expected {expected}, got {area}"
@@ -44,7 +43,7 @@ class TestPentagonShape:
         fixtures = load_fixtures()
         
         for fixture in fixtures:
-            pentagon = PentagonShape([np.array(vertex) for vertex in fixture["vertices"]])
+            pentagon = PentagonShape([tuple(vertex) for vertex in fixture["vertices"]])
             center = pentagon.get_center()
             expected = fixture["center"]
             assert abs(center[0] - expected[0]) < 1e-6, f"Center X test failed: expected {expected[0]}, got {center[0]}"
@@ -56,7 +55,7 @@ class TestPentagonShape:
         
         for fixture in fixtures:
             # Test scale transformation
-            pentagon = PentagonShape([np.array(vertex) for vertex in fixture["vertices"]])
+            pentagon = PentagonShape([tuple(vertex) for vertex in fixture["vertices"]])
             scaled = pentagon.clone().scale(2)
             vertices = scaled.get_vertices()
             
@@ -66,7 +65,7 @@ class TestPentagonShape:
                 assert abs(vertices[i][1] - expected[1]) < 1e-6, f"Scale Y test failed at vertex {i}"
 
             # Test rotate180 transformation
-            pentagon = PentagonShape([np.array(vertex) for vertex in fixture["vertices"]])
+            pentagon = PentagonShape([tuple(vertex) for vertex in fixture["vertices"]])
             rotated = pentagon.clone().rotate180()
             vertices = rotated.get_vertices()
             
@@ -76,7 +75,7 @@ class TestPentagonShape:
                 assert abs(vertices[i][1] - expected[1]) < 1e-6, f"Rotate180 Y test failed at vertex {i}"
 
             # Test reflectY transformation
-            pentagon = PentagonShape([np.array(vertex) for vertex in fixture["vertices"]])
+            pentagon = PentagonShape([tuple(vertex) for vertex in fixture["vertices"]])
             reflected = pentagon.clone().reflect_y()
             vertices = reflected.get_vertices()
             
@@ -86,8 +85,8 @@ class TestPentagonShape:
                 assert abs(vertices[i][1] - expected[1]) < 1e-6, f"ReflectY Y test failed at vertex {i}"
 
             # Test translate transformation
-            pentagon = PentagonShape([np.array(vertex) for vertex in fixture["vertices"]])
-            translated = pentagon.clone().translate(np.array([1, 1]))
+            pentagon = PentagonShape([tuple(vertex) for vertex in fixture["vertices"]])
+            translated = pentagon.clone().translate((1, 1))
             vertices = translated.get_vertices()
             
             expected_translate = fixture["transformTests"]["translate"]
@@ -100,7 +99,7 @@ class TestPentagonShape:
         fixtures = load_fixtures()
         
         for fixture in fixtures:
-            pentagon = PentagonShape([np.array(vertex) for vertex in fixture["vertices"]])
+            pentagon = PentagonShape([tuple(vertex) for vertex in fixture["vertices"]])
             
             # Test boundaries with 2-3 segments
             for n_segments in [2, 3]:

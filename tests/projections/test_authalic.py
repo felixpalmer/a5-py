@@ -5,7 +5,6 @@
 import pytest
 import json
 from pathlib import Path
-import numpy as np
 from a5.projections.authalic import AuthalicProjection
 from a5.core.coordinate_systems import Radians
 
@@ -16,7 +15,8 @@ with open(FIXTURES_DIR / "authalic.json") as f:
 
 def is_close_to(actual: float, expected: float, decimal: int = 6) -> bool:
     """Helper function to check if values are close within tolerance"""
-    return np.isclose(actual, expected, rtol=10**(-decimal))
+    tolerance = 10**(-decimal)
+    return abs(actual - expected) < tolerance * max(abs(actual), abs(expected), 1.0)
 
 @pytest.fixture
 def authalic():

@@ -5,7 +5,6 @@
 import pytest
 import json
 from pathlib import Path
-import numpy as np
 from a5.projections.gnomonic import GnomonicProjection
 from a5.core.coordinate_systems import Polar, Spherical
 
@@ -16,7 +15,10 @@ with open(FIXTURES_DIR / "gnomonic.json") as f:
 
 def is_close_to_array(actual: tuple, expected: list, decimal: int = 6) -> bool:
     """Helper function to check if arrays are close within tolerance"""
-    return np.allclose(actual, expected, rtol=10**(-decimal))
+    tolerance = 10**(-decimal)
+    if len(actual) != len(expected):
+        return False
+    return all(abs(a - e) < tolerance * max(abs(a), abs(e), 1.0) for a, e in zip(actual, expected))
 
 @pytest.fixture
 def gnomonic():

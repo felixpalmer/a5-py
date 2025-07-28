@@ -3,7 +3,6 @@
 # Copyright (c) A5 contributors
 
 import pytest
-import numpy as np
 import json
 import os
 from pathlib import Path
@@ -16,14 +15,17 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 with open(FIXTURES_DIR / "spherical-polygon.json") as f:
     fixtures = json.load(f)
 
-def is_close_to_array(actual: np.ndarray, expected: list, decimal: int = 6) -> bool:
+def is_close_to_array(actual: list, expected: list, decimal: int = 6) -> bool:
     """Helper function to check if arrays are close within tolerance"""
-    return np.allclose(actual, expected, rtol=10**(-decimal))
+    tolerance = 10**(-decimal)
+    if len(actual) != len(expected):
+        return False
+    return all(abs(a - e) < tolerance for a, e in zip(actual, expected))
 
 def test_get_boundary():
     """Test boundary points with different segment counts"""
     for fixture in fixtures:
-        polygon = SphericalPolygonShape([np.array(v, dtype=np.float64) for v in fixture["vertices"]])
+        polygon = SphericalPolygonShape([tuple(v) for v in fixture["vertices"]])
         
         # Test boundaries with 1-3 segments
         for n_segments in [1, 2, 3]:
@@ -31,29 +33,30 @@ def test_get_boundary():
             expected_boundary = fixture[f"boundary{n_segments}"]
             assert len(boundary) == len(expected_boundary)
             for point, expected in zip(boundary, expected_boundary):
-                assert is_close_to_array(point, expected, 6), \
-                    f"Expected {expected}, got {point}"
+                assert is_close_to_array(list(point), expected, 6), \
+                    f"Expected {expected}, got {list(point)}"
 
 def test_slerp():
     """Test interpolation between vertices"""
     for fixture in fixtures:
-        polygon = SphericalPolygonShape([np.array(v, dtype=np.float64) for v in fixture["vertices"]])
+        polygon = SphericalPolygonShape([tuple(v) for v in fixture["vertices"]])
         
         for test in fixture["slerpTests"]:
             actual = polygon.slerp(test["t"])
-            assert is_close_to_array(actual, test["result"], 6), \
-                f"Expected {test['result']}, got {actual}"
+            assert is_close_to_array(list(actual), test["result"], 6), \
+                f"Expected {test['result']}, got {list(actual)}"
             # Should be normalized
-            assert abs(np.linalg.norm(actual) - 1) < 1e-10, \
-                f"Vector not normalized, magnitude: {np.linalg.norm(actual)}"
+            magnitude = math.sqrt(sum(x*x for x in actual))
+            assert abs(magnitude - 1) < 1e-10, \
+                f"Vector not normalized, magnitude: {magnitude}"
 
 def test_contains_point():
     """Test point containment checks"""
     for fixture in fixtures:
-        polygon = SphericalPolygonShape([np.array(v, dtype=np.float64) for v in fixture["vertices"]])
+        polygon = SphericalPolygonShape([tuple(v) for v in fixture["vertices"]])
         
         for test in fixture["containsPointTests"]:
-            point = np.array(test["point"], dtype=np.float64)
+            point = tuple(test["point"])
             actual = polygon.contains_point(point)
             assert abs(actual - test["result"]) < 1e-6, \
                 f"Expected {test['result']}, got {actual}"
@@ -61,7 +64,7 @@ def test_contains_point():
 def test_get_area():
     """Test area calculations"""
     for fixture in fixtures:
-        polygon = SphericalPolygonShape([np.array(v, dtype=np.float64) for v in fixture["vertices"]])
+        polygon = SphericalPolygonShape([tuple(v) for v in fixture["vertices"]])
         area = polygon.get_area()
         assert abs(area - fixture["area"]) < 1e-6, \
             f"Expected {fixture['area']}, got {area}"
@@ -75,10 +78,10 @@ def test_degenerate_polygons():
     assert SphericalPolygonShape([]).get_area() == 0
     
     # Single point
-    assert SphericalPolygonShape([np.array([1, 0, 0], dtype=np.float64)]).get_area() == 0
+    assert SphericalPolygonShape([(1, 0, 0)]).get_area() == 0
     
     # Two points
     assert SphericalPolygonShape([
-        np.array([1, 0, 0], dtype=np.float64),
-        np.array([0, 1, 0], dtype=np.float64)
+        (1, 0, 0),
+        (0, 1, 0)
     ]).get_area() == 0 

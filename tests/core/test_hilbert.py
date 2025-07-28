@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 from a5.core.hilbert import (
     quaternary_to_kj,
     quaternary_to_flips,
