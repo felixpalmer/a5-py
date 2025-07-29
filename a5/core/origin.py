@@ -13,6 +13,7 @@ from .hilbert import Orientation
 from .quat import conjugate, transform_quat, rotation_to
 from ..math import quat as quat_glm, vec2
 from .utils import Origin
+from .dodecaplex import quaternions
 
 UP = (0, 0, 1)
 origins: List[Origin] = []
@@ -53,19 +54,19 @@ ORIGIN_ORDER = [0, 1, 2, 4, 3, 5, 7, 8, 6, 11, 10, 9]
 def generate_origins() -> None:
     """Generate all origin points for the dodecahedron faces."""
     # North pole
-    add_origin((0, 0), 0)
+    add_origin((0, 0), 0, quaternions[0])
 
     # Middle band
     for i in range(5):
         alpha = i * TWO_PI_OVER_5
         alpha2 = alpha + PI_OVER_5
-        add_origin((alpha, interhedral_angle), PI_OVER_5)
-        add_origin((alpha2, math.pi - interhedral_angle), PI_OVER_5)
+        add_origin((alpha, interhedral_angle), PI_OVER_5, quaternions[i + 1])
+        add_origin((alpha2, math.pi - interhedral_angle), PI_OVER_5, quaternions[(i + 3) % 5 + 6])
 
     # South pole
-    add_origin((0, math.pi), 0)
+    add_origin((0, math.pi), 0, quaternions[11])
 
-def add_origin(axis: Spherical, angle: Radians) -> None:
+def add_origin(axis: Spherical, angle: Radians, quat: Tuple[float, float, float, float]) -> None:
     """Add a new origin point."""
     global origin_id
     if origin_id > 11:
@@ -73,7 +74,7 @@ def add_origin(axis: Spherical, angle: Radians) -> None:
     origin = Origin(
         id=origin_id,
         axis=axis,
-        quat=quat_from_spherical(axis),
+        quat=quat,
         angle=angle,
         orientation=QUINTANT_ORIENTATIONS[origin_id],
         first_quintant=QUINTANT_FIRST[origin_id]
