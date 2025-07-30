@@ -13,7 +13,7 @@ from .hilbert import Orientation
 from .quat import conjugate, transform_quat, rotation_to
 from ..math import quat as quat_glm, vec2
 from .utils import Origin
-from .dodecaplex import quaternions
+from .dodecahedron_quaternions import quaternions
 
 UP = (0, 0, 1)
 origins: List[Origin] = []

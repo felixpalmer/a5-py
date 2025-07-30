@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
+import math
+
 AUTHALIC_RADIUS = 6371007.2  # m
-AUTHALIC_AREA = 4 * 3.141592653589793 * AUTHALIC_RADIUS * AUTHALIC_RADIUS  # m^2
+AUTHALIC_AREA = 4 * math.pi * AUTHALIC_RADIUS * AUTHALIC_RADIUS  # m^2
 
 def get_num_cells(resolution: int) -> int:
     """
