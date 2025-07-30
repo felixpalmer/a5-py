@@ -10,7 +10,7 @@ from .coordinate_transforms import to_cartesian
 from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
-from ..math import quat 
+from .quat import conjugate
 from .utils import Origin
 from .dodecahedron_quaternions import quaternions
 
@@ -71,7 +71,7 @@ def add_origin(axis: Spherical, angle: Radians, quaternion: Tuple[float, float, 
     if origin_id > 11:
         raise ValueError(f"Too many origins: {origin_id}")
     
-    inverse_quat = quat.conjugate(quaternion)
+    inverse_quat = conjugate(quaternion)
     origin = Origin(
         id=origin_id,
         axis=axis,

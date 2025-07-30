@@ -5,13 +5,11 @@ Copyright (c) A5 contributors
 """
 
 import math
-from typing import cast, List, Tuple
+from typing import cast, List
 from .coordinate_systems import (
     Degrees, Radians, Face, Polar, IJ, Cartesian, Spherical, LonLat,
-    Vec2, Vec3, Barycentric, FaceTriangle
+    Barycentric, FaceTriangle
 )
-from .quat import rotation_to
-from ..math import quat as quat_glm
 from .pentagon import BASIS_INVERSE, BASIS
 from ..projections.authalic import AuthalicProjection
 from ..math import vec2, vec3
