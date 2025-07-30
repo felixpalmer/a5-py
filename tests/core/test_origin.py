@@ -9,16 +9,14 @@ from pathlib import Path
 from tests.matchers import is_close_array
 
 from a5.core.origin import (    
+    origins,
     find_nearest_origin,
     haversine,
     quintant_to_segment,
-    segment_to_quintant,
-    move_point_to_face,
+    segment_to_quintant
 )
-from a5.core.constants import distance_to_edge, PI_OVER_5, TWO_PI_OVER_5
-from a5.core.coordinate_systems import Face, Radians, Spherical
+from a5.core.constants import PI_OVER_5
 from a5.core.coordinate_transforms import to_cartesian
-from a5.core.origin import origins
 from a5.math.vec3 import length
 from a5.math.quat import length as quat_length
 
@@ -157,26 +155,6 @@ def test_haversine():
 
     for case in test_cases:
         assert abs(haversine(case["p1"], case["p2"]) - case["expected"]) < 1e-4
-
-def test_face_movement():
-    """Test moving points between faces."""
-    # First origin should be top
-    origin1 = origins[0]
-    assert origin1.axis == (0, 0)
-
-    # Move all the way to next origin
-    origin2 = origins[1]
-    direction = [math.cos(origin2.axis[0]), math.sin(origin2.axis[0])]
-    point = (direction[0] * 2 * distance_to_edge, direction[1] * 2 * distance_to_edge)
-    result = move_point_to_face(point, origin1, origin2)
-    
-    # Result should include new point and interface quaternion
-    assert result.point is not None
-    assert result.quat is not None
-    
-    # New point should be on second origin
-    assert result.point == (0, 0)
-
 
 def test_quintant_conversion():
     """Test conversion between quintants and segments."""

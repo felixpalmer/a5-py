@@ -11,7 +11,7 @@ from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
 from .quat import conjugate, transform_quat, rotation_to
-from ..math import quat as quat_glm, vec2
+from ..math import quat, vec2
 from .utils import Origin
 from .dodecahedron_quaternions import quaternions
 
@@ -170,8 +170,8 @@ def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> F
     
     # Quaternion multiplication using gl-matrix style
     from_quat = from_origin.quat
-    final_quat_vec = quat_glm.create()
-    quat_glm.multiply(final_quat_vec, from_quat, interface_quat)
+    final_quat_vec = quat.create()
+    quat.multiply(final_quat_vec, from_quat, interface_quat)
     final_quat = (final_quat_vec[0], final_quat_vec[1], final_quat_vec[2], final_quat_vec[3])
 
     return FaceTransform(point=offset_point, quat=final_quat)
