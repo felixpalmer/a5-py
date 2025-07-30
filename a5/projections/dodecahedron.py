@@ -6,14 +6,13 @@ import math
 from typing import List, Tuple, Union, cast, Literal
 from ..core.coordinate_systems import Radians, Spherical, Cartesian, Polar, Face, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import to_cartesian, to_spherical, to_face, to_polar
-from ..core.quat import conjugate, transform_quat
 from ..core.constants import distance_to_edge, interhedral_angle, PI_OVER_5, TWO_PI_OVER_5
 from ..core.origin import origins
 from ..core.tiling import get_quintant_vertices
 from .gnomonic import GnomonicProjection
 from .polyhedral import PolyhedralProjection
 from .crs import CRS
-from ..math import vec2, vec3, quat as quat_glm
+from ..math import vec2, vec3
 
 # Type definitions
 FaceTriangleIndex = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -49,7 +48,8 @@ class DodecahedronProjection:
 
         # Transform back to origin space
         unprojected = to_cartesian(spherical)
-        out = transform_quat(unprojected, origin.inverse_quat)
+        out = vec3.create()
+        out = vec3.transformQuat(out, unprojected, origin.inverse_quat)
 
         # Unproject gnomonically to polar coordinates in origin space
         projected_spherical = to_spherical(out)

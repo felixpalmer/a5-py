@@ -10,17 +10,12 @@ from .coordinate_transforms import to_cartesian
 from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
-from .quat import conjugate
+from ..math import quat
 from .utils import Origin
 from .dodecahedron_quaternions import quaternions
 
 UP = (0, 0, 1)
 origins: List[Origin] = []
-
-
-class FaceTransform(NamedTuple):
-    point: Face
-    quat: Tuple[float, float, float, float]
 
 # Quintant layouts (clockwise & counterclockwise)
 clockwise_fan = ['vu', 'uw', 'vw', 'vw', 'vw']
@@ -71,7 +66,8 @@ def add_origin(axis: Spherical, angle: Radians, quaternion: Tuple[float, float, 
     if origin_id > 11:
         raise ValueError(f"Too many origins: {origin_id}")
     
-    inverse_quat = conjugate(quaternion)
+    inverse_quat = quat.create()
+    quat.conjugate(inverse_quat, quaternion)
     origin = Origin(
         id=origin_id,
         axis=axis,

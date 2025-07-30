@@ -10,7 +10,7 @@ from ..core.coordinate_systems import Cartesian, Radians, Spherical
 from ..core.coordinate_transforms import to_cartesian
 from ..core.constants import distance_to_edge, distance_to_vertex
 from ..core.origin import origins
-from ..core.quat import transform_quat
+from ..math import vec3
 
 
 class CRS:
@@ -75,8 +75,8 @@ class CRS:
             for i in range(5):
                 theta_vertex = cast(Radians, (2 * i + 1) * math.pi / 5)
                 spherical_vertex = cast(Spherical, (theta_vertex + origin.angle, phi_vertex))
-                vertex = to_cartesian(spherical_vertex)
-                vertex = transform_quat(vertex, origin.quat)
+                vertex = list(to_cartesian(spherical_vertex))
+                vec3.transformQuat(vertex, vertex, origin.quat)
                 self._add(vertex)
     
     def _add_midpoints(self) -> None:
@@ -87,8 +87,8 @@ class CRS:
             for i in range(5):
                 theta_midpoint = cast(Radians, (2 * i) * math.pi / 5)
                 spherical_midpoint = cast(Spherical, (theta_midpoint + origin.angle, phi_midpoint))
-                midpoint = to_cartesian(spherical_midpoint)
-                midpoint = transform_quat(midpoint, origin.quat)
+                midpoint = list(to_cartesian(spherical_midpoint))
+                vec3.transformQuat(midpoint, midpoint, origin.quat)
                 self._add(midpoint)
     
     def _add(self, new_vertex: Cartesian) -> bool:
