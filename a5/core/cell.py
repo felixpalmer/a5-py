@@ -217,11 +217,9 @@ def a5cell_contains_point(cell: A5Cell, point: LonLat) -> float:
     Returns:
         Positive number if the point is contained within the cell, negative otherwise
     """
-    boundary = cell_to_boundary(serialize(cell), {'closed_ring': False, 'segments': 1})
-
-    cartesian = to_cartesian(from_lonlat(point))
-    spherical_boundary = [to_cartesian(from_lonlat(vertex)) for vertex in boundary]
-
-    # TODO should project to dodecahedron and then check if point is inside
-    spherical_pentagon = SphericalPolygonShape(spherical_boundary)
-    return spherical_pentagon.contains_point(cartesian) 
+    pentagon = _get_pentagon(cell)
+    
+    spherical = from_lonlat(point)
+    projected_point = _dodecahedron.forward(spherical, cell['origin'].id)
+    
+    return pentagon.contains_point(projected_point) 

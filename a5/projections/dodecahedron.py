@@ -49,11 +49,7 @@ class DodecahedronProjection:
 
         # Transform back to origin space
         unprojected = to_cartesian(spherical)
-        inverse_quat = quat_glm.create()
-        quat_glm.invert(inverse_quat, origin.quat)
-        out = vec3.create()
-        vec3.transformQuat(out, unprojected, inverse_quat)
-        out = (out[0], out[1], out[2])
+        out = transform_quat(unprojected, origin.inverse_quat)
 
         # Unproject gnomonically to polar coordinates in origin space
         projected_spherical = to_spherical(out)

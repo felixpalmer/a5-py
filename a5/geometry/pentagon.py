@@ -115,21 +115,22 @@ class PentagonShape:
             point: The point to test
             
         Returns:
-            -1 if point is inside, otherwise a value proportional to the distance from the point to the edge
+            1 if point is inside, otherwise a negative value proportional to the distance from the point to the edge
         """
         # TODO: later we can likely remove this, but for now it's useful for debugging
         if not self._is_winding_correct():
             raise ValueError("Pentagon is not counter-clockwise")
 
         n = len(self.vertices)
+        d_max = 1
         for i in range(n):
             v1 = self.vertices[i]
             v2 = self.vertices[(i + 1) % n]
             
             # Calculate the cross product to determine which side of the line the point is on
-            # (v2 - v1) × (point - v1)
-            dx = v2[0] - v1[0]
-            dy = v2[1] - v1[1]
+            # (v1 - v2) × (point - v1)
+            dx = v1[0] - v2[0]
+            dy = v1[1] - v2[1]
             px = point[0] - v1[0]
             py = point[1] - v1[1]
             
@@ -137,13 +138,13 @@ class PentagonShape:
             # If positive, point is on the wrong side
             # If negative, point is on the correct side
             cross_product = dx * py - dy * px
-            if cross_product > 0:
+            if cross_product < 0:
                 # Only normalize by distance of point to edge as we can assume the edges of the
                 # pentagon are all the same length
                 p_length = math.sqrt(px * px + py * py)
-                return cross_product / p_length
+                d_max = min(d_max, cross_product / p_length)
         
-        return -1
+        return d_max
 
     def split_edges(self, segments: int) -> "PentagonShape":
         """

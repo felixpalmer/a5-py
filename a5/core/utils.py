@@ -19,6 +19,7 @@ class Origin(NamedTuple):
     id: OriginId
     axis: Spherical
     quat: Tuple[float, float, float, float]
+    inverse_quat: Tuple[float, float, float, float]
     angle: Radians
     orientation: List[Orientation]
     first_quintant: int

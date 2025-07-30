@@ -66,15 +66,20 @@ def generate_origins() -> None:
     # South pole
     add_origin((0, math.pi), 0, quaternions[11])
 
-def add_origin(axis: Spherical, angle: Radians, quat: Tuple[float, float, float, float]) -> None:
+def add_origin(axis: Spherical, angle: Radians, quaternion: Tuple[float, float, float, float]) -> None:
     """Add a new origin point."""
     global origin_id
     if origin_id > 11:
         raise ValueError(f"Too many origins: {origin_id}")
+    
+    # Calculate inverse quaternion (conjugate for unit quaternions)
+    inverse_quat = (-quaternion[0], -quaternion[1], -quaternion[2], quaternion[3])
+    
     origin = Origin(
         id=origin_id,
         axis=axis,
-        quat=quat,
+        quat=quaternion,
+        inverse_quat=inverse_quat,
         angle=angle,
         orientation=QUINTANT_ORIENTATIONS[origin_id],
         first_quintant=QUINTANT_FIRST[origin_id]
@@ -92,6 +97,7 @@ for i, origin in enumerate(origins):
         id=i,
         axis=origin.axis,
         quat=origin.quat,
+        inverse_quat=origin.inverse_quat,
         angle=origin.angle,
         orientation=origin.orientation,
         first_quintant=origin.first_quintant
