@@ -10,8 +10,7 @@ from .coordinate_transforms import to_cartesian
 from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
-from .quat import conjugate, transform_quat, rotation_to
-from ..math import quat, vec2
+from ..math import quat 
 from .utils import Origin
 from .dodecahedron_quaternions import quaternions
 
@@ -72,9 +71,7 @@ def add_origin(axis: Spherical, angle: Radians, quaternion: Tuple[float, float, 
     if origin_id > 11:
         raise ValueError(f"Too many origins: {origin_id}")
     
-    # Calculate inverse quaternion (conjugate for unit quaternions)
-    inverse_quat = (-quaternion[0], -quaternion[1], -quaternion[2], quaternion[3])
-    
+    inverse_quat = quat.conjugate(quaternion)
     origin = Origin(
         id=origin_id,
         axis=axis,
@@ -130,51 +127,6 @@ def segment_to_quintant(segment: int, origin: Origin) -> Tuple[int, Orientation]
     quintant = (origin.first_quintant + step * face_relative_quintant + 5) % 5
 
     return quintant, orientation
-
-def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> FaceTransform:
-    """
-    Move a point defined in the coordinate system of one dodecahedron face to the coordinate system of another face.
-    
-    Args:
-        point: The point to move
-        from_origin: The origin of the current face
-        to_origin: The origin of the target face
-        
-    Returns:
-        FaceTransform containing the new point and the quaternion representing the transform
-    """
-    # Get inverse quaternion
-    from_quat = from_origin.quat
-    inverse_quat = conjugate(from_quat)
-
-    to_axis = to_cartesian(to_origin.axis)
-
-    # Transform destination axis into face space
-    local_to_axis = transform_quat(to_axis, inverse_quat)
-
-    # Flatten axis to XY plane to obtain direction, scale to get distance to new origin
-    direction_x, direction_y = local_to_axis[0], local_to_axis[1]
-    direction_norm = math.sqrt(direction_x * direction_x + direction_y * direction_y)
-    direction = (
-        (direction_x / direction_norm) * 2 * distance_to_edge,
-        (direction_y / direction_norm) * 2 * distance_to_edge
-    )
-
-    # Move point to be relative to new origin using gl-matrix style
-    offset_vec = vec2.create()
-    vec2.subtract(offset_vec, point, direction)
-    offset_point = (offset_vec[0], offset_vec[1])
-
-    # Construct relative transform from old origin to new origin
-    interface_quat = rotation_to(UP, local_to_axis)
-    
-    # Quaternion multiplication using gl-matrix style
-    from_quat = from_origin.quat
-    final_quat_vec = quat.create()
-    quat.multiply(final_quat_vec, from_quat, interface_quat)
-    final_quat = (final_quat_vec[0], final_quat_vec[1], final_quat_vec[2], final_quat_vec[3])
-
-    return FaceTransform(point=offset_point, quat=final_quat)
 
 def find_nearest_origin(point: Spherical) -> Origin:
     """
