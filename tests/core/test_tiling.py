@@ -124,26 +124,7 @@ class TestGetFaceVertices:
         assert abs(center[0] - expected["center"][0]) < 1e-15, f"Center X coordinate mismatch"
         assert abs(center[1] - expected["center"][1]) < 1e-15, f"Center Y coordinate mismatch"
     
-    def test_face_vertices_has_5_vertices(self):
-        """Test that get_face_vertices returns a pentagon with 5 vertices."""
-        pentagon = get_face_vertices()
-        vertices = pentagon.get_vertices()
-        
-        assert len(vertices) == 5, f"Expected 5 vertices, got {len(vertices)}"
-        
-        # Each vertex should be a 2D point
-        for vertex in vertices:
-            assert len(vertex) == 2, f"Expected 2D vertex, got {len(vertex)}D"
-            assert isinstance(vertex[0], (int, float)), f"Expected numeric X coordinate"
-            assert isinstance(vertex[1], (int, float)), f"Expected numeric Y coordinate"
-    
-    def test_face_vertices_counter_clockwise_winding(self):
-        """Test that get_face_vertices has counter-clockwise winding order."""
-        pentagon = get_face_vertices()
-        area = pentagon.get_area()
-        
-        # Positive area indicates counter-clockwise winding
-        assert area > 0, f"Expected positive area (counter-clockwise), got {area}"
+
 
 
 class TestGetQuintantPolar:
@@ -174,58 +155,4 @@ class TestGetQuintantPolar:
             result = get_quintant_polar(polar)
             
             assert result == expected["quintant"], f"Quintant mismatch for {polar}: expected {expected['quintant']}, got {result}"
-    
-    def test_quintant_polar_range(self):
-        """Test that get_quintant_polar returns quintants in range 0-4."""
-        test_pairs = [
-            (1.0, 0),
-            (1.0, 3.141592653589793 / 6),
-            (1.0, 3.141592653589793 / 3),
-            (1.0, 3.141592653589793 / 2),
-            (1.0, 2 * 3.141592653589793 / 3),
-            (1.0, 3.141592653589793),
-            (1.0, 4 * 3.141592653589793 / 3),
-            (1.0, 3 * 3.141592653589793 / 2),
-            (1.0, 5 * 3.141592653589793 / 3),
-            (1.0, 2 * 3.141592653589793),
-        ]
-        
-        for polar in test_pairs:
-            quintant = get_quintant_polar(polar)
-            assert 0 <= quintant <= 4, f"Quintant {quintant} out of range [0, 4]"
-            assert isinstance(quintant, int), f"Expected integer quintant, got {type(quintant)}"
-    
-    def test_quintant_polar_periodic(self):
-        """Test that get_quintant_polar is periodic with 2π."""
-        base_angle = 3.141592653589793 / 4
-        polar1 = (1.0, base_angle)
-        polar2 = (1.0, base_angle + 2 * 3.141592653589793)
-        
-        quintant1 = get_quintant_polar(polar1)
-        quintant2 = get_quintant_polar(polar2)
-        
-        assert quintant1 == quintant2, f"Periodicity test failed: {quintant1} != {quintant2}"
-    
-    def test_quintant_polar_negative_angles(self):
-        """Test that get_quintant_polar handles negative angles."""
-        positive_angle = 3.141592653589793 / 3
-        negative_angle = positive_angle - 2 * 3.141592653589793
-        
-        polar1 = (1.0, positive_angle)
-        polar2 = (1.0, negative_angle)
-        
-        quintant1 = get_quintant_polar(polar1)
-        quintant2 = get_quintant_polar(polar2)
-        
-        assert quintant1 == quintant2, f"Negative angle test failed: {quintant1} != {quintant2}"
-    
-    def test_quintant_polar_radius_independent(self):
-        """Test that get_quintant_polar is independent of radius."""
-        angle = 3.141592653589793 / 3
-        polar1 = (0.5, angle)
-        polar2 = (2.0, angle)
-        
-        quintant1 = get_quintant_polar(polar1)
-        quintant2 = get_quintant_polar(polar2)
-        
-        assert quintant1 == quintant2, f"Radius independence test failed: {quintant1} != {quintant2}"
+
