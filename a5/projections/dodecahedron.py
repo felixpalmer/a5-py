@@ -29,8 +29,8 @@ class DodecahedronProjection:
     """
     
     def __init__(self):
-        self._face_triangles: List[Tuple[Face, Face, Face]] = [None] * 30  # 10 regular + 10 reflected + 10 squashed
-        self._spherical_triangles: List[SphericalTriangle] = [None] * 240  # 120 regular + 120 reflected  
+        self.face_triangles: List[FaceTriangle] = []
+        self.spherical_triangles: List[SphericalTriangle] = []
         self.polyhedral = PolyhedralProjection()
         self.gnomonic = GnomonicProjection()
 
@@ -59,9 +59,10 @@ class DodecahedronProjection:
         rho, gamma = polar
         polar = cast(Polar, (rho, gamma - origin.angle))
 
-        face_triangle_index = self._get_face_triangle_index(polar)
-        face_triangle = self._get_face_triangle(face_triangle_index)
-        spherical_triangle = self._get_spherical_triangle(face_triangle_index, origin_id, False)
+        face_triangle_index = self.get_face_triangle_index(polar)
+        reflect = self.should_reflect(polar)
+        face_triangle = self.get_face_triangle(face_triangle_index, reflect, False)
+        spherical_triangle = self.get_spherical_triangle(face_triangle_index, origin_id, reflect)
 
         return self.polyhedral.forward(unprojected, spherical_triangle, face_triangle)
 
@@ -77,23 +78,34 @@ class DodecahedronProjection:
             Spherical coordinates [theta, phi]
         """
         polar = to_polar(face)
-        face_triangle_index = self._get_face_triangle_index(polar)
+        face_triangle_index = self.get_face_triangle_index(polar)
 
-        # Detect when point is beyond the edge of the dodecahedron face
-        rho, gamma = polar
-        D = to_face((rho, self._normalize_gamma(gamma)))[0]
-        reflect = D > distance_to_edge
-
-        # In the standard case, both these are the same as we can unproject directly
-        # In the reflected case, both are off the edge of the dodecahedron face,
-        # with the squashed triangle unprojecting correctly onto the neighboring dodecahedron face.
-        face_triangle = self._get_face_triangle(face_triangle_index, reflect, False)
-        spherical_triangle = self._get_spherical_triangle(face_triangle_index, origin_id, reflect)
+        reflect = self.should_reflect(polar)
+        face_triangle = self.get_face_triangle(face_triangle_index, reflect, False)
+        spherical_triangle = self.get_spherical_triangle(face_triangle_index, origin_id, reflect)
         
         unprojected = self.polyhedral.inverse(face, face_triangle, spherical_triangle)
         return to_spherical(unprojected)
 
-    def _get_face_triangle_index(self, polar: Polar) -> FaceTriangleIndex:
+    def should_reflect(self, polar: Polar) -> bool:
+        """
+        Detects when point is beyond the edge of the dodecahedron face
+        In the standard case (reflect = false), the face and spherical triangle can be
+        used directly.
+        In the reflected case (reflect = true), the point is beyond the edge of the dodecahedron face,
+        and so the face triangle is squashed to unproject correctly onto the neighboring dodecahedron face.
+        
+        Args:
+            polar: Polar coordinates
+            
+        Returns:
+            True if point is beyond the edge of the dodecahedron face
+        """
+        rho, gamma = polar
+        D = to_face((rho, self.normalize_gamma(gamma)))[0]
+        return D > distance_to_edge
+
+    def get_face_triangle_index(self, polar: Polar) -> FaceTriangleIndex:
         """
         Given a polar coordinate, returns the index of the face triangle it belongs to
         
@@ -106,7 +118,7 @@ class DodecahedronProjection:
         _, gamma = polar
         return cast(FaceTriangleIndex, (math.floor(gamma / PI_OVER_5) + 10) % 10)
 
-    def _get_face_triangle(self, face_triangle_index: FaceTriangleIndex, reflected: bool = False, squashed: bool = False) -> FaceTriangle:
+    def get_face_triangle(self, face_triangle_index: FaceTriangleIndex, reflected: bool = False, squashed: bool = False) -> FaceTriangle:
         """
         Gets the face triangle for a given polar coordinate
         
@@ -122,60 +134,62 @@ class DodecahedronProjection:
         if reflected:
             index += 20 if squashed else 10
 
-        if self._face_triangles[index] is not None:
-            return self._face_triangles[index]
+        # Extend array if needed
+        while len(self.face_triangles) <= index:
+            self.face_triangles.append(None)
+
+        if self.face_triangles[index] is not None:
+            return self.face_triangles[index]
 
         if reflected:
-            self._face_triangles[index] = self._get_reflected_face_triangle(face_triangle_index, squashed)
+            self.face_triangles[index] = self._get_reflected_face_triangle(face_triangle_index, squashed)
         else:
-            self._face_triangles[index] = self._get_basic_face_triangle(face_triangle_index)
+            self.face_triangles[index] = self._get_face_triangle(face_triangle_index)
             
-        return self._face_triangles[index]
+        return self.face_triangles[index]
 
-    def _get_basic_face_triangle(self, face_triangle_index: FaceTriangleIndex) -> FaceTriangle:
+    def _get_face_triangle(self, face_triangle_index: FaceTriangleIndex) -> FaceTriangle:
         """Get the basic (non-reflected) face triangle"""
         quintant = math.floor((face_triangle_index + 1) / 2) % 5
 
         vertices = get_quintant_vertices(quintant).get_vertices()
         v_center, v_corner1, v_corner2 = vertices[0], vertices[1], vertices[2]
         
-        # Calculate edge midpoint using gl-matrix style
-        edge_midpoint = vec2.create()
-        vec2.add(edge_midpoint, v_corner1, v_corner2)
-        vec2.scale(edge_midpoint, edge_midpoint, 0.5)
-        v_edge_midpoint = cast(Face, (edge_midpoint[0], edge_midpoint[1]))
+        # Calculate edge midpoint using vec2.lerp like TypeScript
+        v_edge_midpoint = vec2.create()
+        vec2.lerp(v_edge_midpoint, v_corner1, v_corner2, 0.5)
+        v_edge_midpoint = cast(Face, (v_edge_midpoint[0], v_edge_midpoint[1]))
 
         # Sign of gamma determines which triangle we want to use, and thus vertex order
         even = face_triangle_index % 2 == 0
 
         # Note: center & midpoint compared to DGGAL implementation are swapped
         # as we are using a dodecahedron, rather than an icosahedron.
-        if even:
-            return cast(FaceTriangle, (v_center, v_edge_midpoint, v_corner1))
-        else:
-            return cast(FaceTriangle, (v_center, v_corner2, v_edge_midpoint))
+        return [v_center, v_edge_midpoint, v_corner1] if even else [v_center, v_corner2, v_edge_midpoint]
 
     def _get_reflected_face_triangle(self, face_triangle_index: FaceTriangleIndex, squashed: bool = False) -> FaceTriangle:
         """Get the reflected face triangle"""
         # First obtain ordinary unreflected triangle
-        A, B, C = self._get_basic_face_triangle(face_triangle_index)
+        face_triangle = self._get_face_triangle(face_triangle_index)
+        A = vec2.clone(face_triangle[0])
+        B = vec2.clone(face_triangle[1])
+        C = vec2.clone(face_triangle[2])
 
         # Reflect dodecahedron center (A) across edge (BC)
         even = face_triangle_index % 2 == 0
-        A_reflected = (-A[0], -A[1])
+        vec2.negate(A, A)
         midpoint = B if even else C
 
         # Squashing is important. A squashed triangle when unprojected will yield the correct spherical triangle.
         scale_factor = (1 + 1 / math.cos(interhedral_angle)) if squashed else 2
-        A_final = (
-            A_reflected[0] + midpoint[0] * scale_factor,
-            A_reflected[1] + midpoint[1] * scale_factor
-        )
+        # Manual scaleAndAdd: A = A + midpoint * scale_factor
+        A[0] += midpoint[0] * scale_factor
+        A[1] += midpoint[1] * scale_factor
 
         # Swap midpoint and corner to maintain correct vertex order
-        return cast(FaceTriangle, (cast(Face, A_final), cast(Face, C), cast(Face, B)))
+        return [cast(Face, (A[0], A[1])), cast(Face, (C[0], C[1])), cast(Face, (B[0], B[1]))]
 
-    def _get_spherical_triangle(self, face_triangle_index: FaceTriangleIndex, origin_id: OriginId, reflected: bool = False) -> SphericalTriangle:
+    def get_spherical_triangle(self, face_triangle_index: FaceTriangleIndex, origin_id: OriginId, reflected: bool = False) -> SphericalTriangle:
         """
         Gets the spherical triangle for a given face triangle index and origin
         
@@ -191,31 +205,35 @@ class DodecahedronProjection:
         if reflected:
             index += 120
 
-        if self._spherical_triangles[index] is not None:
-            return self._spherical_triangles[index]
+        # Extend array if needed
+        while len(self.spherical_triangles) <= index:
+            self.spherical_triangles.append(None)
 
-        self._spherical_triangles[index] = self._compute_spherical_triangle(face_triangle_index, origin_id, reflected)
-        return self._spherical_triangles[index]
+        if self.spherical_triangles[index] is not None:
+            return self.spherical_triangles[index]
 
-    def _compute_spherical_triangle(self, face_triangle_index: FaceTriangleIndex, origin_id: OriginId, reflected: bool = False) -> SphericalTriangle:
+        self.spherical_triangles[index] = self._get_spherical_triangle(face_triangle_index, origin_id, reflected)
+        return self.spherical_triangles[index]
+
+    def _get_spherical_triangle(self, face_triangle_index: FaceTriangleIndex, origin_id: OriginId, reflected: bool = False) -> SphericalTriangle:
         """Compute the spherical triangle for given parameters"""
         origin = origins[origin_id]
-        face_triangle = self._get_face_triangle(face_triangle_index, reflected, True)
-
+        face_triangle = self.get_face_triangle(face_triangle_index, reflected, True)
+        
         spherical_triangle = []
         for face in face_triangle:
             rho, gamma = to_polar(face)
             rotated_polar = cast(Polar, (rho, gamma + origin.angle))
             rotated = to_cartesian(self.gnomonic.inverse(rotated_polar))
-            transformed_vec = vec3.create()
-            vec3.transformQuat(transformed_vec, rotated, origin.quat)
-            transformed = (transformed_vec[0], transformed_vec[1], transformed_vec[2])
+            # Transform using vec3.transformQuat like TypeScript
+            transformed = vec3.create()
+            vec3.transformQuat(transformed, rotated, origin.quat)
             vertex = crs.get_vertex(transformed)
             spherical_triangle.append(vertex)
 
         return cast(SphericalTriangle, tuple(spherical_triangle))
 
-    def _normalize_gamma(self, gamma: Radians) -> Radians:
+    def normalize_gamma(self, gamma: Radians) -> Radians:
         """
         Normalizes gamma to the range [-PI_OVER_5, PI_OVER_5]
         

@@ -8,15 +8,7 @@ from ..core.coordinate_systems import Radians, Face, Spherical
 from ..core.hilbert import Orientation
 from ..math import vec2
 
-OriginId = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-
-class Origin(NamedTuple):
-    id: OriginId
-    axis: Spherical
-    quat: Tuple[float, float, float, float]
-    angle: Radians
-    orientation: List[Orientation]
-    first_quintant: int
+# Origin and OriginId are defined in core/utils.py
 
 Pentagon = List[Face]
 
@@ -100,11 +92,10 @@ class PentagonShape:
 
     def get_center(self) -> Face:
         """Get the center point of the pentagon."""
-        center = vec2.create()
-        for vertex in self.vertices:
-            vec2.add(center, center, vertex)
-        vec2.scale(center, center, 1.0 / len(self.vertices))
-        return (center[0], center[1])
+        # Use the same approach as TypeScript: sum and divide
+        sum_x = sum(v[0] for v in self.vertices) / len(self.vertices)
+        sum_y = sum(v[1] for v in self.vertices) / len(self.vertices)
+        return (sum_x, sum_y)
 
     def contains_point(self, point: Tuple[float, float]) -> float:
         """
@@ -172,10 +163,8 @@ class PentagonShape:
             # Add interpolated points along the edge (excluding the endpoints)
             for j in range(1, segments):
                 t = j / segments
-                interpolated = (
-                    v1[0] + t * (v2[0] - v1[0]),
-                    v1[1] + t * (v2[1] - v1[1])
-                )
-                new_vertices.append(interpolated)
+                interpolated = vec2.create()
+                vec2.lerp(interpolated, v1, v2, t)
+                new_vertices.append((interpolated[0], interpolated[1]))
         
         return PentagonShape(new_vertices)
