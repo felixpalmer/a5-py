@@ -102,5 +102,4 @@ def get_quintant_polar(polar: Tuple[float, float]) -> int:
         Quintant index (0-4)
     """
     rho, gamma = polar
-    normalized_gamma = (gamma % TWO_PI) / TWO_PI_OVER_5
-    return int(normalized_gamma) % 5
+    return (round(gamma / TWO_PI_OVER_5) + 5) % 5
