@@ -93,22 +93,11 @@ class CRS:
     
     def _add(self, new_vertex: Cartesian) -> bool:
         """Add a new vertex if it doesn't already exist."""
-        # Normalize manually
-        norm = math.sqrt(new_vertex[0] * new_vertex[0] + 
-                        new_vertex[1] * new_vertex[1] + 
-                        new_vertex[2] * new_vertex[2])
-        normalized = cast(Cartesian, (
-            new_vertex[0] / norm,
-            new_vertex[1] / norm, 
-            new_vertex[2] / norm
-        ))
+        normalized = vec3.normalize(vec3.create(), new_vertex)
         
         # Check if vertex already exists
         for existing_vertex in self._vertices:
-            dx = normalized[0] - existing_vertex[0]
-            dy = normalized[1] - existing_vertex[1]
-            dz = normalized[2] - existing_vertex[2]
-            distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+            distance = vec3.distance(normalized, existing_vertex)
             if distance < 1e-5:
                 return False
         
