@@ -5,13 +5,12 @@ Copyright (c) A5 contributors
 """
 
 import math
-import numpy as np
 from typing import List, cast
 from ..core.coordinate_systems import Cartesian, Radians, Spherical
 from ..core.coordinate_transforms import to_cartesian
 from ..core.constants import distance_to_edge, distance_to_vertex
 from ..core.origin import origins
-from ..core.quat import transform_quat
+from ..math import vec3
 
 
 class CRS:
@@ -52,7 +51,12 @@ class CRS:
             print('Too many CRS invocations, results should be cached')
         
         for vertex in self._vertices:
-            if np.linalg.norm(point - vertex) < 1e-5:
+            # Calculate distance manually
+            dx = point[0] - vertex[0]
+            dy = point[1] - vertex[1] 
+            dz = point[2] - vertex[2]
+            distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+            if distance < 1e-5:
                 return vertex
         
         raise ValueError("Failed to find vertex in CRS")
@@ -71,8 +75,8 @@ class CRS:
             for i in range(5):
                 theta_vertex = cast(Radians, (2 * i + 1) * math.pi / 5)
                 spherical_vertex = cast(Spherical, (theta_vertex + origin.angle, phi_vertex))
-                vertex = to_cartesian(spherical_vertex)
-                vertex = transform_quat(vertex, origin.quat)
+                vertex = list(to_cartesian(spherical_vertex))
+                vec3.transformQuat(vertex, vertex, origin.quat)
                 self._add(vertex)
     
     def _add_midpoints(self) -> None:
@@ -83,18 +87,18 @@ class CRS:
             for i in range(5):
                 theta_midpoint = cast(Radians, (2 * i) * math.pi / 5)
                 spherical_midpoint = cast(Spherical, (theta_midpoint + origin.angle, phi_midpoint))
-                midpoint = to_cartesian(spherical_midpoint)
-                midpoint = transform_quat(midpoint, origin.quat)
+                midpoint = list(to_cartesian(spherical_midpoint))
+                vec3.transformQuat(midpoint, midpoint, origin.quat)
                 self._add(midpoint)
     
     def _add(self, new_vertex: Cartesian) -> bool:
         """Add a new vertex if it doesn't already exist."""
-        normalized = new_vertex / np.linalg.norm(new_vertex)
-        normalized = cast(Cartesian, normalized)
+        normalized = vec3.normalize(vec3.create(), new_vertex)
         
         # Check if vertex already exists
         for existing_vertex in self._vertices:
-            if np.linalg.norm(normalized - existing_vertex) < 1e-5:
+            distance = vec3.distance(normalized, existing_vertex)
+            if distance < 1e-5:
                 return False
         
         self._vertices.append(normalized)

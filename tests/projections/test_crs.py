@@ -4,21 +4,18 @@
 
 import pytest
 import json
+import math
 from pathlib import Path
-import numpy as np
 from a5.projections.crs import CRS
 from a5.core.coordinate_systems import Cartesian
+from a5.math.vec3 import length
+from tests.matchers import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 with open(FIXTURES_DIR / "crs-vertices.json") as f:
     EXPECTED_VERTICES = json.load(f)
 
-def is_close_to_array(actual: np.ndarray, expected: list, decimal: int = 7) -> bool:
-    """Helper function to check if arrays are close within tolerance"""
-    expected_array = np.array(expected)
-    # Use absolute tolerance - adjusted for cross-language floating point precision
-    return np.allclose(actual, expected_array, atol=10**(-decimal), rtol=0)
 
 @pytest.fixture
 def crs():
@@ -36,12 +33,12 @@ def test_should_match_expected_vertices_from_json_file(crs):
     assert len(vertices) == len(EXPECTED_VERTICES)
     for i, vertex in enumerate(vertices):
         expected = EXPECTED_VERTICES[i]
-        assert is_close_to_array(vertex, expected), \
-            f"Vertex {i}: expected {expected}, got {vertex.tolist()}"
+        assert is_close_array(vertex, expected), \
+            f"Vertex {i}: expected {expected}, got {vertex}"
 
 def test_should_throw_error_for_non_existent_vertex(crs):
     """Test that get_vertex raises error for non-existent vertex"""
-    non_vertex_point = np.array([1, 0, 0], dtype=np.float64)
+    non_vertex_point = (1, 0, 0)
     with pytest.raises(ValueError, match="Failed to find vertex in CRS"):
         crs.get_vertex(non_vertex_point)
 
@@ -51,6 +48,6 @@ def test_should_validate_vertex_structure(crs):
     
     # All vertices should be normalized (unit length)
     for i, vertex in enumerate(vertices):
-        length = np.linalg.norm(vertex)
-        assert abs(length - 1.0) < 1e-15, \
-            f"Vertex {i} is not normalized: length = {length}" 
+        vertex_length = length(vertex)
+        assert abs(vertex_length - 1.0) < 1e-15, \
+            f"Vertex {i} is not normalized: length = {vertex_length}" 

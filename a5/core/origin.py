@@ -4,22 +4,18 @@ SPDX-License-Identifier: Apache-2.0
 Copyright (c) A5 contributors
 """
 
-import numpy as np
+import math
 from typing import List, Tuple, NamedTuple
-from .coordinate_transforms import to_cartesian, quat_from_spherical
+from .coordinate_transforms import to_cartesian
 from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from .hilbert import Orientation
-from .quat import conjugate, transform_quat, rotation_to
+from ..math import quat
 from .utils import Origin
+from .dodecahedron_quaternions import quaternions
 
-UP = np.array([0, 0, 1], dtype=np.float64)
+UP = (0, 0, 1)
 origins: List[Origin] = []
-
-
-class FaceTransform(NamedTuple):
-    point: Face
-    quat: np.ndarray
 
 # Quintant layouts (clockwise & counterclockwise)
 clockwise_fan = ['vu', 'uw', 'vw', 'vw', 'vw']
@@ -52,27 +48,31 @@ ORIGIN_ORDER = [0, 1, 2, 4, 3, 5, 7, 8, 6, 11, 10, 9]
 def generate_origins() -> None:
     """Generate all origin points for the dodecahedron faces."""
     # North pole
-    add_origin((0, 0), 0)
+    add_origin((0, 0), 0, quaternions[0])
 
     # Middle band
     for i in range(5):
         alpha = i * TWO_PI_OVER_5
         alpha2 = alpha + PI_OVER_5
-        add_origin((alpha, interhedral_angle), PI_OVER_5)
-        add_origin((alpha2, np.pi - interhedral_angle), PI_OVER_5)
+        add_origin((alpha, interhedral_angle), PI_OVER_5, quaternions[i + 1])
+        add_origin((alpha2, math.pi - interhedral_angle), PI_OVER_5, quaternions[(i + 3) % 5 + 6])
 
     # South pole
-    add_origin((0, np.pi), 0)
+    add_origin((0, math.pi), 0, quaternions[11])
 
-def add_origin(axis: Spherical, angle: Radians) -> None:
+def add_origin(axis: Spherical, angle: Radians, quaternion: Tuple[float, float, float, float]) -> None:
     """Add a new origin point."""
     global origin_id
     if origin_id > 11:
         raise ValueError(f"Too many origins: {origin_id}")
+    
+    inverse_quat = quat.create()
+    quat.conjugate(inverse_quat, quaternion)
     origin = Origin(
         id=origin_id,
         axis=axis,
-        quat=quat_from_spherical(axis),
+        quat=quaternion,
+        inverse_quat=inverse_quat,
         angle=angle,
         orientation=QUINTANT_ORIENTATIONS[origin_id],
         first_quintant=QUINTANT_FIRST[origin_id]
@@ -90,6 +90,7 @@ for i, origin in enumerate(origins):
         id=i,
         axis=origin.axis,
         quat=origin.quat,
+        inverse_quat=origin.inverse_quat,
         angle=origin.angle,
         orientation=origin.orientation,
         first_quintant=origin.first_quintant
@@ -122,41 +123,6 @@ def segment_to_quintant(segment: int, origin: Origin) -> Tuple[int, Orientation]
     quintant = (origin.first_quintant + step * face_relative_quintant + 5) % 5
 
     return quintant, orientation
-
-def move_point_to_face(point: Face, from_origin: Origin, to_origin: Origin) -> FaceTransform:
-    """
-    Move a point defined in the coordinate system of one dodecahedron face to the coordinate system of another face.
-    
-    Args:
-        point: The point to move
-        from_origin: The origin of the current face
-        to_origin: The origin of the target face
-        
-    Returns:
-        FaceTransform containing the new point and the quaternion representing the transform
-    """
-    # Get inverse quaternion
-    from_quat = from_origin.quat.flatten()
-    inverse_quat = conjugate(from_quat)
-
-    to_axis = to_cartesian(to_origin.axis)
-
-    # Transform destination axis into face space
-    local_to_axis = transform_quat(to_axis, inverse_quat)
-
-    # Flatten axis to XY plane to obtain direction, scale to get distance to new origin
-    direction = np.array([local_to_axis[0], local_to_axis[1]], dtype=np.float64)
-    direction = direction / np.linalg.norm(direction)
-    direction *= 2 * distance_to_edge
-
-    # Move point to be relative to new origin
-    offset_point = point - direction
-
-    # Construct relative transform from old origin to new origin
-    interface_quat = rotation_to(UP, local_to_axis)
-    interface_quat = np.dot(from_origin.quat.flatten(), interface_quat)
-
-    return FaceTransform(point=offset_point, quat=interface_quat)
 
 def find_nearest_origin(point: Spherical) -> Origin:
     """
@@ -192,7 +158,7 @@ def haversine(point: Spherical, axis: Spherical) -> float:
     theta2, phi2 = axis
     dtheta = theta2 - theta
     dphi = phi2 - phi
-    a1 = np.sin(dphi / 2)
-    a2 = np.sin(dtheta / 2)
-    angle = a1 * a1 + a2 * a2 * np.sin(phi) * np.sin(phi2)
-    return angle 
+    a1 = math.sin(dphi / 2)
+    a2 = math.sin(dtheta / 2)
+    angle = a1 * a1 + a2 * a2 * math.sin(phi) * math.sin(phi2)
+    return angle

@@ -25,34 +25,6 @@ face_edge_angle = cast(Radians, -0.5 * math.pi + math.acos(-1 / math.sqrt(3 - PH
 distance_to_edge = (math.sqrt(5) - 1) / 2  # PHI - 1
 distance_to_vertex = 3 - math.sqrt(5)  # 2 * (2 - PHI)
 
-# Warp factor for beta scaling
-WARP_FACTOR = 0.5
-
-# Warp factor types and constants
-WarpType = Literal['high', 'low']
-
-class WarpFactors(TypedDict):
-    BETA_SCALE: float
-    RHO_SHIFT: float
-    RHO_SCALE: float
-    RHO_SCALE2: float
-
-WARP_FACTORS: Dict[WarpType, WarpFactors] = {
-    'high': {
-        'BETA_SCALE': 0.5115918059668587,
-        'RHO_SHIFT': 0.9461616498962347,
-        'RHO_SCALE': 0.04001633808056544,
-        'RHO_SCALE2': 0.008305829720486808,
-    },
-    'low': {
-        'BETA_SCALE': 0.5170052913652168,
-        'RHO_SHIFT': 0.939689240972851,
-        'RHO_SCALE': 0.008891290305379163,
-        'RHO_SCALE2': 0.03962853541477156,
-    }
-}
-
-# Dodecahedron sphere radii (normalized to unit radius for inscribed sphere)
 """
 Radius of the inscribed sphere in dodecahedron
 """
@@ -79,10 +51,6 @@ __all__ = [
     'face_edge_angle',
     'distance_to_edge',
     'distance_to_vertex',
-    'WARP_FACTOR',
-    'WarpType',
-    'WarpFactors',
-    'WARP_FACTORS',
     'R_INSCRIBED',
     'R_MIDEDGE',
     'R_CIRCUMSCRIBED'

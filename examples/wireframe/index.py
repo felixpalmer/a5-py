@@ -45,7 +45,7 @@ def main():
                     "coordinates": [boundary],
                 },
                 "properties": {
-                    "cell_id": bigint_to_hex(cell_id),
+                    "cellIdHex": bigint_to_hex(cell_id),
                 },
             })
         

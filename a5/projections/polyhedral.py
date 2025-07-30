@@ -39,18 +39,20 @@ Copyright (c) A5 contributors
 """
 
 import math
-import numpy as np
-from typing import cast
+from typing import cast, Dict, Tuple
 from ..core.coordinate_systems import Cartesian, Face, Barycentric, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_face
 from ..geometry.spherical_triangle import SphericalTriangleShape
-from ..utils.vector import vector_difference, quadruple_product, slerp
-
+from ..math import vec3, quat
 
 class PolyhedralProjection:
     """
     Polyhedral Equal Area projection using Slice & Dice algorithm
     """
+    
+    def __init__(self):
+        # Cache for triangle-dependent calculations in inverse projection
+        self._inverse_triangle_cache: Dict[Tuple, Dict] = {}
     
     def forward(self, v: Cartesian, spherical_triangle: SphericalTriangle, face_triangle: FaceTriangle) -> Face:
         """
@@ -64,34 +66,25 @@ class PolyhedralProjection:
         Returns:
             The face coordinates
         """
-        # Convert inputs to numpy arrays
-        v = np.array(v, dtype=np.float64)
-        face_triangle_arr = tuple(np.array(vertex, dtype=np.float64) for vertex in face_triangle)
-        A, B, C = [np.array(vertex, dtype=np.float64) for vertex in spherical_triangle]
-        triangle_shape = SphericalTriangleShape([A, B, C])
+        A, B, C = spherical_triangle
+        triangle_shape = SphericalTriangleShape(spherical_triangle)
 
         # When v is close to A, the quadruple product is unstable.
         # As we just need the intersection of two great circles we can use difference
         # between A and v, as it lies in the same plane of the great circle containing A & v
-        Z = v - A
-        Z_norm = np.linalg.norm(Z)
+        Z = vec3.create()
+        vec3.subtract(Z, v, A)
+        vec3.normalize(Z, Z)
+        Z = cast(Cartesian, (Z[0], Z[1], Z[2]))
         
-        # Handle case where v is exactly A (or very close)
-        if Z_norm < 1e-14:
-            # v is at vertex A, return the corresponding face coordinate
-            # This should be the first vertex of the face triangle for barycentric coord [1,0,0]
-            return face_triangle_arr[0]
-        
-        Z = Z / Z_norm
-        Z = cast(Cartesian, Z)
-        
-        p = quadruple_product(A, Z, B, C)
-        p = p / np.linalg.norm(p)
-        p = cast(Cartesian, p)
+        p = vec3.create()
+        vec3.quadrupleProduct(p, A, Z, B, C)
+        vec3.normalize(p, p)
+        p = cast(Cartesian, (p[0], p[1], p[2]))
 
-        h = vector_difference(A, v) / vector_difference(A, p)
-        area_abc = triangle_shape.get_area()
-        scaled_area = h / area_abc
+        h = vec3.vectorDifference(A, v) / vec3.vectorDifference(A, p)
+        Area_ABC = triangle_shape.get_area()
+        scaled_area = h / Area_ABC
         
         b = cast(Barycentric, (
             1 - h,
@@ -99,7 +92,7 @@ class PolyhedralProjection:
             scaled_area * SphericalTriangleShape([A, B, p]).get_area()
         ))
         
-        return barycentric_to_face(b, face_triangle_arr)
+        return barycentric_to_face(b, face_triangle)
 
     def inverse(self, face_point: Face, face_triangle: FaceTriangle, spherical_triangle: SphericalTriangle) -> Cartesian:
         """
@@ -113,12 +106,8 @@ class PolyhedralProjection:
         Returns:
             The spherical coordinates
         """
-        # Convert inputs to numpy arrays
-        face_point = np.array(face_point, dtype=np.float64)
-        face_triangle_arr = tuple(np.array(vertex, dtype=np.float64) for vertex in face_triangle)
-        A, B, C = [np.array(vertex, dtype=np.float64) for vertex in spherical_triangle]
-        triangle_shape = SphericalTriangleShape([A, B, C])
-        b = face_to_barycentric(face_point, face_triangle_arr)
+        A, B, C = spherical_triangle
+        b = face_to_barycentric(face_point, face_triangle)
 
         threshold = 1 - 1e-14
         if b[0] > threshold:
@@ -128,8 +117,17 @@ class PolyhedralProjection:
         if b[2] > threshold:
             return C
         
-        c1 = np.cross(B, C)
-        area_abc = triangle_shape.get_area()
+        # Get cached triangle-dependent constants
+        constants = self._get_triangle_constants(spherical_triangle)
+        area_abc = constants['area_abc']
+        c1 = constants['c1']
+        c01 = constants['c01']
+        c12 = constants['c12']
+        c20 = constants['c20']
+        s12 = constants['s12']
+        V = constants['V']
+        
+        # Point-dependent calculations
         h = 1 - b[0]
         R = b[2] / h
         alpha = R * area_abc
@@ -137,20 +135,51 @@ class PolyhedralProjection:
         half_c = math.sin(alpha / 2)
         CC = 2 * half_c * half_c  # Half angle formula
 
-        c01 = np.dot(A, B)
-        c12 = np.dot(B, C)
-        c20 = np.dot(C, A)
-        s12 = np.linalg.norm(c1)
-
-        V = np.dot(A, c1)  # Triple product of A, B, C. Constant??
         f = S * V + CC * (c01 * c12 - c20)
         g = CC * s12 * (1 + c01)
         q = (2 / math.acos(c12)) * math.atan2(g, f)
-        P = slerp(B, C, q)
-        K = vector_difference(A, P)
+        
+        # Use gl-matrix style slerp for P = slerp(B, C, q)
+        P = vec3.create()
+        vec3.slerp(P, B, C, q)
+        P = cast(Cartesian, (P[0], P[1], P[2]))
+        
+        # K = A - P  
+        K = vec3.vectorDifference(A, P)
         t = self._safe_acos(h * K) / self._safe_acos(K)
-        out = slerp(A, P, t)
-        return cast(Cartesian, out)
+        
+        # Final slerp: out = slerp(A, P, t)
+        out = [0.0, 0.0, 0.0]
+        vec3.slerp(out, A, P, t)
+        return cast(Cartesian, (out[0], out[1], out[2]))
+
+    def _get_triangle_constants(self, spherical_triangle: SphericalTriangle):
+        """
+        Get cached triangle-dependent constants for inverse projection.
+        These values only depend on the spherical triangle, not the input point.
+        """
+        # Create a cache key from the triangle vertices
+        # Convert to tuples since lists aren't hashable
+        A, B, C = spherical_triangle
+        cache_key = (tuple(A), tuple(B), tuple(C))
+        
+        if cache_key not in self._inverse_triangle_cache:
+            triangle_shape = SphericalTriangleShape(spherical_triangle)
+            c1 = vec3.create()
+            vec3.cross(c1, B, C)
+            
+            constants = {
+                'area_abc': triangle_shape.get_area(),
+                'c1': (c1[0], c1[1], c1[2]),  # Store as tuple
+                'c01': vec3.dot(A, B),
+                'c12': vec3.dot(B, C),
+                'c20': vec3.dot(C, A),
+                's12': vec3.length(c1),
+                'V': vec3.dot(A, c1)  # Triple product of A, B, C
+            }
+            self._inverse_triangle_cache[cache_key] = constants
+        
+        return self._inverse_triangle_cache[cache_key]
 
     def _safe_acos(self, x: float) -> float:
         """
