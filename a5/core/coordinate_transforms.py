@@ -178,18 +178,3 @@ def normalize_longitudes(contour: Contour) -> Contour:
         result.append(cast(LonLat, (longitude, latitude)))
     
     return result 
-
-def quat_from_spherical(axis: Spherical) -> tuple:
-    """
-    Creates a quaternion representing a rotation from the north pole to a given axis.
-    
-    Args:
-        axis: Spherical coordinate of axis to rotate to
-        
-    Returns:
-        quaternion [x, y, z, w]
-    """
-    cartesian = to_cartesian(axis)
-    Q = quat_glm.create()
-    quat_glm.rotationTo(Q, [0, 0, 1], cartesian)
-    return (Q[0], Q[1], Q[2], Q[3]) 
