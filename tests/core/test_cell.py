@@ -17,9 +17,8 @@ FIXTURES_PATH = Path(__file__).parent / "fixtures"
 POPULATED_PLACES_PATH = FIXTURES_PATH / "ne_50m_populated_places_nameonly.json"
 
 with open(POPULATED_PLACES_PATH) as f:
-    # TODO: The code is slow, so we're limiting the number of points to 20 for now
     populated_places = json.load(f)
-    populated_places['features'] = populated_places['features'][:20]
+    populated_places['features'] = populated_places['features']
 
 class TestAntimeridianCells:
     """Test antimeridian crossing behavior."""
