@@ -76,7 +76,7 @@ v = cast(Face, (L * math.cos(V), L * math.sin(V)))
 
 W = bisector_angle - PI_OVER_5
 w = cast(Face, (L * math.cos(W), L * math.sin(W)))
-TRIANGLE = PentagonShape([u, v, w, w, w])  # TODO hacky, don't pretend this is pentagon
+TRIANGLE = PentagonShape([u, v, w])
 
 """
 Basis vectors used to layout primitive unit
