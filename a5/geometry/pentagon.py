@@ -3,19 +3,15 @@
 # Copyright (c) A5 contributors
 
 import math
-from typing import List, Tuple, Optional, Literal, NamedTuple
-from ..core.coordinate_systems import Radians, Face, Spherical
-from ..core.hilbert import Orientation
+from typing import List, Tuple
+from ..core.coordinate_systems import Face
 from ..math import vec2
-
-# Origin and OriginId are defined in core/utils.py
 
 Pentagon = List[Face]
 
 class PentagonShape:
     def __init__(self, vertices: Pentagon):
         self.vertices = list(vertices)  # Make a copy to avoid mutating original
-        self.id = {"i": 0, "j": 0, "k": 0, "resolution": 1, "segment": None, "origin": None}
         if not self._is_winding_correct():
             self.vertices.reverse()
 
