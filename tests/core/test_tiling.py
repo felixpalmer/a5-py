@@ -9,6 +9,7 @@ from a5.core.tiling import (
     get_quintant_polar
 )
 from a5.core.hilbert import Anchor
+from tests.matchers import is_close_array
 
 
 def load_fixtures():
@@ -47,8 +48,8 @@ class TestGetPentagonVertices:
             assert len(vertices) == len(expected["vertices"]), f"Vertex count mismatch"
             
             for i, expected_vertex in enumerate(expected["vertices"]):
-                assert abs(vertices[i][0] - expected_vertex[0]) < 1e-15, f"Vertex {i} X coordinate mismatch"
-                assert abs(vertices[i][1] - expected_vertex[1]) < 1e-15, f"Vertex {i} Y coordinate mismatch"
+                assert is_close_array(vertices[i], expected_vertex), \
+                    f"Vertex {i}: expected {expected_vertex}, got {vertices[i]}"
             
             # Check area matches
             area = pentagon.get_area()
@@ -56,8 +57,8 @@ class TestGetPentagonVertices:
             
             # Check center matches
             center = pentagon.get_center()
-            assert abs(center[0] - expected["center"][0]) < 1e-15, f"Center X coordinate mismatch"
-            assert abs(center[1] - expected["center"][1]) < 1e-15, f"Center Y coordinate mismatch"
+            assert is_close_array(center, expected["center"]), \
+                f"Center: expected {expected['center']}, got {center}"
 
 
 class TestGetQuintantVertices:
@@ -72,20 +73,14 @@ class TestGetQuintantVertices:
             expected = fixture["output"]
             
             pentagon = get_quintant_vertices(input_data["quintant"])
-            
-            # Get unique vertices (Python implementation uses PentagonShape with duplicated vertices)
             vertices = pentagon.get_vertices()
-            unique_vertices = []
-            for vertex in vertices:
-                if not any(abs(vertex[0] - uv[0]) < 1e-15 and abs(vertex[1] - uv[1]) < 1e-15 for uv in unique_vertices):
-                    unique_vertices.append(vertex)
             
-            # Check vertices match (compare unique vertices only)
-            assert len(unique_vertices) == len(expected["vertices"]), f"Unique vertex count mismatch: got {len(unique_vertices)}, expected {len(expected['vertices'])}"
+            # Check vertices match
+            assert len(vertices) == len(expected["vertices"]), f"Vertex count mismatch: got {len(vertices)}, expected {len(expected['vertices'])}"
             
             for i, expected_vertex in enumerate(expected["vertices"]):
-                assert abs(unique_vertices[i][0] - expected_vertex[0]) < 1e-15, f"Vertex {i} X coordinate mismatch"
-                assert abs(unique_vertices[i][1] - expected_vertex[1]) < 1e-15, f"Vertex {i} Y coordinate mismatch"
+                assert is_close_array(vertices[i], expected_vertex), \
+                    f"Vertex {i}: expected {expected_vertex}, got {vertices[i]}"
             
             # Check area matches
             area = pentagon.get_area()
@@ -93,8 +88,8 @@ class TestGetQuintantVertices:
             
             # Check center matches
             center = pentagon.get_center()
-            assert abs(center[0] - expected["center"][0]) < 1e-15, f"Center X coordinate mismatch"
-            assert abs(center[1] - expected["center"][1]) < 1e-15, f"Center Y coordinate mismatch"
+            assert is_close_array(center, expected["center"]), \
+                f"Center: expected {expected['center']}, got {center}"
 
 
 class TestGetFaceVertices:
@@ -112,8 +107,8 @@ class TestGetFaceVertices:
         assert len(vertices) == len(expected["vertices"]), f"Vertex count mismatch"
         
         for i, expected_vertex in enumerate(expected["vertices"]):
-            assert abs(vertices[i][0] - expected_vertex[0]) < 1e-15, f"Vertex {i} X coordinate mismatch"
-            assert abs(vertices[i][1] - expected_vertex[1]) < 1e-15, f"Vertex {i} Y coordinate mismatch"
+            assert is_close_array(vertices[i], expected_vertex), \
+                f"Vertex {i}: expected {expected_vertex}, got {vertices[i]}"
         
         # Check area matches
         area = pentagon.get_area()
@@ -121,8 +116,8 @@ class TestGetFaceVertices:
         
         # Check center matches
         center = pentagon.get_center()
-        assert abs(center[0] - expected["center"][0]) < 1e-15, f"Center X coordinate mismatch"
-        assert abs(center[1] - expected["center"][1]) < 1e-15, f"Center Y coordinate mismatch"
+        assert is_close_array(center, expected["center"]), \
+            f"Center: expected {expected['center']}, got {center}"
     
 
 

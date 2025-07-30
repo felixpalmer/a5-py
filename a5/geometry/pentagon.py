@@ -88,9 +88,9 @@ class PentagonShape:
 
     def get_center(self) -> Face:
         """Get the center point of the pentagon."""
-        # Use the same approach as TypeScript: sum and divide
-        sum_x = sum(v[0] for v in self.vertices) / len(self.vertices)
-        sum_y = sum(v[1] for v in self.vertices) / len(self.vertices)
+        n = len(self.vertices)
+        sum_x = sum(v[0] for v in self.vertices) / n
+        sum_y = sum(v[1] for v in self.vertices) / n
         return (sum_x, sum_y)
 
     def contains_point(self, point: Tuple[float, float]) -> float:
