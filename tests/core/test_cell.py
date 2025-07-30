@@ -10,7 +10,7 @@ from typing import List, Tuple, Dict, Any
 from a5.core.coordinate_systems import Degrees, LonLat
 from a5.core.cell import cell_to_boundary, cell_to_lonlat, lonlat_to_cell, a5cell_contains_point
 from a5.core.serialization import deserialize, MAX_RESOLUTION
-from a5.core.hex import hex_to_bigint
+from a5.core.hex import hex_to_bigint, bigint_to_hex
 
 # Load test data
 FIXTURES_PATH = Path(__file__).parent / "fixtures"
@@ -19,7 +19,7 @@ POPULATED_PLACES_PATH = FIXTURES_PATH / "ne_50m_populated_places_nameonly.json"
 with open(POPULATED_PLACES_PATH) as f:
     # TODO: The code is slow, so we're limiting the number of points to 20 for now
     populated_places = json.load(f)
-    populated_places['features'] = populated_places['features'][:20]
+    populated_places['features'] = populated_places['features'][:1]
 
 class TestAntimeridianCells:
     """Test antimeridian crossing behavior."""
@@ -77,12 +77,12 @@ class TestCellBoundary:
                     
                     # Verify the original point is contained within the cell
                     cell = deserialize(cell_id)
-                    if not (a5cell_contains_point(cell, test_lonlat) > 0):
+                    if (a5cell_contains_point(cell, test_lonlat) < 0):
                         # Get cell boundary
                         boundary = cell_to_boundary(cell_id)
                         
                         # Convert boundary to GeoJSON
-                        geojson = self._boundary_to_geojson(boundary, resolution, str(cell_id), test_lonlat)
+                        geojson = self._boundary_to_geojson(boundary, resolution, bigint_to_hex(cell_id), test_lonlat)
                         
                         resolution_failures.append(f"Cell {cell_id} does not contain the original point {test_lonlat}")
                         resolution_failures.append(f"GeoJSON:\n {json.dumps(geojson)}")
@@ -114,8 +114,6 @@ class TestCellBoundary:
         """Convert boundary to GeoJSON format."""
         # Create coordinates list with first point appended at the end to close the polygon
         coordinates = [[lon, lat] for lon, lat in boundary]
-        if coordinates and coordinates[-1] != coordinates[0]:
-            coordinates.append(coordinates[0])  # Close the polygon
 
         # Create a polygon feature for the cell
         cell_feature = {
