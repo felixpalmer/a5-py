@@ -178,6 +178,21 @@ def test_serialize_deserialize_round_trip(resolution):
 # =============================================================================
 
 @pytest.mark.parametrize("id", TEST_IDS)
+def test_cell_to_children_with_same_resolution_returns_original_cell(id):
+    cell = int(id, 16)
+    current_resolution = get_resolution(cell)
+    children = cell_to_children(cell, current_resolution)
+    assert len(children) == 1
+    assert children[0] == cell
+
+@pytest.mark.parametrize("id", TEST_IDS)
+def test_cell_to_parent_with_same_resolution_returns_original_cell(id):
+    cell = int(id, 16)
+    current_resolution = get_resolution(cell)
+    parent = cell_to_parent(cell, current_resolution)
+    assert parent == cell
+
+@pytest.mark.parametrize("id", TEST_IDS)
 def test_round_trip_between_cell_to_parent_and_cell_to_children(id):
     """Test parent-child round trip."""
     cell = int(id, 16)
