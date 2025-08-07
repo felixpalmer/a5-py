@@ -122,11 +122,14 @@ def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List
     origin, segment, S, current_resolution = cell["origin"], cell["segment"], cell["S"], cell["resolution"]
     new_resolution = child_resolution if child_resolution is not None else current_resolution + 1
 
-    if new_resolution <= current_resolution:
-        raise ValueError(f"Target resolution ({new_resolution}) must be greater than current resolution ({current_resolution})")
+    if new_resolution < current_resolution:
+        raise ValueError(f"Target resolution ({new_resolution}) must be equal to or greater than current resolution ({current_resolution})")
 
     if new_resolution > MAX_RESOLUTION:
         raise ValueError(f"Target resolution ({new_resolution}) exceeds maximum resolution ({MAX_RESOLUTION})")
+
+    if new_resolution == current_resolution:
+        return [index]
 
     new_origins = [origin]
     new_segments = [segment]
@@ -158,10 +161,13 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
     if new_resolution < -1:
         raise ValueError(f"Target resolution ({new_resolution}) cannot be less than -1")
 
-    if new_resolution >= current_resolution:
+    if new_resolution > current_resolution:
         raise ValueError(
-            f"Target resolution ({new_resolution}) must be less than current resolution ({current_resolution})"
+            f"Target resolution ({new_resolution}) must be equal to or less than current resolution ({current_resolution})"
         )
+
+    if new_resolution == current_resolution:
+        return index
 
     resolution_diff = current_resolution - new_resolution
     shifted_S = S >> (2 * resolution_diff)
