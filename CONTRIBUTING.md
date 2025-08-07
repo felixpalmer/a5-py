@@ -20,6 +20,8 @@ uv run pytest
 ## Build & publish
 
 ```bash
+rm -rf dist/*
+uv version --bump patch|minor|major
 uv build
 uv publish
 ```
