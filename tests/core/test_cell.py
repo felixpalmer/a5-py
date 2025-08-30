@@ -10,7 +10,7 @@ from typing import List, Tuple, Dict, Any
 from a5.core.coordinate_systems import Degrees, LonLat
 from a5.core.cell import cell_to_boundary, cell_to_lonlat, lonlat_to_cell, a5cell_contains_point
 from a5.core.serialization import deserialize, MAX_RESOLUTION
-from a5.core.hex import hex_to_bigint, bigint_to_hex
+from a5.core.hex import hex_to_u64, u64_to_hex
 
 # Load test data
 FIXTURES_PATH = Path(__file__).parent / "fixtures"
@@ -30,7 +30,7 @@ class TestAntimeridianCells:
         
         for cell_id in antimeridian_cells:
             for segment in segments:
-                cell_id_bigint = hex_to_bigint(cell_id)
+                cell_id_bigint = hex_to_u64(cell_id)
                 boundary = cell_to_boundary(cell_id_bigint, {'segments': segment if segment != 'auto' else None})
 
                 # Check for antimeridian crossing
@@ -81,7 +81,7 @@ class TestCellBoundary:
                         boundary = cell_to_boundary(cell_id)
                         
                         # Convert boundary to GeoJSON
-                        geojson = self._boundary_to_geojson(boundary, resolution, bigint_to_hex(cell_id), test_lonlat)
+                        geojson = self._boundary_to_geojson(boundary, resolution, u64_to_hex(cell_id), test_lonlat)
                         
                         resolution_failures.append(f"Cell {cell_id} does not contain the original point {test_lonlat}")
                         resolution_failures.append(f"GeoJSON:\n {json.dumps(geojson)}")

@@ -1,6 +1,6 @@
 [project]
 name = "pya5"
-version = "0.4.2"
+version = "0.4.3"
 description = "A5 - Global Pentagonal Geospatial Index"
 readme = "README.md"
 requires-python = ">=3.8"
