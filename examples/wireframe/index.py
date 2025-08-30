@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from a5.core.cell import cell_to_boundary
-from a5.core.hex import bigint_to_hex
+from a5.core.hex import u64_to_hex
 from a5.core.serialization import cell_to_children, WORLD_CELL
 
 
@@ -45,7 +45,7 @@ def main():
                     "coordinates": [boundary],
                 },
                 "properties": {
-                    "cellIdHex": bigint_to_hex(cell_id),
+                    "cellIdHex": u64_to_hex(cell_id),
                 },
             })
         
