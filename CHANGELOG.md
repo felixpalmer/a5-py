@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to A5-Python will be documented in this file.
+All notable changes to pya5 will be documented in this file.
 
 For the latest documentation, visit [A5 Documentation](https://a5geo.org)
 
@@ -17,26 +17,26 @@ Each version should:
 Ref: http://keepachangelog.com/en/0.3.0/
 -->
 
-## A5-Python v0.5
+## pya5 v0.5
 
-#### A5-Python [v0.5.0] - Sep 21 2025
+#### pya5 [v0.5.0] - Sep 21 2025
 
 - **BREAKING**: Renamed hex conversion functions to use u64 naming convention (#30)
   - `hex_to_bigint` → `hex_to_u64`
   - `bigint_to_hex` → `u64_to_hex`
 
-## A5-Python v0.4
+## pya5 v0.4
 
-#### A5-Python [v0.4.2] - Aug 7 2025
+#### pya5 [v0.4.2] - Aug 7 2025
 
 - Fixed: cell_to_children and cell_to_parent functions (#29)
 
-#### A5-Python [v0.4.1] - Jul 30 2025
+#### pya5 [v0.4.1] - Jul 30 2025
 
 - Removed: numpy dependency (#27)
 - Added: Port cell functions and wireframe test script (#26)
 
-#### A5-Python [v0.4.0] - Jul 15 2025
+#### pya5 [v0.4.0] - Jul 15 2025
 
 - Added: Dodecahedron projection port (#25)
 - Added: Port CRS and polyhedral projection (#24)
@@ -49,9 +49,9 @@ Ref: http://keepachangelog.com/en/0.3.0/
 - Changed: Re-port spherical-polygon & add vector.py (#17)
 - Changed: Re-port constants & authalic (#16)
 
-## A5-Python v0.3
+## pya5 v0.3
 
-#### A5-Python [v0.3.0] - May 27 2025
+#### pya5 [v0.3.0] - May 27 2025
 
 - Added: Porting serialization (#14)
 - Added: utils.py, test_utils.py (#12)
@@ -67,9 +67,9 @@ Ref: http://keepachangelog.com/en/0.3.0/
 - Changed: Update hilbert.py
 - Added: Hilbert curve implementation
 
-## A5-Python v0.2
+## pya5 v0.2
 
-#### A5-Python [v0.2.0] - May 18 2025
+#### pya5 [v0.2.0] - May 18 2025
 
 - Added: CI testing workflow (#4)
 - Added: Publishing configuration (#2)
@@ -79,9 +79,9 @@ Ref: http://keepachangelog.com/en/0.3.0/
 - Added: Math functions port
 - Changed: Update contributing documentation
 
-## A5-Python v0.1
+## pya5 v0.1
 
-#### A5-Python [v0.1.0] - May 16 2025
+#### pya5 [v0.1.0] - May 16 2025
 
 - Added: Initial Python port of A5 - Global Pentagonal Geospatial Index
 - Added: Simple hex.py implementation
