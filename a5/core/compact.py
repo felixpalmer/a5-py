@@ -9,8 +9,7 @@ This version uses cell_to_children for expansion and stride-based sibling detect
 for compaction.
 """
 
-from typing import List, Union
-import array
+from typing import List
 
 from .serialization import (
     get_resolution,
@@ -23,20 +22,18 @@ from .serialization import (
 from .cell_info import get_num_children
 
 
-def uncompact(cells: Union[List[int], array.array], target_resolution: int) -> array.array:
+def uncompact(cells: List[int], target_resolution: int) -> List[int]:
     """
     Expands a set of A5 cells to a target resolution by generating all descendant cells.
 
     Args:
-        cells: List or array of A5 cell identifiers to uncompact
+        cells: List of A5 cell identifiers to uncompact
         target_resolution: The target resolution level for all output cells
 
     Returns:
-        Array of cell identifiers, all at the target resolution
+        List of cell identifiers, all at the target resolution
     """
-    # First calculate how much space is needed
-    n = 0
-    resolutions = []
+    result = []
     for cell in cells:
         resolution = get_resolution(cell)
         resolution_diff = target_resolution - resolution
@@ -44,40 +41,28 @@ def uncompact(cells: Union[List[int], array.array], target_resolution: int) -> a
             raise ValueError(
                 f"Cannot uncompact cell at resolution {resolution} to lower resolution {target_resolution}"
             )
-        resolutions.append(resolution)
-        n += get_num_children(resolution, target_resolution)
 
-    # Write directly into pre-allocated array
-    result = array.array('Q', [0] * n)  # 'Q' is unsigned long long (64-bit)
-    offset = 0
-    for i, cell in enumerate(cells):
-        resolution = resolutions[i]
-
-        num_children = get_num_children(resolution, target_resolution)
-        if num_children == 1:
-            result[offset] = cell
+        if resolution == target_resolution:
+            result.append(cell)
         else:
             children = cell_to_children(cell, target_resolution)
-            for j, child in enumerate(children):
-                result[offset + j] = child
-
-        offset += num_children
+            result.extend(children)
 
     return result
 
 
-def compact(cells: Union[List[int], array.array]) -> array.array:
+def compact(cells: List[int]) -> List[int]:
     """
     Compacts a set of A5 cells by replacing complete groups of sibling cells with their parent cells.
 
     Args:
-        cells: List or array of A5 cell identifiers to compact
+        cells: List of A5 cell identifiers to compact
 
     Returns:
-        Array of compacted cell identifiers (typically smaller than input)
+        List of compacted cell identifiers (typically smaller than input)
     """
     if len(cells) == 0:
-        return array.array('Q')
+        return []
 
     # Single sort and dedup
     current_cells = sorted(set(cells))
@@ -139,5 +124,4 @@ def compact(cells: Union[List[int], array.array]) -> array.array:
 
         current_cells = result
 
-    final_result = array.array('Q', current_cells)
-    return final_result
+    return current_cells
