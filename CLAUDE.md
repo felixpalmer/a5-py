@@ -65,6 +65,27 @@ uv publish
 - **Type Hints**: Use type hints throughout for better code clarity
 - **Dependencies**: Core library has no runtime dependencies
 
+## CI Checks (run as a final verification)
+```bash
+# 1. Install dependencies
+uv pip install -e ".[test]"
+
+# 2. Run tests
+uv run pytest
+```
+
+These are the same checks that run in CI (.github/workflows/test.yml). Run these to verify your changes before the user reviews the code.
+
+## Git Usage
+
+- **DO** use git commands for debugging and information gathering:
+  - `git status` - Check current state
+  - `git diff` - Compare changes
+  - `git log` - View commit history
+  - `git diff master` - Compare to master branch
+  - `git show <commit>` - View specific commits
+- **DO NOT** create git commits - the user will review the code and commit it themselves
+
 ## Testing Strategy
 
 - Tests are written such that they can easily be ported to other languages
