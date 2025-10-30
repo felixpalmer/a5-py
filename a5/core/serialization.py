@@ -158,6 +158,10 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
 
     new_resolution = parent_resolution if parent_resolution is not None else current_resolution - 1
 
+    # Special case: parent of resolution 0 cells is the world cell
+    if new_resolution == -1:
+        return WORLD_CELL
+
     if new_resolution < -1:
         raise ValueError(f"Target resolution ({new_resolution}) cannot be less than -1")
 
@@ -184,8 +188,36 @@ def get_res0_cells() -> List[int]:
     """
     Returns resolution 0 cells of the A5 system, which serve as a starting point
     for all higher-resolution subdivisions in the hierarchy.
-    
+
     Returns:
         List of 12 cell indices
     """
-    return cell_to_children(WORLD_CELL, 0)  
+    return cell_to_children(WORLD_CELL, 0)
+
+
+def is_first_child(index: int, resolution: Optional[int] = None) -> bool:
+    """Check whether index corresponds to first child of its parent."""
+    if resolution is None:
+        resolution = get_resolution(index)
+
+    if resolution < 2:
+        # For resolution 0: first child is origin 0 (child count = 12)
+        # For resolution 1: first children are at multiples of 5 (child count = 5)
+        top6_bits = index >> HILBERT_START_BIT
+        child_count = 12 if resolution == 0 else 5
+        return top6_bits % child_count == 0
+
+    s_position = 2 * (MAX_RESOLUTION - resolution)
+    s_mask = 3 << s_position  # Mask for the 2 LSBs of S
+    return (index & s_mask) == 0
+
+
+def get_stride(resolution: int) -> int:
+    """Difference between two neighbouring sibling cells at a given resolution."""
+    # Both level 0 & 1 just write values 0-11 or 0-59 to the first 6 bits
+    if resolution < 2:
+        return 1 << HILBERT_START_BIT
+
+    # For hilbert levels, the position shifts by 2 bits per resolution level
+    s_position = 2 * (MAX_RESOLUTION - resolution)
+    return 1 << s_position  
