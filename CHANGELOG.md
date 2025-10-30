@@ -17,7 +17,11 @@ Each version should:
 Ref: http://keepachangelog.com/en/0.3.0/
 -->
 
-## pya5 v0.5
+## pya5
+
+#### pya5 [v0.6.0] - Oct 30 2025
+
+- Feature: cell compaction/uncompaction (#33)
 
 #### pya5 [v0.5.0] - Sep 21 2025
 

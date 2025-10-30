@@ -23,5 +23,5 @@ uv run pytest
 rm -rf dist/*
 uv version --bump patch|minor|major
 uv build
-uv publish
+uv publish --token <TOKEN>
 ```
