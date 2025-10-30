@@ -33,7 +33,9 @@ def uncompact(cells: List[int], target_resolution: int) -> List[int]:
     Returns:
         List of cell identifiers, all at the target resolution
     """
-    result = []
+    # First calculate how much space is needed
+    n = 0
+    resolutions = []
     for cell in cells:
         resolution = get_resolution(cell)
         resolution_diff = target_resolution - resolution
@@ -42,11 +44,24 @@ def uncompact(cells: List[int], target_resolution: int) -> List[int]:
                 f"Cannot uncompact cell at resolution {resolution} to lower resolution {target_resolution}"
             )
 
-        if resolution == target_resolution:
-            result.append(cell)
+        resolutions.append(resolution)
+        n += get_num_children(resolution, target_resolution)
+
+    # Write directly into pre-allocated list
+    result = [0] * n
+    offset = 0
+    for i, cell in enumerate(cells):
+        resolution = resolutions[i]
+
+        num_children = get_num_children(resolution, target_resolution)
+        if num_children == 1:
+            result[offset] = cell
         else:
             children = cell_to_children(cell, target_resolution)
-            result.extend(children)
+            for j, child in enumerate(children):
+                result[offset + j] = child
+
+        offset += num_children
 
     return result
 
@@ -89,9 +104,9 @@ def compact(cells: List[int]) -> List[int]:
             if resolution >= FIRST_HILBERT_RESOLUTION:
                 expected_children = 4  # Hilbert levels have 4 siblings
             elif resolution == 0:
-                expected_children = 12  # First level has 12 siblings
+                expected_children = 12  # First two levels are exceptions, with 12 & 5 siblings
             else:
-                expected_children = 5  # Second level has 5 siblings
+                expected_children = 5
 
             if i + expected_children <= len(current_cells):
                 has_all_siblings = True
