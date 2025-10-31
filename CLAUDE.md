@@ -64,6 +64,20 @@ uv publish
 - **Cell IDs**: Always use int internally, convert to hex with `u64_to_hex()` / `hex_to_bigint()`
 - **Type Hints**: Use type hints throughout for better code clarity
 - **Dependencies**: Core library has no runtime dependencies
+- **Coordinate Types**: LonLat is just a tuple `(float, float)` in Python - no special casting needed
+
+## Porting from TypeScript
+When porting features from TypeScript:
+1. **Reference implementation**: TypeScript in `../a5` is the source of truth
+2. **Key file mappings**:
+   - `modules/core/cell.ts` → `a5/core/cell.py`
+   - `tests/cell.test.ts` → `tests/core/test_cell.py`
+   - `modules/index.ts` → `a5/__init__.py`
+3. **Type conversions**:
+   - `bigint` → `int`
+   - `LonLat` branded type → `tuple[float, float]`
+   - `Result<T, Error>` → direct return or raise exception
+4. **Test patterns**: Follow existing test structure with `class Test*` grouping tests
 
 ## CI Checks (run as a final verification)
 ```bash
