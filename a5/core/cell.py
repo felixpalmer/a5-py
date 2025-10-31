@@ -16,7 +16,7 @@ from ..geometry.pentagon import PentagonShape
 from .tiling import get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
 from .constants import PI_OVER_5
 from .hilbert import ij_to_s, s_to_anchor
-from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
+from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL
 from ..geometry.spherical_polygon import SphericalPolygonShape
 
 # Reuse this object to avoid allocation
@@ -30,14 +30,18 @@ class CellToBoundaryOptions(TypedDict, total=False):
 def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
     """
     Convert longitude/latitude coordinates to a cell ID.
-    
+
     Args:
         lon_lat: Tuple of (longitude, latitude) in degrees
         resolution: Resolution level of the cell
-        
+
     Returns:
         Cell ID as a big integer
     """
+    # Resolution -1 represents WORLD_CELL, which covers the entire world
+    if resolution == -1:
+        return WORLD_CELL
+
     if resolution < FIRST_HILBERT_RESOLUTION:
         # For low resolutions there is no Hilbert curve, so we can just return as the result is exact
         return serialize(_lonlat_to_estimate(lon_lat, resolution))
@@ -146,40 +150,48 @@ def _get_pentagon(cell: A5Cell) -> PentagonShape:
 def cell_to_lonlat(cell_id: int) -> LonLat:
     """
     Convert a cell ID to longitude/latitude coordinates.
-    
+
     Args:
         cell_id: Cell ID as a big integer
-        
+
     Returns:
         Tuple of (longitude, latitude) in degrees
     """
+    # WORLD_CELL represents the entire world, return (0, 0) as a reasonable default
+    if cell_id == WORLD_CELL:
+        return (0.0, 0.0)
+
     cell = deserialize(cell_id)
     pentagon = _get_pentagon(cell)
     point = _dodecahedron.inverse(pentagon.get_center(), cell["origin"].id)
     return to_lonlat(point)
 
 def cell_to_boundary(
-    cell_id: int, 
+    cell_id: int,
     options: Optional[CellToBoundaryOptions] = None
 ) -> List[LonLat]:
     """
     Get the boundary coordinates of a cell.
-    
+
     Args:
         cell_id: Cell ID as a big integer
         options: Dictionary with optional parameters:
             - closed_ring: Pass True to close the ring with the first point (default True)
             - segments: Number of segments to use for each edge. Pass 'auto' to use the resolution of the cell (default 'auto')
-        
+
     Returns:
         List of (longitude, latitude) coordinates forming the cell boundary
     """
+    # WORLD_CELL represents the entire world and is unbounded
+    if cell_id == WORLD_CELL:
+        return []
+
     if options is None:
         options = {}
-    
+
     closed_ring = options.get('closed_ring', True)
     segments = options.get('segments', 'auto')
-    
+
     cell = deserialize(cell_id)
     if segments == 'auto' or segments is None:
         segments = max(1, 2 ** (6 - cell["resolution"]))
