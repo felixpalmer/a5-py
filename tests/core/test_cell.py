@@ -20,6 +20,24 @@ with open(POPULATED_PLACES_PATH) as f:
     populated_places = json.load(f)
     populated_places['features'] = populated_places['features']
 
+class TestCellIDValidation:
+    """Test cell ID validation and special cases."""
+
+    def test_world_cell_for_resolution_minus_1(self):
+        """Test that resolution -1 returns WORLD_CELL."""
+        cell_id = lonlat_to_cell((0, 0), -1)
+        assert cell_id == 0
+
+    def test_world_cell_center(self):
+        """Test that WORLD_CELL center returns (0, 0)."""
+        lon_lat = cell_to_lonlat(0)
+        assert lon_lat == (0.0, 0.0)
+
+    def test_world_cell_boundary(self):
+        """Test that WORLD_CELL boundary returns empty array."""
+        boundary = cell_to_boundary(0)
+        assert boundary == []
+
 class TestAntimeridianCells:
     """Test antimeridian crossing behavior."""
     

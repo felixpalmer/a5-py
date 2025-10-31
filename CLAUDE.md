@@ -64,6 +64,26 @@ uv publish
 - **Cell IDs**: Always use int internally, convert to hex with `u64_to_hex()` / `hex_to_bigint()`
 - **Type Hints**: Use type hints throughout for better code clarity
 - **Dependencies**: Core library has no runtime dependencies
+- **Coordinate Types**: LonLat is just a tuple `(float, float)` in Python - no special casting needed
+
+## Polyglot Mirroring
+A5 uses **Polyglot Mirroring** - any of the three implementations (TypeScript, Python, Rust) can be the source for porting changes to the others. See `../a5/docs/ecosystem/polyglot-mirroring.md` for philosophy.
+
+When porting features to Python:
+1. **Source can be any language** - TypeScript (`../a5`), Python (here), or Rust (`../a5-rs`)
+2. **Key file mappings** from TypeScript:
+   - `modules/core/cell.ts` ↔ `a5/core/cell.py`
+   - `tests/cell.test.ts` ↔ `tests/core/test_cell.py`
+   - `modules/index.ts` ↔ `a5/__init__.py`
+3. **Type conversions from TypeScript**:
+   - `bigint` → `int`
+   - `LonLat` branded type → `tuple[float, float]`
+   - `Result<T, Error>` → direct return or raise exception
+4. **Type conversions from Rust**:
+   - `u64` → `int`
+   - `LonLat::new(lon, lat)` → `(lon, lat)`
+   - `Result<T, String>` → direct return or raise exception
+5. **Test patterns**: Follow existing test structure with `class Test*` grouping tests
 
 ## CI Checks (run as a final verification)
 ```bash
@@ -104,3 +124,14 @@ These are the same checks that run in CI (.github/workflows/test.yml). Run these
 - Test fixtures should be copied from TypeScript repo, not regenerated
 - Ensure exact numerical equivalence with TypeScript implementation
 - If instructions in `CLAUDE.md` seem wrong, update them and notify the user
+
+## Self-Improvement
+After completing a porting task from TypeScript:
+1. **Review the session** - Identify any confusion, file hunting, or unclear instructions
+2. **Consider updates** - Would adding context to CLAUDE.md files have helped?
+3. **Keep it concise** - Only add guidance if it would clearly prevent future issues
+4. **Update all three** - If guidance applies across ports, update all CLAUDE.md files
+5. **Note to user** - Mention the improvements made
+
+Examples of valuable additions: file location clarifications, type system gotchas, common porting patterns
+Examples of noise: obvious information, language basics, one-off issues that won't recur
