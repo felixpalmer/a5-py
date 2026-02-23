@@ -3,9 +3,9 @@
 # Copyright (c) A5 contributors
 
 import math
+from .constants import AUTHALIC_AREA_EARTH
 
-AUTHALIC_RADIUS = 6371007.2  # m
-AUTHALIC_AREA = 4 * math.pi * AUTHALIC_RADIUS * AUTHALIC_RADIUS  # m^2
+AUTHALIC_AREA = AUTHALIC_AREA_EARTH
 FIRST_HILBERT_RESOLUTION = 2
 
 def get_num_cells(resolution: int) -> int:

@@ -15,7 +15,7 @@ from .utils import A5Cell
 from ..geometry.pentagon import PentagonShape
 from .tiling import get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
 from .constants import PI_OVER_5
-from .hilbert import ij_to_s, s_to_anchor
+from ..lattice import ij_to_s, s_to_anchor
 from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL
 from ..geometry.spherical_polygon import SphericalPolygonShape
 
@@ -147,6 +147,21 @@ def _get_pentagon(cell: A5Cell) -> PentagonShape:
     anchor = s_to_anchor(cell["S"], hilbert_resolution, orientation)
     return get_pentagon_vertices(hilbert_resolution, quintant, anchor)
 
+def cell_to_spherical(cell_id: int) -> Spherical:
+    """
+    Convert a cell ID to spherical coordinates.
+
+    Args:
+        cell_id: Cell ID as a big integer
+
+    Returns:
+        Spherical coordinates (theta, phi)
+    """
+    cell = deserialize(cell_id)
+    pentagon = _get_pentagon(cell)
+    return _dodecahedron.inverse(pentagon.get_center(), cell["origin"].id)
+
+
 def cell_to_lonlat(cell_id: int) -> LonLat:
     """
     Convert a cell ID to longitude/latitude coordinates.
@@ -161,10 +176,7 @@ def cell_to_lonlat(cell_id: int) -> LonLat:
     if cell_id == WORLD_CELL:
         return (0.0, 0.0)
 
-    cell = deserialize(cell_id)
-    pentagon = _get_pentagon(cell)
-    point = _dodecahedron.inverse(pentagon.get_center(), cell["origin"].id)
-    return to_lonlat(point)
+    return to_lonlat(cell_to_spherical(cell_id))
 
 def cell_to_boundary(
     cell_id: int,

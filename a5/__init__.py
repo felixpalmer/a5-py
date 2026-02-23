@@ -4,15 +4,18 @@ A5 Python package.
 
 # PUBLIC API
 # Indexing
-from a5.core.cell import cell_to_boundary, cell_to_lonlat, lonlat_to_cell
+from a5.core.cell import cell_to_boundary, cell_to_lonlat, cell_to_spherical, lonlat_to_cell
 from a5.core.hex import hex_to_u64, u64_to_hex
 
 # Hierarchy
-from a5.core.serialization import cell_to_parent, cell_to_children, get_resolution, get_res0_cells
-from a5.core.cell_info import get_num_cells, cell_area
+from a5.core.serialization import cell_to_parent, cell_to_children, get_resolution, get_res0_cells, WORLD_CELL
+from a5.core.cell_info import get_num_cells, get_num_children, cell_area
 
 # Compaction
 from a5.core.compact import compact, uncompact
+
+# Traversal
+from a5.traversal import grid_disk, grid_disk_vertex, spherical_cap
 
 # Types
 from a5.core.coordinate_systems import Degrees, Radians
@@ -20,13 +23,15 @@ from a5.core.utils import A5Cell
 
 __all__ = [
     # Indexing
-    'cell_to_boundary', 'cell_to_lonlat', 'lonlat_to_cell',
+    'cell_to_boundary', 'cell_to_lonlat', 'cell_to_spherical', 'lonlat_to_cell',
     'hex_to_u64', 'u64_to_hex',
     # Hierarchy
-    'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells',
-    'get_num_cells', 'cell_area',
+    'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells', 'WORLD_CELL',
+    'get_num_cells', 'get_num_children', 'cell_area',
     # Compaction
     'compact', 'uncompact',
+    # Traversal
+    'grid_disk', 'grid_disk_vertex', 'spherical_cap',
     # Types
     'Degrees', 'Radians', 'A5Cell'
 ] 

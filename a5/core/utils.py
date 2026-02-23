@@ -4,7 +4,7 @@
 import math
 from typing import List, Tuple, Optional, TypedDict, NamedTuple, Literal
 from .coordinate_systems import Radians, LonLat, Face, Spherical
-from .hilbert import Orientation
+from ..lattice.types import Orientation
 from dataclasses import dataclass
 
 # Type aliases for vectors and matrices (now pure Python)

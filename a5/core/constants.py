@@ -40,6 +40,12 @@ Radius of the circumscribed sphere for dodecahedron
 """
 R_CIRCUMSCRIBED = math.sqrt(3) * R_MIDEDGE / PHI
 
+# Authalic radius of Earth (meters)
+AUTHALIC_RADIUS_EARTH = 6371007.2  # m
+
+# Authalic surface area of Earth (square meters)
+AUTHALIC_AREA_EARTH = 4 * math.pi * AUTHALIC_RADIUS_EARTH * AUTHALIC_RADIUS_EARTH  # m^2
+
 __all__ = [
     'PHI',
     'TWO_PI',
@@ -53,5 +59,7 @@ __all__ = [
     'distance_to_vertex',
     'R_INSCRIBED',
     'R_MIDEDGE',
-    'R_CIRCUMSCRIBED'
+    'R_CIRCUMSCRIBED',
+    'AUTHALIC_RADIUS_EARTH',
+    'AUTHALIC_AREA_EARTH'
 ] 
