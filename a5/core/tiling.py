@@ -7,7 +7,7 @@ from typing import List, Tuple
 from ..geometry.pentagon import PentagonShape, Pentagon
 from .pentagon import a, BASIS, PENTAGON, TRIANGLE, v, V, w
 from .constants import TWO_PI, TWO_PI_OVER_5
-from .hilbert import NO, Anchor, YES
+from ..lattice import NO, Anchor, YES
 from ..math import vec2
 
 TRIANGLE_MODE = False
@@ -50,13 +50,13 @@ def get_pentagon_vertices(resolution: int, quintant: int, anchor: Anchor) -> Pen
     if anchor.flips[0] == NO and anchor.flips[1] == YES:
         pentagon.rotate180()
 
-    k = anchor.k
+    q = anchor.q
     F = anchor.flips[0] + anchor.flips[1]
     if (
         # Orient last two pentagons when both or neither flips are YES
-        ((F == -2 or F == 2) and k > 1) or
+        ((F == -2 or F == 2) and q > 1) or
         # Orient first & last pentagons when only one of flips is YES
-        (F == 0 and (k == 0 or k == 3))
+        (F == 0 and (q == 0 or q == 3))
     ):
         pentagon.reflect_y()
 
@@ -73,6 +73,31 @@ def get_pentagon_vertices(resolution: int, quintant: int, anchor: Anchor) -> Pen
     pentagon.transform(QUINTANT_ROTATIONS[quintant])
 
     return pentagon
+
+PentagonFlavor = int  # 0-7
+
+
+def get_pentagon_flavor(anchor: Anchor) -> PentagonFlavor:
+    """Get the flavor (0-7) of a pentagon from its anchor."""
+    f = 0
+    if anchor.flips[1] == YES:
+        f += 2
+
+    q = anchor.q
+    F = anchor.flips[0] + anchor.flips[1]
+    if (
+        # Orient last two pentagons when both or neither flips are YES
+        ((F == -2 or F == 2) and q > 1) or
+        # Orient first & last pentagons when only one of flips is YES
+        (F == 0 and (q == 0 or q == 3))
+    ):
+        f += 1
+
+    if F == -2 or F == 2:
+        f += 4
+
+    return f
+
 
 def get_quintant_vertices(quintant: int) -> PentagonShape:
     triangle = TRIANGLE.clone()

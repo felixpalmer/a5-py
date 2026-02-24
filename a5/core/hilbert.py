@@ -14,10 +14,17 @@ NO: Literal[1] = 1
 Flip = Literal[-1, 1]
 
 class Anchor:
-    def __init__(self, k: Quaternary, offset: IJ, flips: Tuple[Flip, Flip]):
-        self.k = k
-        self.offset = offset
-        self.flips = flips
+    def __init__(self, k: Quaternary = None, offset: IJ = None, flips: Tuple[Flip, Flip] = None, q: Quaternary = None):
+        # Support both old 'k' and new 'q' parameter names
+        if q is not None:
+            self.q = q
+        elif k is not None:
+            self.q = k
+        else:
+            self.q = 0
+        self.k = self.q  # Backwards compatibility
+        self.offset = offset if offset is not None else (0.0, 0.0)
+        self.flips = flips if flips is not None else (NO, NO)
 
 def reverse_pattern(pattern: List[int]) -> List[int]:
     """Reverse a pattern by finding the index of each position."""

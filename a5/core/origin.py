@@ -9,7 +9,7 @@ from typing import List, Tuple, NamedTuple
 from .coordinate_transforms import to_cartesian
 from .coordinate_systems import Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
-from .hilbert import Orientation
+from ..lattice.types import Orientation
 from ..math import quat
 from .utils import Origin
 from .dodecahedron_quaternions import quaternions
