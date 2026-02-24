@@ -18,9 +18,17 @@ CELL_RADIUS_SAFETY_FACTOR = 2.0
 MIN_CELLS_FOR_SUBDIVISION = 20
 
 # Pre-compute cell radii
+# Derived from: cellRadius = SAFETY * sqrt(cellArea / pi)
+#             = SAFETY * sqrt(4*pi*R^2 / (numCells * pi))
+#             = SAFETY * 2R / sqrt(numCells)
+# For r >= 1: numCells = 60 * 4^(r-1), so sqrt(numCells) = 2*sqrt(15) * 2^(r-1)
+# giving: cellRadius(r) = BASE / 2^(r-1) — halves at each resolution level.
+_BASE_CELL_RADIUS = CELL_RADIUS_SAFETY_FACTOR * AUTHALIC_RADIUS_EARTH / math.sqrt(15)
 _cell_radius: List[float] = [
-    CELL_RADIUS_SAFETY_FACTOR * math.sqrt(cell_area(r) / math.pi)
-    for r in range(31)
+    CELL_RADIUS_SAFETY_FACTOR * AUTHALIC_RADIUS_EARTH / math.sqrt(3)
+] + [
+    _BASE_CELL_RADIUS / (1 << (r - 1))
+    for r in range(1, 31)
 ]
 
 
