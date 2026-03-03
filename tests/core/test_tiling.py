@@ -34,7 +34,7 @@ class TestGetPentagonVertices:
             anchor = Anchor(
                 offset=tuple(input_data["anchor"]["offset"]),
                 flips=tuple(input_data["anchor"]["flips"]),
-                k=input_data["anchor"]["k"]
+                k=input_data["anchor"]["q"]
             )
             
             pentagon = get_pentagon_vertices(

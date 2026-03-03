@@ -34,7 +34,8 @@ class TestEstimateCellRadius:
         fixtures = load_fixtures()
         for case in fixtures["helpers"]["estimateCellRadius"]:
             result = estimate_cell_radius(case["resolution"])
-            assert result == case["expectedMeters"], \
+            # Allow tiny tolerance: Python's math may round differently from JS
+            assert abs(result - case["expectedMeters"]) < 1e-6, \
                 f'res={case["resolution"]}: {result} != {case["expectedMeters"]}'
 
     def test_decreases_with_resolution(self):
