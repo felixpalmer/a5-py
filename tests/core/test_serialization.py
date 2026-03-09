@@ -5,12 +5,13 @@ from a5.core.serialization import (
     deserialize,
     get_resolution,
     MAX_RESOLUTION,
-    REMOVAL_MASK,
     FIRST_HILBERT_RESOLUTION,
     WORLD_CELL,
     cell_to_parent,
     cell_to_children,
     get_res0_cells,
+    is_first_child,
+    get_stride,
 )
 from a5.core.utils import A5Cell
 from a5.core.origin import origins
@@ -20,46 +21,13 @@ import copy
 
 # Test data
 origin0 = copy.deepcopy(origins[0])
-TEST_IDS_PATH = Path(__file__).parent / "test-ids.json"
+FIXTURES_PATH = Path(__file__).parent / "fixtures" / "serialization.json"
 
-with open(TEST_IDS_PATH) as f:
-    TEST_IDS = json.load(f)
+with open(FIXTURES_PATH) as f:
+    FIXTURES = json.load(f)
 
-# Resolution masks for testing bit encoding
-RESOLUTION_MASKS = [
-    # Non-Hilbert resolutions
-    "0000001000000000000000000000000000000000000000000000000000000000",  # res0: Dodecahedron faces
-    "0000000100000000000000000000000000000000000000000000000000000000",  # res1: Quintants
-    # Hilbert resolutions (res2-29)
-    "0000000010000000000000000000000000000000000000000000000000000000",
-    "0000000000100000000000000000000000000000000000000000000000000000",
-    "0000000000001000000000000000000000000000000000000000000000000000",
-    "0000000000000010000000000000000000000000000000000000000000000000",
-    "0000000000000000100000000000000000000000000000000000000000000000",
-    "0000000000000000001000000000000000000000000000000000000000000000",
-    "0000000000000000000010000000000000000000000000000000000000000000",
-    "0000000000000000000000100000000000000000000000000000000000000000",
-    "0000000000000000000000001000000000000000000000000000000000000000",
-    "0000000000000000000000000010000000000000000000000000000000000000",
-    "0000000000000000000000000000100000000000000000000000000000000000",
-    "0000000000000000000000000000001000000000000000000000000000000000",
-    "0000000000000000000000000000000010000000000000000000000000000000",
-    "0000000000000000000000000000000000100000000000000000000000000000",
-    "0000000000000000000000000000000000001000000000000000000000000000",
-    "0000000000000000000000000000000000000010000000000000000000000000",
-    "0000000000000000000000000000000000000000100000000000000000000000",
-    "0000000000000000000000000000000000000000001000000000000000000000",
-    "0000000000000000000000000000000000000000000010000000000000000000",
-    "0000000000000000000000000000000000000000000000100000000000000000",
-    "0000000000000000000000000000000000000000000000001000000000000000",
-    "0000000000000000000000000000000000000000000000000010000000000000",
-    "0000000000000000000000000000000000000000000000000000100000000000",
-    "0000000000000000000000000000000000000000000000000000001000000000",
-    "0000000000000000000000000000000000000000000000000000000010000000",
-    "0000000000000000000000000000000000000000000000000000000000100000",
-    "0000000000000000000000000000000000000000000000000000000000001000",
-    "0000000000000000000000000000000000000000000000000000000000000010",
-]
+RESOLUTION_MASKS = FIXTURES["resolutionMasks"]
+TEST_IDS = FIXTURES["testIds"]
 
 
 # Helper function to compare A5Cell objects
@@ -82,15 +50,7 @@ def assert_cells_equal(actual: A5Cell, expected: A5Cell):
 
 def test_correct_number_of_masks():
     """Test correct number of masks."""
-    assert len(RESOLUTION_MASKS) == MAX_RESOLUTION
-
-
-def test_removal_mask_is_correct():
-    """Test removal mask is correct."""
-    origin_segment_bits = "0" * 6
-    remaining_bits = "1" * 58
-    expected = int(f"0b{origin_segment_bits}{remaining_bits}", 2)
-    assert REMOVAL_MASK == expected
+    assert len(RESOLUTION_MASKS) == MAX_RESOLUTION + 1
 
 
 def test_encodes_resolution_correctly_for_different_values():
@@ -146,7 +106,7 @@ def test_round_trip_test_ids(id):
 
 
 @pytest.mark.parametrize("origin_id", range(1, 12))
-@pytest.mark.parametrize("binary", RESOLUTION_MASKS[FIRST_HILBERT_RESOLUTION:])
+@pytest.mark.parametrize("binary", RESOLUTION_MASKS[FIRST_HILBERT_RESOLUTION:MAX_RESOLUTION])
 def test_round_trip_resolution_masks_with_origins(origin_id, binary):
     """Test round trip for resolution masks with different origins."""
     origin_segment_id = format(5 * origin_id, '06b')
@@ -156,19 +116,19 @@ def test_round_trip_resolution_masks_with_origins(origin_id, binary):
     assert reserialized == serialized
 
 
-@pytest.mark.parametrize("resolution", range(MAX_RESOLUTION))
+@pytest.mark.parametrize("resolution", range(MAX_RESOLUTION + 1))
 def test_serialize_deserialize_round_trip(resolution):
     """Test serialize/deserialize round trip for all resolutions."""
     input_cell = A5Cell(origin=origin0, segment=4, S=0, resolution=resolution)
-    
+
     serialized = serialize(input_cell)
     deserialized = deserialize(serialized)
-    
+
     # At resolution 0, segment is always normalized to 0
     expected_cell = copy.deepcopy(input_cell)
     if resolution == 0:
         expected_cell["segment"] = 0
-    
+
     assert_cells_equal(deserialized, expected_cell)
     assert get_resolution(serialized) == resolution
 
@@ -196,16 +156,20 @@ def test_cell_to_parent_with_same_resolution_returns_original_cell(id):
 def test_round_trip_between_cell_to_parent_and_cell_to_children(id):
     """Test parent-child round trip."""
     cell = int(id, 16)
-    
+    resolution = get_resolution(cell)
+    # Skip res 30 (no children) and res 29 with out-of-bounds quintants
+    # (res 30 children fall back to res 29)
+    if resolution >= MAX_RESOLUTION:
+        return
+    child = cell_to_children(cell)[0]
+    if get_resolution(child) != resolution + 1:
+        return
+
+    parent = cell_to_parent(child)
+    assert parent == cell
+
     children = cell_to_children(cell)
-    assert children, "No children returned"
-    
-    # Test first child
-    child = children[0]
-    assert cell_to_parent(child) == cell
-    
-    # Test all children have same parent
-    parents = [cell_to_parent(child) for child in children]
+    parents = [cell_to_parent(c) for c in children]
     assert all(p == cell for p in parents), "Not all children map to the same parent"
 
 
@@ -287,7 +251,319 @@ def test_get_res0_cells_returns_12_resolution_0_cells():
     """Test getRes0Cells functionality."""
     res0_cells = get_res0_cells()
     assert len(res0_cells) == 12
-    
+
     # Each cell should have resolution 0
     for cell in res0_cells:
         assert get_resolution(cell) == 0
+
+
+# =============================================================================
+# resolution 30 tests
+# =============================================================================
+
+def test_res30_get_resolution_detects_from_lsb():
+    """Any odd int (LSB=1) that isn't 0 is resolution 30."""
+    assert get_resolution(1) == 30
+    assert get_resolution(3) == 30
+    assert get_resolution(0xFFFFFFFFFFFFFFFF) == 30
+
+
+def test_res30_round_trip_valid_quintants():
+    """Serialize/deserialize round trip for valid quintants (0-41)."""
+    for q in range(42):
+        origin_id = q // 5
+        origin = origins[origin_id]
+        segment_n = q % 5
+        segment = (segment_n + origin.first_quintant) % 5
+
+        cell = A5Cell(origin=origin, segment=segment, S=0, resolution=30)
+        serialized = serialize(cell)
+        assert get_resolution(serialized) == 30
+
+        # Verify correct marker pattern
+        if q <= 31:
+            assert serialized & 1 == 1  # ...1 encoding
+        elif q <= 39:
+            assert serialized & 0b111 == 0b100  # ...100 encoding
+        else:
+            assert serialized & 0b11111 == 0b10000  # ...10000 encoding
+
+        deserialized = deserialize(serialized)
+        assert deserialized["origin"].id == origin_id
+        assert deserialized["segment"] == segment
+        assert deserialized["S"] == 0
+        assert deserialized["resolution"] == 30
+
+        # Round trip
+        reserialized = serialize(deserialized)
+        assert reserialized == serialized
+
+
+def test_res30_round_trip_nonzero_s():
+    """Serialize/deserialize round trip with non-zero S."""
+    origin = origins[0]
+    segment = (0 + origin.first_quintant) % 5
+
+    test_s_values = [0, 1, 42, (1 << 58) - 1]
+    for s in test_s_values:
+        cell = A5Cell(origin=origin, segment=segment, S=s, resolution=30)
+        serialized = serialize(cell)
+        deserialized = deserialize(serialized)
+        assert deserialized["S"] == s
+        assert deserialized["resolution"] == 30
+        assert serialize(deserialized) == serialized
+
+
+def test_res30_bit_layout_1_encoding():
+    """Bit layout: ...1 encoding (quintant 0-31)."""
+    origin = origins[0]
+    segment = (0 + origin.first_quintant) % 5
+
+    # Quintant 0, S=0 -> just the marker bit
+    cell0 = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))
+    assert cell0 == 1
+
+    # Quintant 0, S=1 -> marker + S shifted left by 1
+    cell1 = serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))
+    assert cell1 == 0b11
+
+
+def test_res30_bit_layout_10000_encoding():
+    """Bit layout: ...10000 encoding (quintant 40-41)."""
+    origin = origins[8]
+    segment = (0 + origin.first_quintant) % 5
+
+    # Quintant 40, S=0 -> just the marker
+    cell0 = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))
+    assert cell0 == 0b10000
+
+    # Quintant 40, S=1 -> S shifted left by 5 + marker
+    cell1 = serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))
+    assert cell1 == 0b110000
+
+
+def test_res30_bit_layout_100_encoding():
+    """Bit layout: ...100 encoding (quintant 32-39)."""
+    # Origin 6 has quintants 30-34, segmentN=2 gives quintant 32
+    origin = origins[6]
+    segment_n = 2
+    segment = (segment_n + origin.first_quintant) % 5
+
+    # Quintant 32, S=0 -> just the marker
+    cell0 = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))
+    assert cell0 == 0b100
+
+    # Quintant 32, S=1 -> S shifted left by 3 + marker
+    cell1 = serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))
+    assert cell1 == 0b1100
+
+
+def test_res30_round_trip_nonzero_s_100_encoding():
+    """Round trip with non-zero S (...100 encoding)."""
+    # Use quintant 35 (origin 7, segmentN=0)
+    origin = origins[7]
+    segment = (0 + origin.first_quintant) % 5
+
+    test_s_values = [0, 1, 42, (1 << 58) - 1]
+    for s in test_s_values:
+        cell = A5Cell(origin=origin, segment=segment, S=s, resolution=30)
+        serialized = serialize(cell)
+        assert serialized & 0b111 == 0b100  # ...100 marker
+        deserialized = deserialize(serialized)
+        assert deserialized["S"] == s
+        assert deserialized["resolution"] == 30
+        assert serialize(deserialized) == serialized
+
+
+def test_res30_round_trip_nonzero_s_10000_encoding():
+    """Round trip with non-zero S (...10000 encoding)."""
+    # Use quintant 40 (origin 8, segmentN=0)
+    origin = origins[8]
+    segment = (0 + origin.first_quintant) % 5
+
+    test_s_values = [0, 1, 42, (1 << 58) - 1]
+    for s in test_s_values:
+        cell = A5Cell(origin=origin, segment=segment, S=s, resolution=30)
+        serialized = serialize(cell)
+        assert serialized & 0b11111 == 0b10000  # ...10000 marker
+        deserialized = deserialize(serialized)
+        assert deserialized["S"] == s
+        assert deserialized["resolution"] == 30
+        assert serialize(deserialized) == serialized
+
+
+def test_res30_falls_back_to_res29_for_quintant_gt_41():
+    """Falls back to res 29 for quintant > 41."""
+    # Origin 9 has quintants 45-49, all > 41
+    origin = origins[9]
+    segment = (0 + origin.first_quintant) % 5
+    cell = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))
+    assert get_resolution(cell) == 29
+
+    # With non-zero S, the parent S should be S >> 2
+    cell2 = serialize(A5Cell(origin=origin, segment=segment, S=7, resolution=30))
+    assert get_resolution(cell2) == 29
+    assert deserialize(cell2)["S"] == 1  # 7 >> 2 = 1
+
+
+def test_res30_falls_back_for_out_of_bounds_quintant_55():
+    """Falls back to res 29 for out-of-bounds quintant (e.g. 55)."""
+    # Origin 11 has quintants 55-59, all > 41
+    origin = origins[11]
+    segment_n = 0
+    segment = (segment_n + origin.first_quintant) % 5
+    cell = serialize(A5Cell(origin=origin, segment=segment, S=100, resolution=30))
+    assert get_resolution(cell) == 29
+    assert deserialize(cell)["S"] == 25  # 100 >> 2 = 25
+    assert deserialize(cell)["origin"].id == 11
+
+
+def test_res30_throws_for_s_too_large():
+    """Throws for S too large."""
+    origin = origins[0]
+    segment = (0 + origin.first_quintant) % 5
+    with pytest.raises(ValueError, match="too large for resolution level 30"):
+        serialize(A5Cell(origin=origin, segment=segment, S=1 << 58, resolution=30))
+
+
+def test_res30_cell_to_parent():
+    """cellToParent from res 30 to res 29."""
+    origin = origins[0]
+    segment = (0 + origin.first_quintant) % 5
+
+    for i in range(4):
+        child = serialize(A5Cell(origin=origin, segment=segment, S=i, resolution=30))
+        parent = cell_to_parent(child)
+        assert get_resolution(parent) == 29
+        assert deserialize(parent)["S"] == 0
+
+
+def test_res30_cell_to_children():
+    """cellToChildren from res 29 to res 30."""
+    origin = origins[0]
+    segment = (0 + origin.first_quintant) % 5
+    parent = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=29))
+    children = cell_to_children(parent, 30)
+
+    assert len(children) == 4
+    for i, child in enumerate(children):
+        assert get_resolution(child) == 30
+        assert deserialize(child)["S"] == i
+
+
+def test_res30_children_parent_round_trip():
+    """cellToChildren/cellToParent round trip."""
+    origin = origins[0]
+    segment = (0 + origin.first_quintant) % 5
+    parent = serialize(A5Cell(origin=origin, segment=segment, S=42, resolution=29))
+    children = cell_to_children(parent, 30)
+
+    assert len(children) == 4
+    for child in children:
+        assert cell_to_parent(child) == parent
+
+
+def test_res30_get_stride():
+    """getStride returns 2 for res 30."""
+    assert get_stride(30) == 2
+
+
+def test_res30_is_first_child_1_encoding():
+    """isFirstChild works for res 30 (...1 encoding)."""
+    origin = origins[0]
+    segment = (0 + origin.first_quintant) % 5
+
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))) is True
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))) is False
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=4, resolution=30))) is True
+
+
+def test_res30_is_first_child_100_encoding():
+    """isFirstChild works for res 30 (...100 encoding)."""
+    origin = origins[7]  # quintant 35, uses ...100
+    segment = (0 + origin.first_quintant) % 5
+
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))) is True
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))) is False
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=4, resolution=30))) is True
+
+
+def test_res30_is_first_child_10000_encoding():
+    """isFirstChild works for res 30 (...10000 encoding)."""
+    origin = origins[8]  # quintant 40, uses ...10000
+    segment = (0 + origin.first_quintant) % 5
+
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))) is True
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))) is False
+    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=4, resolution=30))) is True
+
+
+def test_res30_children_parent_round_trip_10000_encoding():
+    """cellToChildren/cellToParent round trip (...10000 encoding)."""
+    origin = origins[8]
+    segment = (0 + origin.first_quintant) % 5
+    parent = serialize(A5Cell(origin=origin, segment=segment, S=10, resolution=29))
+    children = cell_to_children(parent, 30)
+
+    assert len(children) == 4
+    for child in children:
+        assert get_resolution(child) == 30
+        assert child & 0b11111 == 0b10000  # ...10000 marker
+        assert cell_to_parent(child) == parent
+
+
+def test_res30_children_parent_round_trip_100_encoding():
+    """cellToChildren/cellToParent round trip (...100 encoding)."""
+    origin = origins[7]
+    segment = (0 + origin.first_quintant) % 5
+    parent = serialize(A5Cell(origin=origin, segment=segment, S=10, resolution=29))
+    children = cell_to_children(parent, 30)
+
+    assert len(children) == 4
+    for child in children:
+        assert get_resolution(child) == 30
+        assert child & 0b111 == 0b100  # ...100 marker
+        assert cell_to_parent(child) == parent
+
+
+def test_res30_cell_to_children_throws_at_max():
+    """cellToChildren of res 30 throws (max resolution)."""
+    origin = origins[0]
+    segment = (0 + origin.first_quintant) % 5
+    cell = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))
+    with pytest.raises(ValueError, match="exceeds maximum resolution"):
+        cell_to_children(cell)
+
+
+# =============================================================================
+# resolution 30 location tests
+# =============================================================================
+
+def test_res30_locations_round_trip():
+    """Round trip for res 30 location cells."""
+    res30_locations = FIXTURES["res30Locations"]
+    for loc in res30_locations:
+        cell = int(loc["hex"], 16)
+        deserialized = deserialize(cell)
+        reserialized = serialize(deserialized)
+        assert reserialized == cell
+
+
+def test_res30_locations_out_of_bounds_fall_back():
+    """Out-of-bounds quintants fall back to res 29."""
+    res30_locations = FIXTURES["res30Locations"]
+    out_of_bounds = [l for l in res30_locations if l["resolution"] == 29]
+    assert len(out_of_bounds) > 0
+    for loc in out_of_bounds:
+        cell = int(loc["hex"], 16)
+        assert get_resolution(cell) == 29
+
+
+def test_res30_locations_in_bounds_encode_at_res30():
+    """In-bounds quintants encode at res 30."""
+    res30_locations = FIXTURES["res30Locations"]
+    in_bounds = [l for l in res30_locations if l["resolution"] == 30]
+    assert len(in_bounds) > 0
+    for loc in in_bounds:
+        cell = int(loc["hex"], 16)
+        assert get_resolution(cell) == 30
