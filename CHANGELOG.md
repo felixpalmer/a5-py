@@ -19,6 +19,10 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v0.7.1] - Mar 10 2026
+
+- Feature: Support (de)serialization of resolution 30 cells (#37)
+
 #### pya5 [v0.7.0] - Mar 3 2026
 
 - Feature: gridDisk & sphericalCap (#35)

@@ -24,5 +24,12 @@ rm -rf dist/*
 uv version --bump patch|minor|major
 uv build
 uv run pytest
+
+Update CHANGELOG
+git add CHANGELOG.md pyproject.toml uv.lock
+git commit -m "x.y.z release"
 uv publish --token <TOKEN>
+
+git tag vx.y.z
+git push && git push --tags
 ```
