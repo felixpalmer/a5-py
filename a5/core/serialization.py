@@ -9,15 +9,6 @@ FIRST_HILBERT_RESOLUTION = 2
 MAX_RESOLUTION = 30
 HILBERT_START_BIT = 58  # 64 - 6 bits for origin & segment
 
-# First 6 bits 0, remaining 58 bits 1
-REMOVAL_MASK = 0x3ffffffffffffff
-
-# First 6 bits 1, remaining 58 bits 0
-ORIGIN_SEGMENT_MASK = 0xfc00000000000000
-
-# All 64 bits 1
-ALL_ONES = 0xffffffffffffffff
-
 # Abstract cell that contains the whole world, has resolution -1 and 12 children,
 # which are the res0 cells.
 WORLD_CELL = 0
@@ -25,8 +16,21 @@ WORLD_CELL = 0
 
 def get_resolution(index: int) -> int:
     """Find resolution from position of first non-00 bits from the right."""
+    if index == 0:
+        return -1
+
+    # Resolution 30 uses three encoding patterns:
+    #   ...1     -> 5-bit quintant (0-31),  58-bit S
+    #   ...100   -> 3-bit quintant (32-39), 58-bit S
+    #   ...10000 -> 1-bit quintant (40-41), 58-bit S
+    if (index & 1) or (index & 0b111) == 0b100 or (index & 0b11111) == 0b10000:
+        return MAX_RESOLUTION
+
     resolution = MAX_RESOLUTION - 1
-    shifted = index >> 1  # TODO check if non-zero for point level
+    shifted = index >> 1
+    if shifted == 0:
+        return -1
+
     while resolution > -1 and (shifted & 1) == 0:
         resolution -= 1
         # For non-Hilbert resolutions, resolution marker moves by 1 bit per resolution
@@ -44,30 +48,40 @@ def deserialize(index: int) -> A5Cell:
     if resolution == -1:
         return A5Cell(origin=origins[0], segment=0, S=0, resolution=resolution)
 
-    # Extract origin*segment from top 6 bits
-    top6_bits = index >> 58
-    
-    # Find origin and segment that multiply to give this product
+    # For res 30, quintant bits are fewer to make room for S:
+    #   ...1     marker (1 bit)  -> 5-bit quintant (0-31)
+    #   ...100   marker (3 bits) -> 3-bit quintant + 32 (32-39)
+    #   ...10000 marker (5 bits) -> 1-bit quintant + 40 (40-41)
+    quintant_shift = HILBERT_START_BIT
+    quintant_offset = 0
+    if resolution == MAX_RESOLUTION:
+        marker_bits = 1 if (index & 1) else (3 if (index & 0b100) else 5)
+        quintant_shift = HILBERT_START_BIT + marker_bits
+        quintant_offset = 0 if marker_bits == 1 else (32 if marker_bits == 3 else 40)
+
+    # Extract origin*segment from top bits
+    top_bits = (index >> quintant_shift) + quintant_offset
+
+    # Find origin and segment
     if resolution == 0:
-        origin_id = top6_bits
-        origin = origins[origin_id]
+        origin = origins[top_bits]
         segment = 0
     else:
-        origin_id = top6_bits // 5
+        origin_id = top_bits // 5
         origin = origins[origin_id]
-        segment = (top6_bits + origin.first_quintant) % 5
+        segment = (top_bits + origin.first_quintant) % 5
 
     if origin is None:
-        raise ValueError(f"Could not parse origin: {top6_bits}")
+        raise ValueError(f"Could not parse origin: {top_bits}")
 
     if resolution < FIRST_HILBERT_RESOLUTION:
         return A5Cell(origin=origin, segment=segment, S=0, resolution=resolution)
 
-    # Mask away origin & segment and shift away resolution and 00 bits
+    # Mask away origin & segment and shift away resolution and marker bits
     hilbert_levels = resolution - FIRST_HILBERT_RESOLUTION + 1
     hilbert_bits = 2 * hilbert_levels
-    shift = HILBERT_START_BIT - hilbert_bits
-    S = (index & REMOVAL_MASK) >> shift
+    removal_mask = (1 << quintant_shift) - 1
+    S = (index & removal_mask) >> (quintant_shift - hilbert_bits)
 
     return A5Cell(origin=origin, segment=segment, S=S, resolution=resolution)
 
@@ -85,34 +99,52 @@ def serialize(cell: A5Cell) -> int:
     if resolution == -1:
         return WORLD_CELL
 
+    # For res 30, quintant bits are fewer to make room for S:
+    #   quintant 0-31:  ...1     marker -> 5-bit quintant
+    #   quintant 32-39: ...100   marker -> 3-bit quintant + 32
+    #   quintant 40-41: ...10000 marker -> 1-bit quintant + 40
+    #   quintant 42+:   fall back to res 29
+    quintant_shift = HILBERT_START_BIT
+
     # Position of resolution marker as bit shift from LSB
     if resolution < FIRST_HILBERT_RESOLUTION:
-        # For non-Hilbert resolutions, resolution marker moves by 1 bit per resolution
         R = resolution + 1
     else:
-        # For Hilbert resolutions, resolution marker moves by 2 bits per resolution
         hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
         R = 2 * hilbert_resolution + 1
 
-    # First 6 bits are the origin id and the segment
+    # Top bits encode the origin id and segment
     segment_n = (segment - origin.first_quintant + 5) % 5
 
     if resolution == 0:
-        index = origin.id << 58
+        index = origin.id << quintant_shift
     else:
-        index = (5 * origin.id + segment_n) << 58
+        quintant = 5 * origin.id + segment_n
+        if resolution == MAX_RESOLUTION:
+            if quintant <= 31:
+                quintant_shift = HILBERT_START_BIT + 1
+                quintant_value = quintant
+            elif quintant <= 39:
+                quintant_shift = HILBERT_START_BIT + 3
+                quintant_value = quintant - 32
+            elif quintant <= 41:
+                quintant_shift = HILBERT_START_BIT + 5
+                quintant_value = quintant - 40
+            else:
+                return serialize(A5Cell(origin=origin, segment=segment, S=S >> 2, resolution=MAX_RESOLUTION - 1))
+            index = quintant_value << quintant_shift
+        else:
+            index = quintant << quintant_shift
 
     if resolution >= FIRST_HILBERT_RESOLUTION:
-        # Number of bits required for S Hilbert curve
         hilbert_levels = resolution - FIRST_HILBERT_RESOLUTION + 1
         hilbert_bits = 2 * hilbert_levels
         if S >= (1 << hilbert_bits):
             raise ValueError(f"S ({S}) is too large for resolution level {resolution}")
-        # Next (2 * hilbertResolution) bits are S (hilbert index within segment)
-        index += S << (HILBERT_START_BIT - hilbert_bits)
-  
+        index += S << (quintant_shift - hilbert_bits)
+
     # Resolution is encoded by position of the least significant 1
-    index |= 1 << (HILBERT_START_BIT - R)
+    index |= 1 << (quintant_shift - R)
 
     return index
 
@@ -207,6 +239,11 @@ def is_first_child(index: int, resolution: Optional[int] = None) -> bool:
         child_count = 12 if resolution == 0 else 5
         return top6_bits % child_count == 0
 
+    if resolution == MAX_RESOLUTION:
+        # S's 2 LSBs sit just above the marker bits
+        marker_bits = 1 if (index & 1) else (3 if (index & 0b100) else 5)
+        return (index & (3 << marker_bits)) == 0
+
     s_position = 2 * (MAX_RESOLUTION - resolution)
     s_mask = 3 << s_position  # Mask for the 2 LSBs of S
     return (index & s_mask) == 0
@@ -218,6 +255,10 @@ def get_stride(resolution: int) -> int:
     if resolution < 2:
         return 1 << HILBERT_START_BIT
 
+    # For res 30, S is shifted left by 1 (marker bit at position 0)
+    if resolution == MAX_RESOLUTION:
+        return 2
+
     # For hilbert levels, the position shifts by 2 bits per resolution level
     s_position = 2 * (MAX_RESOLUTION - resolution)
-    return 1 << s_position  
+    return 1 << s_position
