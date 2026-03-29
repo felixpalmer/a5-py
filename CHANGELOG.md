@@ -19,6 +19,10 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v0.7.2] - Mar 29 2026
+
+- Feature: Support neighbor functions in res 0 & 1 (#38)
+
 #### pya5 [v0.7.1] - Mar 10 2026
 
 - Feature: Support (de)serialization of resolution 30 cells (#37)
