@@ -203,8 +203,10 @@ def test_spherical_to_lonlat():
     for lon_lat in TEST_POINTS_LONLAT:
         spherical = from_lonlat(lon_lat)
         result = to_lonlat(spherical)
-        
-        assert all(abs(r - l) < 1e-10 for r, l in zip([result[0], result[1]], [lon_lat[0], lon_lat[1]]))
+
+        # 180 and -180 are equivalent longitudes (antimeridian)
+        expected_lon = -180.0 if lon_lat[0] == 180.0 else lon_lat[0]
+        assert all(abs(r - l) < 1e-10 for r, l in zip([result[0], result[1]], [expected_lon, lon_lat[1]]))
 
 def test_normalize_longitudes():
     """Test longitude normalization for contours."""

@@ -15,10 +15,14 @@ from a5.core.hex import hex_to_u64, u64_to_hex
 # Load test data
 FIXTURES_PATH = Path(__file__).parent / "fixtures"
 POPULATED_PLACES_PATH = FIXTURES_PATH / "ne_50m_populated_places_nameonly.json"
+CELL_TO_LONLAT_PATH = FIXTURES_PATH / "cell-to-lonlat.json"
 
 with open(POPULATED_PLACES_PATH) as f:
     populated_places = json.load(f)
     populated_places['features'] = populated_places['features']
+
+with open(CELL_TO_LONLAT_PATH) as f:
+    cell_to_lonlat_fixtures = json.load(f)
 
 class TestCellIDValidation:
     """Test cell ID validation and special cases."""
@@ -166,4 +170,28 @@ class TestCellBoundary:
             'features': [cell_feature, point_feature]
         }
 
-        return feature_collection 
+        return feature_collection
+
+
+class TestCellToLonLat:
+    """Test cellToLonLat returns valid coordinates."""
+
+    def test_longitude_in_valid_range(self):
+        """Should return longitude in [-180, 180] range."""
+        for fixture in cell_to_lonlat_fixtures:
+            cell = hex_to_u64(fixture['cell_id'])
+            lon, lat = cell_to_lonlat(cell)
+            assert lon >= -180, f"lon {lon} < -180 for cell {fixture['cell_id']}"
+            assert lon <= 180, f"lon {lon} > 180 for cell {fixture['cell_id']}"
+            assert lat >= -90, f"lat {lat} < -90 for cell {fixture['cell_id']}"
+            assert lat <= 90, f"lat {lat} > 90 for cell {fixture['cell_id']}"
+
+    def test_matches_fixture_values(self):
+        """Should match fixture values."""
+        for fixture in cell_to_lonlat_fixtures:
+            cell = hex_to_u64(fixture['cell_id'])
+            lon, lat = cell_to_lonlat(cell)
+            assert lon == pytest.approx(fixture['center_lonlat'][0], abs=1e-10), \
+                f"lon mismatch for cell {fixture['cell_id']}: {lon} != {fixture['center_lonlat'][0]}"
+            assert lat == pytest.approx(fixture['center_lonlat'][1], abs=1e-10), \
+                f"lat mismatch for cell {fixture['cell_id']}: {lat} != {fixture['center_lonlat'][1]}"
