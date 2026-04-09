@@ -19,6 +19,10 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v0.7.3] - Apr 9 2026
+
+- fix: normalize longitude in toLonLat to -180-180 (#40)
+
 #### pya5 [v0.7.2] - Mar 29 2026
 
 - Feature: Support neighbor functions in res 0 & 1 (#38)
