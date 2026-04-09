@@ -93,21 +93,25 @@ def from_lonlat(lon_lat: LonLat) -> Spherical:
     phi = cast(Radians, math.pi / 2 - authalic_lat)
     return cast(Spherical, (theta, phi))
 
+def normalize_longitude(lon: Degrees) -> Degrees:
+    """Normalize a longitude value to the range [-180, 180)."""
+    return cast(Degrees, ((lon + 180) % 360 + 360) % 360 - 180)
+
 def to_lonlat(spherical: Spherical) -> LonLat:
     """Convert spherical coordinates to longitude/latitude.
-    
+
     Args:
         spherical: Tuple of (theta, phi) in radians
             theta: 0 to 2π
             phi: 0 to π
-    
+
     Returns:
         Tuple of (longitude, latitude) in degrees
-            longitude: 0 to 360
+            longitude: -180 to 180
             latitude: -90 to 90
     """
     theta, phi = spherical
-    longitude = rad_to_deg(theta) - LONGITUDE_OFFSET
+    longitude = normalize_longitude(rad_to_deg(theta) - LONGITUDE_OFFSET)
 
     authalic_lat = cast(Radians, math.pi / 2 - phi)
     geodetic_lat = authalic.inverse(authalic_lat)
@@ -160,8 +164,7 @@ def normalize_longitudes(contour: Contour) -> Contour:
         # Near poles, use first point's longitude
         center_lon = contour[0][0]
 
-    # Normalize center longitude to be in the range -180 to 180
-    center_lon = ((center_lon + 180) % 360 + 360) % 360 - 180
+    center_lon = normalize_longitude(center_lon)
 
     # Normalize each point relative to center
     result = []
