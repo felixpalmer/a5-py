@@ -183,37 +183,84 @@ def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List
 
     return children
 
-def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
-    """Get the parent of a cell at a specific resolution."""
-    cell = deserialize(index)
-    origin, segment, S, current_resolution = cell["origin"], cell["segment"], cell["S"], cell["resolution"]
+def _is_max_resolution(index: int) -> bool:
+    """Cheap predicate that mirrors the first three checks in get_resolution:
+    res-30 cells are exactly those whose low bits match one of the three
+    variable-width quintant marker patterns.
+    """
+    return (
+        (index & 1) != 0
+        or (index & 0b111) == 0b100
+        or (index & 0b11111) == 0b10000
+    )
 
-    new_resolution = parent_resolution if parent_resolution is not None else current_resolution - 1
+
+def _normalize_res30(index: int) -> int:
+    """Re-pack a res-30 cell into the standard res-29 bit layout (6-bit quintant
+    in [63..58], 56-bit S in [57..2], marker at bit 1). The 58-bit res-30 S is
+    truncated by 2 bits, exactly as cell_to_parent(_, 29) would.
+    """
+    if index & 1:
+        q_shift, q_offset, marker_bits = 59, 0, 1
+    elif index & 0b100:
+        q_shift, q_offset, marker_bits = 61, 32, 3
+    else:
+        q_shift, q_offset, marker_bits = 63, 40, 5
+    quintant = (index >> q_shift) + q_offset
+    s58 = (index >> marker_bits) & ((1 << 58) - 1)
+    return (quintant << 58) | ((s58 >> 2) << 2) | (1 << 1)
+
+
+def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
+    """Walk a cell up the hierarchy to a coarser resolution.
+
+    Implemented as pure bit ops over the encoded index — no deserialize /
+    serialize round-trip. The three encoding regimes (non-Hilbert res 0/1,
+    Hilbert res 2..29, variable-width res 30) all reduce to the same shape
+    after a small amount of normalization.
+    """
+    if parent_resolution is None:
+        parent_resolution = get_resolution(index) - 1
 
     # Special case: parent of resolution 0 cells is the world cell
-    if new_resolution == -1:
+    if parent_resolution == -1:
         return WORLD_CELL
-
-    if new_resolution < -1:
-        raise ValueError(f"Target resolution ({new_resolution}) cannot be less than -1")
-
-    if new_resolution > current_resolution:
+    if parent_resolution < -1 or parent_resolution > MAX_RESOLUTION:
+        raise ValueError(f"Target resolution ({parent_resolution}) is out of range")
+    if index == WORLD_CELL:
         raise ValueError(
-            f"Target resolution ({new_resolution}) must be equal to or less than current resolution ({current_resolution})"
+            f"Target resolution ({parent_resolution}) must be equal to or less than current resolution (-1)"
         )
 
-    if new_resolution == current_resolution:
-        return index
+    # Normalize res-30 children to the standard res-29 layout. After this,
+    # the fast paths below treat the cell as a Hilbert-range cell.
+    c = index
+    if _is_max_resolution(index):
+        if parent_resolution == MAX_RESOLUTION:
+            return index  # identity (already res 30)
+        c = _normalize_res30(index)
+        if parent_resolution == MAX_RESOLUTION - 1:
+            return c
 
-    resolution_diff = current_resolution - new_resolution
-    shifted_S = S >> (2 * resolution_diff)
+    if parent_resolution >= FIRST_HILBERT_RESOLUTION:
+        # Hilbert-range parent: clear bits below the parent marker, set the marker.
+        # Identity (parent res === child res) falls out for free: the marker lands
+        # in the same position and bits below the keep cut are already zero.
+        keep_shift = 60 - 2 * parent_resolution
+        return ((c >> keep_shift) << keep_shift) | (1 << (59 - 2 * parent_resolution))
 
-    return serialize(A5Cell(
-        origin=origin,
-        segment=segment,
-        S=shifted_S,
-        resolution=new_resolution
-    ))
+    if parent_resolution == 1:
+        # Top 6 bits already encode 5*originId + segmentN; only the marker moves.
+        # Identity (cell already at res 1) is preserved.
+        return ((c >> 58) << 58) | (1 << 56)
+
+    # parent_resolution == 0: top 6 bits change from quintant (0-59) to originId (0-11).
+    # Identity (cell already at res 0) needs an explicit guard since dividing
+    # an originId by 5 would corrupt it. A res-0 cell has bit 57 set with all
+    # lower bits zero — equivalently, all bottom 57 bits are zero.
+    if (c & ((1 << 57) - 1)) == 0:
+        return c
+    return (((c >> 58) // 5) << 58) | (1 << 57)
 
 
 def get_res0_cells() -> List[int]:
@@ -247,6 +294,24 @@ def is_first_child(index: int, resolution: Optional[int] = None) -> bool:
     s_position = 2 * (MAX_RESOLUTION - resolution)
     s_mask = 3 << s_position  # Mask for the 2 LSBs of S
     return (index & s_mask) == 0
+
+
+def is_child_of(child: int, parent: int, parent_resolution: int) -> bool:
+    """Bit-level descendant test: is child the same cell as parent, or one of
+    its descendants at any deeper resolution? Compares the high (quintant +
+    parent's Hilbert) bits in a single shift, no deserialize needed.
+
+    Restricted to the Hilbert range: parent_resolution must be in
+    [FIRST_HILBERT_RESOLUTION .. MAX_RESOLUTION - 1], and child must not be
+    a resolution-30 cell (whose encoding uses a variable quintant shift).
+    Callers handling those cases should fall back to cell_to_parent equality.
+    """
+    # Parent's identifying bits occupy positions 63..(60-2P): 6 quintant bits
+    # + 2(P-1) Hilbert bits. Bit (59-2P) is the marker, below that is zero.
+    # Shifting both right by (60-2P) keeps exactly those identifying bits and
+    # discards the marker, so a descendant matches iff the high bits match.
+    shift = 60 - 2 * parent_resolution
+    return (child >> shift) == (parent >> shift)
 
 
 def get_stride(resolution: int) -> int:
