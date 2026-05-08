@@ -58,48 +58,60 @@ def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
     Returns:
         Cell ID as a big integer
     """
+    return spherical_to_cell(from_lonlat(lon_lat), resolution)
+
+
+def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
+    """
+    Like `lonlat_to_cell`, but accepts a point already in A5's internal spherical
+    representation (rotated authalic frame, as produced by `from_lonlat` or
+    `to_spherical(authalic_cartesian)`). Skips the redundant authalic
+    inverse/forward round-trip in dense-sample loops where the input already
+    comes from the authalic Cartesian space (e.g. polygon-fill boundary slerp).
+    """
     # Resolution -1 represents WORLD_CELL, which covers the entire world
     if resolution == -1:
         return WORLD_CELL
 
     if resolution < FIRST_HILBERT_RESOLUTION:
         # For low resolutions there is no Hilbert curve, so we can just return as the result is exact
-        return serialize(_lonlat_to_estimate(lon_lat, resolution))
+        return serialize(_spherical_to_estimate(spherical, resolution))
 
     # Try the cached pentagon first -- skips the full estimate pipeline when
     # consecutive calls land in the same cell (common in dense-sample loops).
     if _last_result is not None and _last_result['resolution'] == resolution:
-        projected = _dodecahedron.forward(from_lonlat(lon_lat), _last_result['origin_id'])
+        projected = _dodecahedron.forward(spherical, _last_result['origin_id'])
         if _last_result['pentagon'].contains_point(projected) > 0:
             return _last_result['cell_id']
 
     # Try the original point's projection-based estimate. Common case for
     # non-boundary points.
-    first_estimate = _lonlat_to_estimate(lon_lat, resolution)
+    first_estimate = _spherical_to_estimate(spherical, resolution)
     first_key = serialize(first_estimate)
-    first_distance = a5cell_contains_point(first_estimate, lon_lat)
+    first_distance = a5cell_contains_point(first_estimate, spherical)
     if first_distance > 0:
         return _cache_result(first_estimate, first_key, resolution)
 
-    # Spiral search: perturb lon_lat to find nearby estimate cells (the projection
-    # approximation can land in a neighbor at pentagon boundaries). Samples are
-    # generated lazily -- if the first sample hits we skip 25 trig+alloc ops.
+    # Spiral search: perturb the point to find nearby estimate cells (the
+    # projection approximation can land in a neighbor at pentagon boundaries).
+    # Samples are generated lazily -- if the first sample hits we skip 25 trig+alloc ops.
     hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
     N = 25
-    scale = 50 / (2 ** hilbert_resolution)
+    # 50 degrees / 2^hilbert_resolution, expressed as radians for spherical-space perturbation.
+    scale = (50 * math.pi / 180) / (2 ** hilbert_resolution)
     estimate_set = {first_key}
     cells = [{'cell': first_estimate, 'distance': first_distance}]
 
     # i=0 yields R=0 -> same as the original sample, so start at i=1.
     for i in range(1, N):
         R = (i / N) * scale
-        sample = (lon_lat[0] + math.cos(i) * R, lon_lat[1] + math.sin(i) * R)
-        estimate = _lonlat_to_estimate(sample, resolution)
+        sample = (spherical[0] + math.cos(i) * R, spherical[1] + math.sin(i) * R)
+        estimate = _spherical_to_estimate(sample, resolution)
         estimate_key = serialize(estimate)
         if estimate_key in estimate_set:
             continue
         estimate_set.add(estimate_key)
-        distance = a5cell_contains_point(estimate, lon_lat)
+        distance = a5cell_contains_point(estimate, spherical)
         if distance > 0:
             return _cache_result(estimate, estimate_key, resolution)
         cells.append({'cell': estimate, 'distance': distance})
@@ -110,20 +122,13 @@ def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
     fallback = cells[0]['cell']
     return _cache_result(fallback, serialize(fallback), resolution)
 
-def _lonlat_to_estimate(lon_lat: LonLat, resolution: int) -> A5Cell:
+
+def _spherical_to_estimate(spherical: Spherical, resolution: int) -> A5Cell:
     """
-    Convert longitude/latitude to an approximate cell.
+    Convert spherical (rotated authalic) coordinates to an approximate cell.
     The IJToS function uses the triangular lattice which only approximates the pentagon lattice.
     Thus this function only returns a cell nearby, and we need to search the neighbourhood to find the correct cell.
-    
-    Args:
-        lon_lat: Tuple of (longitude, latitude) in degrees
-        resolution: Resolution level of the cell
-        
-    Returns:
-        Approximate A5Cell
     """
-    spherical = from_lonlat(lon_lat)
     origin = find_nearest_origin(spherical)
 
     dodec_point = _dodecahedron.forward(spherical, origin.id)
@@ -242,9 +247,11 @@ def cell_to_boundary(
     split_pentagon = pentagon.split_edges(segments)
     vertices = split_pentagon.get_vertices()
 
-    # Unproject to obtain lon/lat coordinates
-    unprojected_vertices = [_dodecahedron.inverse(vertex, cell["origin"].id) for vertex in vertices]
-    boundary = [to_lonlat(vertex) for vertex in unprojected_vertices]
+    # Unproject to obtain lon/lat coordinates. Fused loop avoids the
+    # intermediate unprojected_vertices allocation.
+    boundary: List[LonLat] = [None] * len(vertices)
+    for i in range(len(vertices)):
+        boundary[i] = to_lonlat(_dodecahedron.inverse(vertices[i], cell["origin"].id))
 
     # Normalize longitudes to handle antimeridian crossing
     normalized_boundary = normalize_longitudes(boundary)
@@ -257,20 +264,18 @@ def cell_to_boundary(
     normalized_boundary.reverse()
     return normalized_boundary
 
-def a5cell_contains_point(cell: A5Cell, point: LonLat) -> float:
+def a5cell_contains_point(cell: A5Cell, spherical: Spherical) -> float:
     """
-    Check if a point is contained within a cell.
-    
+    Check if a spherical point is contained within a cell.
+
     Args:
         cell: A5Cell object
-        point: Tuple of (longitude, latitude) in degrees
-        
+        spherical: Spherical coordinates in A5's internal rotated authalic frame
+
     Returns:
         Positive number if the point is contained within the cell, negative otherwise
     """
     pentagon = _get_pentagon(cell)
-
-    spherical = from_lonlat(point)
     projected_point = _dodecahedron.forward(spherical, cell['origin'].id)
 
     return pentagon.contains_point(projected_point)

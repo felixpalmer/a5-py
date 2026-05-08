@@ -2,15 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import math
 from typing import List, Set, cast
 
 from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import lonlat_to_cell, cell_intersects_segment
 from ..core.coordinate_transforms import from_lonlat, to_cartesian, to_spherical, to_lonlat
-from ..core.constants import AUTHALIC_RADIUS_EARTH
-from ..math import vec3
 from .cap import estimate_cell_radius
+from ..utils.great_circle import sample_great_circle_arc
 from .lattice_neighbors import get_lattice_neighbors
 
 
@@ -49,21 +47,16 @@ def line_string_to_cells(waypoints: List[LonLat], resolution: int) -> List[int]:
         end = waypoints[i + 1]
         start_vec = to_cartesian(from_lonlat(start))
         end_vec = to_cartesian(from_lonlat(end))
-        dot = max(-1.0, min(1.0, vec3.dot(start_vec, end_vec)))
-        dist = math.acos(dot) * AUTHALIC_RADIUS_EARTH
 
-        # Sample the great-circle at half-cell-radius spacing. The endpoints are
-        # always included; num_subsegments >= 1 (so we always get the start->end pair
-        # even for short waypoint-to-waypoint hops).
-        num_subsegments = max(1, math.ceil(dist / sample_interval))
+        # Sample the great-circle at half-cell-radius spacing. Endpoints are
+        # always included; even for short hops we get the start->end pair.
+        interior = sample_great_circle_arc(start_vec, end_vec, sample_interval)
+        num_subsegments = len(interior) + 1
         samples: List[LonLat] = [start] * (num_subsegments + 1)
         samples[0] = start
         samples[num_subsegments] = end
-        if num_subsegments > 1:
-            tmp = vec3.create()
-            for j in range(1, num_subsegments):
-                vec3.slerp(tmp, start_vec, end_vec, j / num_subsegments)
-                samples[j] = to_lonlat(to_spherical(cast(Cartesian, (tmp[0], tmp[1], tmp[2]))))
+        for j in range(len(interior)):
+            samples[j + 1] = to_lonlat(to_spherical(interior[j]))
         sample_cells = [lonlat_to_cell(s, resolution) for s in samples]
 
         # Walk pairwise. Each (P_j, P_{j+1}) sub-segment is short enough that its
@@ -82,9 +75,6 @@ def line_string_to_cells(waypoints: List[LonLat], resolution: int) -> List[int]:
 
             # Strict local BFS: expand neighbors of every cell known to touch this
             # sub-segment, keeping anything whose pentagon the sub-segment crosses.
-            # Terminates as soon as no new touching cells are found -- typically 1-2
-            # hops, since a sub-segment <= cellRadius/2 reaches at most a couple of
-            # cells beyond its endpoint cells.
             visited: Set[int] = {cell_a, cell_b}
             frontier: List[int] = [cell_a, cell_b]
             while frontier:
