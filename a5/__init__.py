@@ -15,7 +15,7 @@ from a5.core.cell_info import get_num_cells, get_num_children, cell_area
 from a5.core.compact import compact, uncompact
 
 # Traversal
-from a5.traversal import grid_disk, grid_disk_vertex, spherical_cap
+from a5.traversal import grid_disk, grid_disk_vertex, spherical_cap, line_string_to_cells
 
 # Types
 from a5.core.coordinate_systems import Degrees, Radians
@@ -31,7 +31,7 @@ __all__ = [
     # Compaction
     'compact', 'uncompact',
     # Traversal
-    'grid_disk', 'grid_disk_vertex', 'spherical_cap',
+    'grid_disk', 'grid_disk_vertex', 'spherical_cap', 'line_string_to_cells',
     # Types
     'Degrees', 'Radians', 'A5Cell'
 ] 
