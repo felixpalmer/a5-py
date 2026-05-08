@@ -4,3 +4,4 @@
 
 from .grid_disk import grid_disk, grid_disk_vertex
 from .cap import spherical_cap
+from .line import line_string_to_cells

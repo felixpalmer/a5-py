@@ -9,6 +9,25 @@ from ..math import vec2
 
 Pentagon = List[Face]
 
+
+def _segments2d_intersect(p1: Tuple[float, float], p2: Tuple[float, float],
+                          p3: Tuple[float, float], p4: Tuple[float, float]) -> bool:
+    """
+    2D segment-vs-segment intersection test.
+    Returns True iff the closed segments p1->p2 and p3->p4 share at least one point.
+    """
+    d1x, d1y = p2[0] - p1[0], p2[1] - p1[1]
+    d2x, d2y = p4[0] - p3[0], p4[1] - p3[1]
+    denom = d1x * d2y - d1y * d2x
+    if abs(denom) < 1e-12:
+        return False
+
+    dx, dy = p3[0] - p1[0], p3[1] - p1[1]
+    t = (dx * d2y - dy * d2x) / denom
+    u = (dx * d1y - dy * d1x) / denom
+    return 0 <= t <= 1 and 0 <= u <= 1
+
+
 class PentagonShape:
     def __init__(self, vertices: Pentagon):
         self.vertices = list(vertices)  # Make a copy to avoid mutating original
@@ -132,6 +151,24 @@ class PentagonShape:
                 d_max = min(d_max, cross_product / p_length)
         
         return d_max
+
+    def intersects_segment(self, a: Face, b: Face) -> bool:
+        """
+        Tests whether a 2D segment intersects this pentagon.
+        True if either endpoint is inside, or any pentagon edge crosses the segment.
+        Operates entirely in Face coordinates -- pentagon edges are exact straight lines
+        here, so the test has no projection-induced approximation.
+        """
+        if self.contains_point(a) > 0 or self.contains_point(b) > 0:
+            return True
+
+        n = len(self.vertices)
+        for i in range(n):
+            v1 = self.vertices[i]
+            v2 = self.vertices[(i + 1) % n]
+            if _segments2d_intersect(a, b, v1, v2):
+                return True
+        return False
 
     def split_edges(self, segments: int) -> "PentagonShape":
         """

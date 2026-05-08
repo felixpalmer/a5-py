@@ -269,8 +269,28 @@ def a5cell_contains_point(cell: A5Cell, point: LonLat) -> float:
         Positive number if the point is contained within the cell, negative otherwise
     """
     pentagon = _get_pentagon(cell)
-    
+
     spherical = from_lonlat(point)
     projected_point = _dodecahedron.forward(spherical, cell['origin'].id)
-    
-    return pentagon.contains_point(projected_point) 
+
+    return pentagon.contains_point(projected_point)
+
+
+def cell_intersects_segment(cell_id: int, a: LonLat, b: LonLat) -> bool:
+    """
+    Tests whether the segment between two LonLat points intersects a cell.
+
+    The test runs entirely in the cell's Face coordinate system: both endpoints
+    are projected via the dodecahedron projection (with face-plane extension for
+    points beyond the face's edge), then checked against the pentagon's straight
+    2D edges. The segment is treated as a 2D straight line in Face coords --
+    accurate when the segment is short relative to the face (DSEA distortion is
+    negligible at sub-cell scales).
+    """
+    if cell_id == WORLD_CELL:
+        return True
+    cell = deserialize(cell_id)
+    pentagon = _get_pentagon(cell)
+    a_face = _dodecahedron.forward(from_lonlat(a), cell['origin'].id)
+    b_face = _dodecahedron.forward(from_lonlat(b), cell['origin'].id)
+    return pentagon.intersects_segment(a_face, b_face)

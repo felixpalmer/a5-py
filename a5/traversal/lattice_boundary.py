@@ -94,7 +94,6 @@ def _push_deltas(
 def get_boundary_neighbors(
     ctx: BoundaryContext,
     edge_only: bool,
-    skip_corners: bool = False,
 ) -> List[int]:
     """
     Return every neighbor that lies outside the source cell's quintant: cross-quintant
@@ -150,7 +149,7 @@ def get_boundary_neighbors(
     # Base-left corner [-maxRow, maxRow, 0]: 3 dodecahedron faces meet at this vertex.
     # The symmetric base-right corner is implicitly covered: its cross-quintant and
     # cross-face paths land on the [-maxRow, maxRow, 0] cell of neighboring quintants.
-    if not skip_corners and triple.x == -max_row and triple.y == max_row and triple.z == 0:
+    if triple.x == -max_row and triple.y == max_row and triple.z == 0:
         # Vertex neighbor 1: across the previous quintant's base edge
         prev_quintant = (source_quintant - 1 + 5) % 5
         prev_adj_face_id, prev_adj_quintant = FACE_ADJACENCY[origin.id][prev_quintant]
