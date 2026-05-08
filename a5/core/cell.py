@@ -11,7 +11,7 @@ from .coordinate_transforms import (
 )
 from .origin import find_nearest_origin, quintant_to_segment, segment_to_quintant
 from ..projections.dodecahedron import DodecahedronProjection
-from .utils import A5Cell
+from .utils import A5Cell, OriginId
 from ..geometry.pentagon import PentagonShape
 from .tiling import get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
 from .constants import PI_OVER_5
@@ -21,6 +21,26 @@ from ..geometry.spherical_polygon import SphericalPolygonShape
 
 # Reuse this object to avoid allocation
 _dodecahedron = DodecahedronProjection()
+
+# Single-entry cache of the most recent successful lookup. Speeds up
+# dense-sample workloads (polygon boundary tracing, line tracing) where
+# consecutive calls often land in the same cell. The cache stores the
+# pre-computed pentagon + origin so the hit-test is just one projection
+# + one pentagon containment check.
+_last_result: Optional[Dict] = None
+
+
+def _cache_result(cell: A5Cell, cell_id: int, resolution: int) -> int:
+    """Update the single-entry cache with a successful (cell, cell_id) pair."""
+    global _last_result
+    _last_result = {
+        'cell_id': cell_id,
+        'pentagon': _get_pentagon(cell),
+        'origin_id': cell['origin'].id,
+        'resolution': resolution,
+    }
+    return cell_id
+
 
 class CellToBoundaryOptions(TypedDict, total=False):
     """Options for cell_to_boundary function."""
@@ -46,42 +66,49 @@ def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
         # For low resolutions there is no Hilbert curve, so we can just return as the result is exact
         return serialize(_lonlat_to_estimate(lon_lat, resolution))
 
+    # Try the cached pentagon first -- skips the full estimate pipeline when
+    # consecutive calls land in the same cell (common in dense-sample loops).
+    if _last_result is not None and _last_result['resolution'] == resolution:
+        projected = _dodecahedron.forward(from_lonlat(lon_lat), _last_result['origin_id'])
+        if _last_result['pentagon'].contains_point(projected) > 0:
+            return _last_result['cell_id']
+
+    # Try the original point's projection-based estimate. Common case for
+    # non-boundary points.
+    first_estimate = _lonlat_to_estimate(lon_lat, resolution)
+    first_key = serialize(first_estimate)
+    first_distance = a5cell_contains_point(first_estimate, lon_lat)
+    if first_distance > 0:
+        return _cache_result(first_estimate, first_key, resolution)
+
+    # Spiral search: perturb lon_lat to find nearby estimate cells (the projection
+    # approximation can land in a neighbor at pentagon boundaries). Samples are
+    # generated lazily -- if the first sample hits we skip 25 trig+alloc ops.
     hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
-    samples: List[LonLat] = [lon_lat]
     N = 25
     scale = 50 / (2 ** hilbert_resolution)
-    
-    for i in range(N):
+    estimate_set = {first_key}
+    cells = [{'cell': first_estimate, 'distance': first_distance}]
+
+    # i=0 yields R=0 -> same as the original sample, so start at i=1.
+    for i in range(1, N):
         R = (i / N) * scale
-        coordinate = (
-            math.cos(i) * R + lon_lat[0],
-            math.sin(i) * R + lon_lat[1]
-        )
-        samples.append(coordinate)
-
-    # Deduplicate estimates
-    estimate_set = set()
-    unique_estimates = []
-
-    cells = []
-    for sample in samples:
+        sample = (lon_lat[0] + math.cos(i) * R, lon_lat[1] + math.sin(i) * R)
         estimate = _lonlat_to_estimate(sample, resolution)
         estimate_key = serialize(estimate)
-        if estimate_key not in estimate_set:
-            # Have new estimate, add to set and list
-            estimate_set.add(estimate_key)
-            unique_estimates.append(estimate)
+        if estimate_key in estimate_set:
+            continue
+        estimate_set.add(estimate_key)
+        distance = a5cell_contains_point(estimate, lon_lat)
+        if distance > 0:
+            return _cache_result(estimate, estimate_key, resolution)
+        cells.append({'cell': estimate, 'distance': distance})
 
-            # Check if we have a hit, storing distance if not
-            distance = a5cell_contains_point(estimate, lon_lat)
-            if distance > 0:
-                return serialize(estimate)
-            else:
-                cells.append({'cell': estimate, 'distance': distance})
-
-    # As fallback, sort cells by distance and use the closest one
+    # Fallback: pick the closest estimate. Cache it so subsequent dense-sample
+    # calls still benefit even though this lookup was approximate.
     cells.sort(key=lambda x: x['distance'], reverse=True)
-    return serialize(cells[0]['cell'])
+    fallback = cells[0]['cell']
+    return _cache_result(fallback, serialize(fallback), resolution)
 
 def _lonlat_to_estimate(lon_lat: LonLat, resolution: int) -> A5Cell:
     """
