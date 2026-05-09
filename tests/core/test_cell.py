@@ -88,7 +88,7 @@ class TestCellBoundary:
 
             # Test resolutions from 1 to MAX_RESOLUTION - 1
             for resolution in range(1, MAX_RESOLUTION):
-                if resolution == MAX_RESOLUTION or abs(test_lonlat[1]) > 77: # Issues in polar regions, TODO fix
+                if resolution == MAX_RESOLUTION:
                     continue
 
                 resolution_failures: List[str] = []

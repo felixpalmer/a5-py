@@ -36,18 +36,25 @@ class DodecahedronProjection:
     def forward(self, spherical: Spherical, origin_id: OriginId) -> Face:
         """
         Projects spherical coordinates to face coordinates using dodecahedron projection
-        
+
         Args:
             spherical: Spherical coordinates [theta, phi]
             origin_id: Origin ID (0-11)
-            
+
         Returns:
             Face coordinates [x, y]
+        """
+        return self.forward_cartesian(to_cartesian(spherical), origin_id)
+
+    def forward_cartesian(self, unprojected: Cartesian, origin_id: OriginId) -> Face:
+        """
+        Same as `forward` but takes a Cartesian unit vector -- skips the
+        `to_cartesian` round-trip when the caller already has the Cartesian
+        form (e.g. in the spiral-search path inside `spherical_to_cell`).
         """
         origin = origins[origin_id]
 
         # Transform back to origin space
-        unprojected = to_cartesian(spherical)
         out = vec3.create()
         out = vec3.transformQuat(out, unprojected, origin.inverse_quat)
 
@@ -55,7 +62,7 @@ class DodecahedronProjection:
         projected_spherical = to_spherical(out)
         polar = self.gnomonic.forward(projected_spherical)
 
-        # Rotate around face axis to remove origin rotation  
+        # Rotate around face axis to remove origin rotation
         rho, gamma = polar
         polar = cast(Polar, (rho, gamma - origin.angle))
 
