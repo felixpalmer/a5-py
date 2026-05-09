@@ -4,20 +4,26 @@
 
 import math
 from typing import List, Tuple, Optional, Dict, TypedDict, Union
-from .coordinate_systems import Face, LonLat, Spherical
+from .coordinate_systems import Cartesian, Face, LonLat, Spherical
 from .coordinate_transforms import (
-    face_to_ij, from_lonlat, to_cartesian, to_face, to_lonlat, 
+    face_to_ij, from_lonlat, to_cartesian, to_face, to_lonlat,
     to_spherical, to_polar, normalize_longitudes
 )
-from .origin import find_nearest_origin, quintant_to_segment, segment_to_quintant
+from .origin import (
+    find_nearest_origin,
+    find_nearest_origin_cartesian,
+    quintant_to_segment,
+    segment_to_quintant,
+)
 from ..projections.dodecahedron import DodecahedronProjection
-from .utils import A5Cell, OriginId
+from .utils import A5Cell, Origin, OriginId
 from ..geometry.pentagon import PentagonShape
 from .tiling import get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
 from .constants import PI_OVER_5
 from ..lattice import ij_to_s, s_to_anchor
 from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL
 from ..geometry.spherical_polygon import SphericalPolygonShape
+from ..utils.spiral import Spiral, SPIRAL_SAMPLE_COUNT
 
 # Reuse this object to avoid allocation
 _dodecahedron = DodecahedronProjection()
@@ -92,21 +98,18 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
     if first_distance > 0:
         return _cache_result(first_estimate, first_key, resolution)
 
-    # Spiral search: perturb the point to find nearby estimate cells (the
-    # projection approximation can land in a neighbor at pentagon boundaries).
-    # Samples are generated lazily -- if the first sample hits we skip 25 trig+alloc ops.
+    # Spiral search: perturb the point in the tangent plane to find nearby
+    # estimate cells (see a5/utils/spiral.py).
     hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
-    N = 25
-    # 50 degrees / 2^hilbert_resolution, expressed as radians for spherical-space perturbation.
-    scale = (50 * math.pi / 180) / (2 ** hilbert_resolution)
+    scale = _SPIRAL_SCALE_RAD / (2 ** hilbert_resolution)
     estimate_set = {first_key}
-    cells = [{'cell': first_estimate, 'distance': first_distance}]
+    cells = [{'cell_id': first_key, 'distance': first_distance}]
 
-    # i=0 yields R=0 -> same as the original sample, so start at i=1.
-    for i in range(1, N):
-        R = (i / N) * scale
-        sample = (spherical[0] + math.cos(i) * R, spherical[1] + math.sin(i) * R)
-        estimate = _spherical_to_estimate(sample, resolution)
+    spiral = Spiral(spherical, scale)
+    spiral_out: List[float] = [0.0, 0.0, 0.0]
+    for i in range(SPIRAL_SAMPLE_COUNT):
+        sample = spiral.sample(spiral_out, i)
+        estimate = _cartesian_to_estimate(sample, resolution)
         estimate_key = serialize(estimate)
         if estimate_key in estimate_set:
             continue
@@ -114,28 +117,63 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
         distance = a5cell_contains_point(estimate, spherical)
         if distance > 0:
             return _cache_result(estimate, estimate_key, resolution)
-        cells.append({'cell': estimate, 'distance': distance})
+        cells.append({'cell_id': estimate_key, 'distance': distance})
 
-    # Fallback: pick the closest estimate. Cache it so subsequent dense-sample
-    # calls still benefit even though this lookup was approximate.
+    # Spiral exhausted without finding a strict container. This is reachable
+    # for points right at the polar singularity at very high resolutions,
+    # where re-projecting any tangent sample snaps back to a small set of
+    # cells while the geometrically-containing cell is offset by one
+    # adjacency step. Fall back to direct neighbours of the closest spiral
+    # candidate, which always finds it.
+    # Lazy import to avoid circular dependency with the traversal package.
+    from ..traversal.global_neighbors import get_global_cell_neighbors
     cells.sort(key=lambda x: x['distance'], reverse=True)
-    fallback = cells[0]['cell']
-    return _cache_result(fallback, serialize(fallback), resolution)
+    K = min(3, len(cells))
+    for k in range(K):
+        neighbors = get_global_cell_neighbors(cells[k]['cell_id'])
+        for neighbor_key in neighbors:
+            if neighbor_key in estimate_set:
+                continue
+            estimate_set.add(neighbor_key)
+            neighbor_cell = deserialize(neighbor_key)
+            distance = a5cell_contains_point(neighbor_cell, spherical)
+            if distance > 0:
+                return _cache_result(neighbor_cell, neighbor_key, resolution)
+            cells.append({'cell_id': neighbor_key, 'distance': distance})
 
+    # True fallback: closest cell wins, even if technically just outside.
+    cells.sort(key=lambda x: x['distance'], reverse=True)
+    fallback_key = cells[0]['cell_id']
+    return _cache_result(deserialize(fallback_key), fallback_key, resolution)
+
+
+# Spiral perturbation radius at hilbert_resolution=1 (in radians of tangent
+# offset). For higher resolutions we scale by 1/2^hilbert_resolution. Tuned
+# via debug-scripts/tune-spiral.ts.
+_SPIRAL_SCALE_RAD = 70 * math.pi / 180
+
+
+# The IJToS function uses the triangular lattice which only approximates the pentagon lattice
+# Thus these functions only return a cell nearby, and we need to search the neighborhood to find the correct cell
+# TODO: Implement a more accurate function
 
 def _spherical_to_estimate(spherical: Spherical, resolution: int) -> A5Cell:
-    """
-    Convert spherical (rotated authalic) coordinates to an approximate cell.
-    The IJToS function uses the triangular lattice which only approximates the pentagon lattice.
-    Thus this function only returns a cell nearby, and we need to search the neighbourhood to find the correct cell.
-    """
     origin = find_nearest_origin(spherical)
-
     dodec_point = _dodecahedron.forward(spherical, origin.id)
+    return _face_to_estimate(dodec_point, origin, resolution)
+
+
+def _cartesian_to_estimate(cartesian: Cartesian, resolution: int) -> A5Cell:
+    origin = find_nearest_origin_cartesian(cartesian)
+    dodec_point = _dodecahedron.forward_cartesian(cartesian, origin.id)
+    return _face_to_estimate(dodec_point, origin, resolution)
+
+
+def _face_to_estimate(dodec_point: Face, origin: Origin, resolution: int) -> A5Cell:
     polar = to_polar(dodec_point)
     quintant = get_quintant_polar(polar)
     segment, orientation = quintant_to_segment(quintant, origin)
-    
+
     if resolution < FIRST_HILBERT_RESOLUTION:
         # For low resolutions there is no Hilbert curve
         return A5Cell(S=0, segment=segment, origin=origin, resolution=resolution)
@@ -155,8 +193,7 @@ def _spherical_to_estimate(spherical: Spherical, resolution: int) -> A5Cell:
 
     ij = face_to_ij(dodec_point)
     S = ij_to_s(ij, hilbert_resolution, orientation)
-    estimate = A5Cell(S=S, segment=segment, origin=origin, resolution=resolution)
-    return estimate
+    return A5Cell(S=S, segment=segment, origin=origin, resolution=resolution)
 
 def _get_pentagon(cell: A5Cell) -> PentagonShape:
     """

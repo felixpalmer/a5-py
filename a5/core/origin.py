@@ -7,7 +7,7 @@ Copyright (c) A5 contributors
 import math
 from typing import List, Tuple, NamedTuple
 from .coordinate_transforms import to_cartesian
-from .coordinate_systems import Radians, Spherical, Face
+from .coordinate_systems import Cartesian, Radians, Spherical, Face
 from .constants import interhedral_angle, PI_OVER_5, TWO_PI_OVER_5, distance_to_edge
 from ..lattice.types import Orientation
 from ..math import quat
@@ -71,6 +71,7 @@ def add_origin(axis: Spherical, angle: Radians, quaternion: Tuple[float, float, 
     origin = Origin(
         id=origin_id,
         axis=axis,
+        axis_cartesian=to_cartesian(axis),
         quat=quaternion,
         inverse_quat=inverse_quat,
         angle=angle,
@@ -89,6 +90,7 @@ for i, origin in enumerate(origins):
     origins[i] = Origin(
         id=i,
         axis=origin.axis,
+        axis_cartesian=origin.axis_cartesian,
         quat=origin.quat,
         inverse_quat=origin.inverse_quat,
         angle=origin.angle,
@@ -133,6 +135,22 @@ def find_nearest_origin(point: Spherical) -> Origin:
     nearest = origins[0]
     for origin in origins:
         distance = haversine(point, origin.axis)
+        if distance < min_distance:
+            min_distance = distance
+            nearest = origin
+    return nearest
+
+def find_nearest_origin_cartesian(c: Cartesian) -> Origin:
+    """
+    Same as `find_nearest_origin` but takes a Cartesian unit vector. The
+    argmin of `1 - a.b` matches the argmin of haversine, so this returns
+    the same origin without any spherical-trig conversions.
+    """
+    min_distance = float('inf')
+    nearest = origins[0]
+    for origin in origins:
+        ax = origin.axis_cartesian
+        distance = 1 - (c[0] * ax[0] + c[1] * ax[1] + c[2] * ax[2])
         if distance < min_distance:
             min_distance = distance
             nearest = origin
