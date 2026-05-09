@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, cast
 import math
 from ..core.coordinate_systems import Cartesian
 from ..math import vec3, quat
 
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
+
+_winding_centroid = vec3.create()
 
 # Pre-allocated vectors for midpoints. midA is the midpoint opposite the vertex A
 _mid_a = vec3.create()
@@ -19,6 +21,64 @@ _center = vec3.create()
 # Use Cartesian system for all calculations for greater accuracy
 # Using [x, y, z] gives equal precision in all directions, unlike spherical coordinates
 UP = (0.0, 0.0, 1.0)
+
+
+def point_in_spherical_polygon(point: Cartesian, vertices: List[Cartesian]) -> bool:
+    """
+    Spherical point-in-polygon via signed-angle summation. Works for concave
+    polygons (unlike `SphericalPolygonShape.contains_point`, which assumes
+    convex "necessary strike"). The math is fully inlined as it's called
+    per-cell in polygon-fill hot paths.
+    """
+    angle_sum = 0.0
+    n = len(vertices)
+    for i in range(n):
+        av = vertices[i]
+        bv = vertices[(i + 1) % n]
+        dot_pa = point[0] * av[0] + point[1] * av[1] + point[2] * av[2]
+        dot_pb = point[0] * bv[0] + point[1] * bv[1] + point[2] * bv[2]
+        apx = av[0] - dot_pa * point[0]
+        apy = av[1] - dot_pa * point[1]
+        apz = av[2] - dot_pa * point[2]
+        bpx = bv[0] - dot_pb * point[0]
+        bpy = bv[1] - dot_pb * point[1]
+        bpz = bv[2] - dot_pb * point[2]
+        cx = apy * bpz - apz * bpy
+        cy = apz * bpx - apx * bpz
+        cz = apx * bpy - apy * bpx
+        angle_sum += math.atan2(
+            cx * point[0] + cy * point[1] + cz * point[2],
+            apx * bpx + apy * bpy + apz * bpz,
+        )
+    return abs(angle_sum) > math.pi
+
+
+def ring_winding_sign(ring_vecs: List[Cartesian]) -> int:
+    """
+    Ring winding direction: +1 for CCW (interior to the left of edge direction),
+    -1 for CW. Sums (v_i x v_{i+1}) . centroid across the ring.
+    """
+    vec3.set(_winding_centroid, 0.0, 0.0, 0.0)
+    for v in ring_vecs:
+        vec3.add(_winding_centroid, _winding_centroid, v)
+    vec3.normalize(_winding_centroid, _winding_centroid)
+
+    n = len(ring_vecs)
+    s = 0.0
+    for i in range(n):
+        s += vec3.tripleProduct(_winding_centroid, ring_vecs[i], ring_vecs[(i + 1) % n])
+    return 1 if s > 0 else -1
+
+
+def ring_segment_normals(ring_vecs: List[Cartesian]) -> List[Cartesian]:
+    """Great-circle plane normals for every segment of the ring."""
+    n = len(ring_vecs)
+    normals: List[Cartesian] = []
+    for i in range(n):
+        out = vec3.create()
+        vec3.cross(out, ring_vecs[i], ring_vecs[(i + 1) % n])
+        normals.append(cast(Cartesian, (out[0], out[1], out[2])))
+    return normals
 
 
 class SphericalPolygonShape:

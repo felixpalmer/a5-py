@@ -3,7 +3,7 @@
 # Copyright (c) A5 contributors
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ..lattice import (
     Orientation, Triple,
@@ -18,7 +18,7 @@ from .lattice_boundary import BoundaryContext, get_boundary_neighbors
 
 @dataclass
 class _LatticeSource:
-    """Source-cell state used by the lattice neighbor finder."""
+    """Decoded source-cell state used by the lattice neighbor finder."""
     origin: Origin
     segment: int
     S: int
@@ -65,21 +65,29 @@ def _boundary_context(src: _LatticeSource) -> BoundaryContext:
     )
 
 
+# All 26 non-zero +/-1 moves in 3D -- vertex- and edge-sharing within-quintant candidates.
+SUPERSET_DELTAS: List[Tuple[int, int, int]] = [
+    (dx, dy, dz)
+    for dx in (-1, 0, 1)
+    for dy in (-1, 0, 1)
+    for dz in (-1, 0, 1)
+    if not (dx == 0 and dy == 0 and dz == 0)
+]
+
+# The 3 parity-valid single-axis moves matching `triple_space_flood_fill`'s edge connectivity.
+PARITY_EVEN_DELTAS: List[Tuple[int, int, int]] = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]
+PARITY_ODD_DELTAS: List[Tuple[int, int, int]] = [(-1, 0, 0), (0, -1, 0), (0, 0, -1)]
+
+
 def get_lattice_neighbors(cell_id: int, edge_only: bool) -> List[int]:
     """
-    Fast lattice-based neighbor finding for BFS in line tracing.
+    Fast lattice-based neighbor finding. Skips is_neighbor() validation for
+    within-quintant candidates; falls back to get_global_cell_neighbors below res 2.
 
-    Unlike get_global_cell_neighbors, this skips is_neighbor() validation for
-    within-quintant candidates. The result is a SUPERSET of true neighbors --
-    it may include a few extra cells that share only a vertex point (not an edge).
-
-    This is safe for BFS contexts where candidates are validated by
-    cell_intersects_segment -- false positives just fail that check.
-
-    For res < 2, falls back to get_global_cell_neighbors (rare).
-
-    Args:
-        edge_only: If True, restrict to Manhattan distance <= 2 (edge-sharing candidates)
+    - edge_only=False: 26-cube +/-1 superset (may include vertex-only touchers).
+      For BFS that re-validates candidates downstream (e.g. line tracing).
+    - edge_only=True: 3 parity-valid moves matching `triple_space_flood_fill` --
+      exact connectivity for shell-buffering the flood-fill firewall.
     """
     src = _decode_source(cell_id)
     if src is None:
@@ -95,31 +103,25 @@ def get_lattice_neighbors(cell_id: int, edge_only: bool) -> List[int]:
     max_s = src.max_s
     max_row = src.max_row
 
+    if edge_only:
+        deltas = PARITY_EVEN_DELTAS if triple_parity(triple) == 0 else PARITY_ODD_DELTAS
+    else:
+        deltas = SUPERSET_DELTAS
+
     result: List[int] = []
+    for dx, dy, dz in deltas:
+        candidate = Triple(triple.x + dx, triple.y + dy, triple.z + dz)
+        if not triple_in_bounds(candidate, max_row):
+            continue
+        candidate_s = triple_to_s(candidate, hilbert_res, orientation)
+        if (candidate_s is not None and 0 <= candidate_s < max_s and candidate_s != S):
+            result.append(serialize({
+                'origin': origin, 'segment': segment,
+                'S': candidate_s, 'resolution': resolution,
+            }))
 
-    # Within-quintant: enumerate the 26-cube of +/-1 deltas, skipping the source.
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            for dz in (-1, 0, 1):
-                if dx == 0 and dy == 0 and dz == 0:
-                    continue
-                manhattan = abs(dx) + abs(dy) + abs(dz)
-                if manhattan > 3:
-                    continue
-                if edge_only and manhattan > 2:
-                    continue
-
-                candidate = Triple(triple.x + dx, triple.y + dy, triple.z + dz)
-                if not triple_in_bounds(candidate, max_row):
-                    continue
-
-                candidate_s = triple_to_s(candidate, hilbert_res, orientation)
-                if (candidate_s is not None and 0 <= candidate_s < max_s and candidate_s != S):
-                    result.append(serialize({
-                        'origin': origin, 'segment': segment,
-                        'S': candidate_s, 'resolution': resolution,
-                    }))
-
-    for c in get_boundary_neighbors(_boundary_context(src), edge_only):
+    # Strict lattice connectivity (edge_only) doesn't traverse the [-max_row, max_row, 0]
+    # vertex corner, so we skip it there too -- keeping the firewall topology tight.
+    for c in get_boundary_neighbors(_boundary_context(src), edge_only, edge_only):
         result.append(c)
     return result

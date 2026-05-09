@@ -375,26 +375,41 @@ def quadrupleProduct(out: Vec3, A: "Cartesian", B: "Cartesian", C: "Cartesian", 
     scale(scaledB, B, triple_product_acd)
     return subtract(out, scaledB, scaledA)
 
-def slerp(out: Vec3, A: "Cartesian", B: "Cartesian", t: float) -> "Cartesian":
+def precompute_slerp(A: "Cartesian", B: "Cartesian") -> dict:
     """
-    Spherical linear interpolation between two vectors
-    
+    Cached `gamma` and `sin(gamma)` for a fixed (A, B) pair, so loops that
+    slerp many times along the same arc don't re-run `angle` and `sin`.
+
+    Returns:
+        dict with 'gamma' and 'sin_gamma' keys; pass to `slerp` as `ctx`.
+    """
+    gamma = angle(A, B)
+    return {'gamma': gamma, 'sin_gamma': math.sin(gamma)}
+
+
+def slerp(out: Vec3, A: "Cartesian", B: "Cartesian", t: float, ctx: "dict | None" = None) -> "Cartesian":
+    """
+    Spherical linear interpolation between two vectors.
+
     Args:
         out: The target vector to write the result to
         A: The first vector
         B: The second vector
         t: The interpolation parameter (0 to 1)
-        
+        ctx: Optional precomputed `{'gamma', 'sin_gamma'}`; supply when slerping
+             many `t` values along the same arc to avoid recomputing them.
+
     Returns:
         The interpolated vector (same as out)
     """
-    gamma = angle(A, B)
+    gamma = ctx['gamma'] if ctx is not None else angle(A, B)
     if gamma < 1e-12:
         return lerp(out, A, B, t)
-    
-    weight_a = math.sin((1 - t) * gamma) / math.sin(gamma)
-    weight_b = math.sin(t * gamma) / math.sin(gamma)
-    scale(scaledA, A, weight_a)
-    scale(scaledB, B, weight_b)
-    add(out, scaledA, scaledB)
+
+    sin_gamma = ctx['sin_gamma'] if ctx is not None else math.sin(gamma)
+    weight_a = math.sin((1 - t) * gamma) / sin_gamma
+    weight_b = math.sin(t * gamma) / sin_gamma
+    out[0] = weight_a * A[0] + weight_b * B[0]
+    out[1] = weight_a * A[1] + weight_b * B[1]
+    out[2] = weight_a * A[2] + weight_b * B[2]
     return cast("Cartesian", (out[0], out[1], out[2]))

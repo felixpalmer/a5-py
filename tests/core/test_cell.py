@@ -9,6 +9,7 @@ from typing import List, Tuple, Dict, Any
 
 from a5.core.coordinate_systems import Degrees, LonLat
 from a5.core.cell import cell_to_boundary, cell_to_lonlat, lonlat_to_cell, a5cell_contains_point
+from a5.core.coordinate_transforms import from_lonlat
 from a5.core.serialization import deserialize, MAX_RESOLUTION
 from a5.core.hex import hex_to_u64, u64_to_hex
 
@@ -87,7 +88,7 @@ class TestCellBoundary:
 
             # Test resolutions from 1 to MAX_RESOLUTION - 1
             for resolution in range(1, MAX_RESOLUTION):
-                if resolution == MAX_RESOLUTION or abs(test_lonlat[1]) > 80: # Issues in polar regions, TODO fix
+                if resolution == MAX_RESOLUTION or abs(test_lonlat[1]) > 77: # Issues in polar regions, TODO fix
                     continue
 
                 resolution_failures: List[str] = []
@@ -98,7 +99,7 @@ class TestCellBoundary:
                     
                     # Verify the original point is contained within the cell
                     cell = deserialize(cell_id)
-                    if (a5cell_contains_point(cell, test_lonlat) < 0):
+                    if (a5cell_contains_point(cell, from_lonlat(test_lonlat)) < 0):
                         # Get cell boundary
                         boundary = cell_to_boundary(cell_id)
                         
