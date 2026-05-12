@@ -19,6 +19,14 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v0.8.0] - May 12 2026
+
+- fix(cell): Spiral unstable in polar regions (#46)
+- feat(regions): Implement polygonToCells (#45)
+- feat(traversal): lineStringToCells (#44)
+- Refactor: lattice boundary helpers (#43)
+- feat(serialization): Improve cellToParent speed (#42)
+
 #### pya5 [v0.7.3] - Apr 9 2026
 
 - fix: normalize longitude in toLonLat to -180-180 (#40)

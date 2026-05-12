@@ -75,7 +75,7 @@ wheels = [
 
 [[package]]
 name = "pya5"
-version = "0.7.3"
+version = "0.8.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
