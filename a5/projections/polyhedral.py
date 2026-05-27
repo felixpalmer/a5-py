@@ -42,7 +42,7 @@ import math
 from typing import cast, Dict, Tuple
 from ..core.coordinate_systems import Cartesian, Face, Barycentric, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_face
-from ..geometry.spherical_triangle import SphericalTriangleShape
+from ..geometry.spherical_polygon import spherical_triangle_area
 from ..math import vec3, quat
 
 class PolyhedralProjection:
@@ -67,7 +67,6 @@ class PolyhedralProjection:
             The face coordinates
         """
         A, B, C = spherical_triangle
-        triangle_shape = SphericalTriangleShape(spherical_triangle)
 
         # When v is close to A, the quadruple product is unstable.
         # As we just need the intersection of two great circles we can use difference
@@ -76,22 +75,22 @@ class PolyhedralProjection:
         vec3.subtract(Z, v, A)
         vec3.normalize(Z, Z)
         Z = cast(Cartesian, (Z[0], Z[1], Z[2]))
-        
+
         p = vec3.create()
         vec3.quadrupleProduct(p, A, Z, B, C)
         vec3.normalize(p, p)
         p = cast(Cartesian, (p[0], p[1], p[2]))
 
         h = vec3.vectorDifference(A, v) / vec3.vectorDifference(A, p)
-        Area_ABC = triangle_shape.get_area()
-        scaled_area = h / Area_ABC
-        
+        area_abc = spherical_triangle_area(A, B, C)
+        scaled_area = h / area_abc
+
         b = cast(Barycentric, (
             1 - h,
-            scaled_area * SphericalTriangleShape([A, p, C]).get_area(),
-            scaled_area * SphericalTriangleShape([A, B, p]).get_area()
+            scaled_area * spherical_triangle_area(A, p, C),
+            scaled_area * spherical_triangle_area(A, B, p)
         ))
-        
+
         return barycentric_to_face(b, face_triangle)
 
     def inverse(self, face_point: Face, face_triangle: FaceTriangle, spherical_triangle: SphericalTriangle) -> Cartesian:
@@ -164,12 +163,11 @@ class PolyhedralProjection:
         cache_key = (tuple(A), tuple(B), tuple(C))
         
         if cache_key not in self._inverse_triangle_cache:
-            triangle_shape = SphericalTriangleShape(spherical_triangle)
             c1 = vec3.create()
             vec3.cross(c1, B, C)
-            
+
             constants = {
-                'area_abc': triangle_shape.get_area(),
+                'area_abc': spherical_triangle_area(A, B, C),
                 'c1': (c1[0], c1[1], c1[2]),  # Store as tuple
                 'c01': vec3.dot(A, B),
                 'c12': vec3.dot(B, C),

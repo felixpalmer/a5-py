@@ -23,6 +23,29 @@ _center = vec3.create()
 UP = (0.0, 0.0, 1.0)
 
 
+def spherical_triangle_area(v1: Cartesian, v2: Cartesian, v3: Cartesian) -> float:
+    """
+    Area of the spherical triangle (v1, v2, v3) on the unit sphere, in radians.
+
+    Free-function form avoids the class allocation of
+    `SphericalTriangleShape([…]).get_area()` on the lon_lat_to_cell hot path.
+    """
+    vec3.lerp(_mid_a, v2, v3, 0.5)
+    vec3.normalize(_mid_a, _mid_a)
+    vec3.lerp(_mid_b, v3, v1, 0.5)
+    vec3.normalize(_mid_b, _mid_b)
+    vec3.lerp(_mid_c, v1, v2, 0.5)
+    vec3.normalize(_mid_c, _mid_c)
+
+    S = vec3.tripleProduct(_mid_a, _mid_b, _mid_c)
+    clamped = max(-1.0, min(1.0, S))
+
+    # sin(x) ≈ x for small x — keep precision on tiny triangles.
+    if abs(clamped) < 1e-8:
+        return 2 * clamped
+    return math.asin(clamped) * 2
+
+
 def point_in_spherical_polygon(point: Cartesian, vertices: List[Cartesian]) -> bool:
     """
     Spherical point-in-polygon via signed-angle summation. Works for concave
@@ -199,36 +222,6 @@ class SphericalPolygonShape:
 
         return theta_delta_min
 
-    def get_triangle_area(self, v1: Cartesian, v2: Cartesian, v3: Cartesian) -> float:
-        """
-        Calculate the area of a spherical triangle given three vertices
-        
-        Args:
-            v1: First vertex
-            v2: Second vertex  
-            v3: Third vertex
-            
-        Returns:
-            Area of the spherical triangle in radians
-        """
-        # Calculate midpoints
-        vec3.lerp(_mid_a, v2, v3, 0.5)
-        vec3.lerp(_mid_b, v3, v1, 0.5)
-        vec3.lerp(_mid_c, v1, v2, 0.5)
-        vec3.normalize(_mid_a, _mid_a)
-        vec3.normalize(_mid_b, _mid_b)
-        vec3.normalize(_mid_c, _mid_c)
-        
-        # Calculate area using asin of dot product, clamped to valid range
-        S = vec3.tripleProduct(_mid_a, _mid_b, _mid_c)
-        clamped = max(-1.0, min(1.0, S))
-        
-        # sin(x) = x for x < 1e-8
-        if abs(clamped) < 1e-8:
-            return 2 * clamped
-        else:
-            return math.asin(clamped) * 2
-
     def get_area(self) -> float:
         """
         Calculate the area of the spherical polygon by decomposing it into a fan of triangles
@@ -251,7 +244,7 @@ class SphericalPolygonShape:
             return 0.0
 
         if len(self.vertices) == 3:
-            self._area = self.get_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2])
+            self._area = spherical_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2])
             return self._area
 
         # Calculate center of polygon
@@ -265,7 +258,7 @@ class SphericalPolygonShape:
         for i in range(len(self.vertices)):
             v1 = self.vertices[i]
             v2 = self.vertices[(i + 1) % len(self.vertices)]
-            tri_area = self.get_triangle_area(_center, v1, v2)
+            tri_area = spherical_triangle_area(_center, v1, v2)
             if not math.isnan(tri_area):
                 area += tri_area
 
