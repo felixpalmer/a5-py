@@ -39,21 +39,50 @@ Copyright (c) A5 contributors
 """
 
 import math
-from typing import cast, Dict, Tuple
+from typing import cast, Dict
 from ..core.coordinate_systems import Cartesian, Face, Barycentric, FaceTriangle, SphericalTriangle
 from ..core.coordinate_transforms import face_to_barycentric, barycentric_to_face
 from ..geometry.spherical_polygon import spherical_triangle_area
 from ..math import vec3, quat
 
-class PolyhedralProjection:
+class EqualAreaProjection:
     """
-    Polyhedral Equal Area projection using Slice & Dice algorithm
+    Equal area projection using Slice & Dice algorithm
+
+    Caches the shape-only invariants of the spherical triangle. A5 only ever
+    projects the congruent face-triangles of a single dodecahedron, so these
+    depend only on the triangle's shape, not its position — they are computed
+    once from the canonical triangle passed to the constructor and reused for
+    every projection. Deriving them eagerly from a fixed triangle (rather than
+    lazily from whichever triangle is projected first) keeps results
+    independent of call order: congruent triangles agree only to ~1 ulp, so a
+    lazy cache would make outputs depend on process history.
+
+    NOTE: `V` is a *signed* triple product, so this caching is only valid while
+    every triangle shares the same winding (chirality). DodecahedronProjection
+    guarantees this by ordering vertices consistently across normal and
+    reflected faces. A · B and C · A are deliberately NOT cached — even/odd
+    face triangles swap the roles of the B and C vertices, so those dot
+    products differ by ~0.056 between triangles and must be computed per call.
     """
-    
-    def __init__(self):
-        # Cache for triangle-dependent calculations in inverse projection
-        self._inverse_triangle_cache: Dict[Tuple, Dict] = {}
-    
+
+    def __init__(self, canonical_triangle: SphericalTriangle):
+        self._constants = EqualAreaProjection.compute_constants(canonical_triangle)
+
+    @staticmethod
+    def compute_constants(spherical_triangle: SphericalTriangle) -> Dict[str, float]:
+        A, B, C = spherical_triangle
+        c1 = vec3.create()
+        vec3.cross(c1, B, C)
+        c12 = vec3.dot(B, C)
+        return {
+            'V': vec3.dot(A, c1),  # A · (B × C) — signed triple product
+            'c12': c12,  # B · C
+            's12': vec3.length(c1),  # |B × C|
+            'kQ': 2 / math.acos(c12),
+            'area_abc': spherical_triangle_area(A, B, C)
+        }
+
     def forward(self, v: Cartesian, spherical_triangle: SphericalTriangle, face_triangle: FaceTriangle) -> Face:
         """
         Forward projection: converts a spherical point to face coordinates
@@ -82,8 +111,7 @@ class PolyhedralProjection:
         p = cast(Cartesian, (p[0], p[1], p[2]))
 
         h = vec3.vectorDifference(A, v) / vec3.vectorDifference(A, p)
-        area_abc = spherical_triangle_area(A, B, C)
-        scaled_area = h / area_abc
+        scaled_area = h / self._constants['area_abc']
 
         b = cast(Barycentric, (
             1 - h,
@@ -116,16 +144,14 @@ class PolyhedralProjection:
         if b[2] > threshold:
             return C
         
-        # Get cached triangle-dependent constants
-        constants = self._get_triangle_constants(spherical_triangle)
+        # Cached shape constants (from the canonical triangle)
+        constants = self._constants
         area_abc = constants['area_abc']
-        c1 = constants['c1']
-        c01 = constants['c01']
         c12 = constants['c12']
-        c20 = constants['c20']
         s12 = constants['s12']
+        kQ = constants['kQ']
         V = constants['V']
-        
+
         # Point-dependent calculations
         h = 1 - b[0]
         R = b[2] / h
@@ -134,9 +160,14 @@ class PolyhedralProjection:
         half_c = math.sin(alpha / 2)
         CC = 2 * half_c * half_c  # Half angle formula
 
+        # Per-triangle: A·B and C·A swap between even/odd face triangles (see
+        # class docstring), so they cannot come from the cached constants.
+        c01 = vec3.dot(A, B)
+        c20 = vec3.dot(C, A)
+
         f = S * V + CC * (c01 * c12 - c20)
         g = CC * s12 * (1 + c01)
-        q = (2 / math.acos(c12)) * math.atan2(g, f)
+        q = kQ * math.atan2(g, f)
         
         # Use gl-matrix style slerp for P = slerp(B, C, q)
         P = vec3.create()
@@ -151,33 +182,6 @@ class PolyhedralProjection:
         out = [0.0, 0.0, 0.0]
         vec3.slerp(out, A, P, t)
         return cast(Cartesian, (out[0], out[1], out[2]))
-
-    def _get_triangle_constants(self, spherical_triangle: SphericalTriangle):
-        """
-        Get cached triangle-dependent constants for inverse projection.
-        These values only depend on the spherical triangle, not the input point.
-        """
-        # Create a cache key from the triangle vertices
-        # Convert to tuples since lists aren't hashable
-        A, B, C = spherical_triangle
-        cache_key = (tuple(A), tuple(B), tuple(C))
-        
-        if cache_key not in self._inverse_triangle_cache:
-            c1 = vec3.create()
-            vec3.cross(c1, B, C)
-
-            constants = {
-                'area_abc': spherical_triangle_area(A, B, C),
-                'c1': (c1[0], c1[1], c1[2]),  # Store as tuple
-                'c01': vec3.dot(A, B),
-                'c12': vec3.dot(B, C),
-                'c20': vec3.dot(C, A),
-                's12': vec3.length(c1),
-                'V': vec3.dot(A, c1)  # Triple product of A, B, C
-            }
-            self._inverse_triangle_cache[cache_key] = constants
-        
-        return self._inverse_triangle_cache[cache_key]
 
     def _safe_acos(self, x: float) -> float:
         """
