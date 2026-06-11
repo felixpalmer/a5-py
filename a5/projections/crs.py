@@ -6,7 +6,7 @@ Copyright (c) A5 contributors
 
 import math
 from typing import List, cast
-from ..core.coordinate_systems import Cartesian, Radians, Spherical
+from ..core.coordinate_systems import Cartesian, Radians, Spherical, SphericalTriangle
 from ..core.coordinate_transforms import to_cartesian
 from ..core.constants import distance_to_edge, distance_to_vertex
 from ..core.origin import origins
@@ -43,6 +43,22 @@ class CRS:
     def vertices(self) -> List[Cartesian]:
         """Get the list of vertices (for testing access)."""
         return list(self._vertices)
+
+    def get_canonical_triangle(self) -> SphericalTriangle:
+        """
+        A canonical spherical face triangle (face center, edge midpoint, vertex)
+        of the dodecahedron, taken from origin 0's CRS vertices. All face
+        triangles used by DodecahedronProjection are congruent and consistently
+        wound with this one, so it serves as the fixed source of the
+        EqualAreaProjection shape constants — independent of projection call order.
+
+        The indices rely on the construction order above: vertices[0] is origin
+        0's face center, vertices[12] its first corner (after the 12 centers) and
+        vertices[32] its first edge midpoint (after the 20 corners). The corner
+        and midpoint are adjacent (π/5 apart), forming a genuine face triangle —
+        the constants-agreement test verifies this against every face triangle.
+        """
+        return cast(SphericalTriangle, (self._vertices[0], self._vertices[32], self._vertices[12]))
     
     def get_vertex(self, point: Cartesian) -> Cartesian:
         """Find the CRS vertex that matches the given point."""

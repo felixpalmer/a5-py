@@ -6,14 +6,16 @@ import pytest
 import json
 import math
 from pathlib import Path
-from a5.projections.polyhedral import PolyhedralProjection
+from a5.projections.equal_area import EqualAreaProjection
+from a5.projections.dodecahedron import DodecahedronProjection
+from a5.projections.crs import CRS
 from a5.core.coordinate_systems import Cartesian
 from a5.math.vec3 import length
 from tests.matchers import is_close_array
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
-with open(FIXTURES_DIR / "polyhedral.json") as f:
+with open(FIXTURES_DIR / "equal-area.json") as f:
     TEST_DATA = json.load(f)
 
 # Extract static data from test data
@@ -34,48 +36,48 @@ DESIRED_MM_PRECISION = 0.01
 
 
 @pytest.fixture
-def polyhedral():
-    return PolyhedralProjection()
+def equal_area():
+    return EqualAreaProjection(TEST_SPHERICAL_TRIANGLE)
 
-class TestPolyhedralProjectionForward:
+class TestEqualAreaProjectionForward:
     """Test forward projection functionality"""
-    
-    def test_forward_projections(self, polyhedral):
+
+    def test_forward_projections(self, equal_area):
         """Test forward projections match expected values"""
         for test_case in TEST_DATA["forward"]:
-            result = polyhedral.forward(
+            result = equal_area.forward(
                 test_case["input"],
-                TEST_SPHERICAL_TRIANGLE, 
+                TEST_SPHERICAL_TRIANGLE,
                 TEST_FACE_TRIANGLE
             )
             assert is_close_array(list(result), test_case["expected"]), \
                 f"Expected {test_case['expected']}, got {list(result)}"
 
-    def test_round_trip_forward_projections(self, polyhedral):
+    def test_round_trip_forward_projections(self, equal_area):
         """Test round trip forward projections"""
         largest_error = 0
-        
+
         for test_case in TEST_DATA["forward"]:
             spherical = test_case["input"]
-            polar = polyhedral.forward(spherical, TEST_SPHERICAL_TRIANGLE, TEST_FACE_TRIANGLE)
-            result = polyhedral.inverse(polar, TEST_FACE_TRIANGLE, TEST_SPHERICAL_TRIANGLE)
+            polar = equal_area.forward(spherical, TEST_SPHERICAL_TRIANGLE, TEST_FACE_TRIANGLE)
+            result = equal_area.inverse(polar, TEST_FACE_TRIANGLE, TEST_SPHERICAL_TRIANGLE)
             error = length([r - s for r, s in zip(result, spherical)])
             largest_error = max(largest_error, error)
             assert is_close_array(list(result), spherical), \
                 f"Round trip failed: expected {spherical}, got {list(result)}"
-        
+
         # Check precision requirement
         assert largest_error * MAX_ARC_LENGTH_MM < DESIRED_MM_PRECISION, \
             f"Accuracy requirement not met: {largest_error * MAX_ARC_LENGTH_MM:.6f}mm > {DESIRED_MM_PRECISION}mm"
 
 
-class TestPolyhedralProjectionInverse:
+class TestEqualAreaProjectionInverse:
     """Test inverse projection functionality"""
-    
-    def test_inverse_projections(self, polyhedral):
+
+    def test_inverse_projections(self, equal_area):
         """Test inverse projections match expected values"""
         for test_case in TEST_DATA["inverse"]:
-            result = polyhedral.inverse(
+            result = equal_area.inverse(
                 test_case["input"],
                 TEST_FACE_TRIANGLE,
                 TEST_SPHERICAL_TRIANGLE
@@ -83,11 +85,33 @@ class TestPolyhedralProjectionInverse:
             assert is_close_array(list(result), test_case["expected"]), \
                 f"Expected {test_case['expected']}, got {list(result)}"
 
-    def test_round_trip_inverse_projections(self, polyhedral):
+    def test_round_trip_inverse_projections(self, equal_area):
         """Test round trip inverse projections"""
         for test_case in TEST_DATA["inverse"]:
             face_point = test_case["input"]
-            spherical = polyhedral.inverse(face_point, TEST_FACE_TRIANGLE, TEST_SPHERICAL_TRIANGLE)
-            result = polyhedral.forward(spherical, TEST_SPHERICAL_TRIANGLE, TEST_FACE_TRIANGLE)
+            spherical = equal_area.inverse(face_point, TEST_FACE_TRIANGLE, TEST_SPHERICAL_TRIANGLE)
+            result = equal_area.forward(spherical, TEST_SPHERICAL_TRIANGLE, TEST_FACE_TRIANGLE)
             assert is_close_array(list(result), face_point), \
-                f"Round trip failed: expected {face_point}, got {list(result)}" 
+                f"Round trip failed: expected {face_point}, got {list(result)}"
+
+
+class TestEqualAreaProjectionTriangleConstants:
+    """The projection caches shape constants from one canonical triangle, which
+    is only valid if every spherical triangle the dodecahedron can supply is
+    congruent AND consistently wound (the sign of V is chirality-sensitive).
+    This enforces the invariant documented in equal_area.py."""
+
+    def test_constants_agree_across_all_triangles(self):
+        dodecahedron = DodecahedronProjection()
+        canonical = EqualAreaProjection.compute_constants(CRS().get_canonical_triangle())
+
+        RELATIVE_TOLERANCE = 1e-13
+        for origin_id in range(12):
+            for face_triangle_index in range(10):
+                for reflected in (False, True):
+                    triangle = dodecahedron.get_spherical_triangle(face_triangle_index, origin_id, reflected)
+                    constants = EqualAreaProjection.compute_constants(triangle)
+                    for key, expected in canonical.items():
+                        actual = constants[key]
+                        assert abs(actual - expected) < abs(expected) * RELATIVE_TOLERANCE, \
+                            f"{key} mismatch at face {face_triangle_index}, origin {origin_id}, reflected {reflected}"

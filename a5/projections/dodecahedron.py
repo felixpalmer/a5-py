@@ -10,7 +10,7 @@ from ..core.constants import distance_to_edge, interhedral_angle, PI_OVER_5, TWO
 from ..core.origin import origins
 from ..core.tiling import get_quintant_vertices
 from .gnomonic import GnomonicProjection
-from .polyhedral import PolyhedralProjection
+from .equal_area import EqualAreaProjection
 from .crs import CRS
 from ..math import vec2, vec3
 
@@ -30,7 +30,7 @@ class DodecahedronProjection:
     def __init__(self):
         self.face_triangles: List[FaceTriangle] = []
         self.spherical_triangles: List[SphericalTriangle] = []
-        self.polyhedral = PolyhedralProjection()
+        self.equal_area = EqualAreaProjection(crs.get_canonical_triangle())
         self.gnomonic = GnomonicProjection()
 
     def forward(self, spherical: Spherical, origin_id: OriginId) -> Face:
@@ -71,7 +71,7 @@ class DodecahedronProjection:
         face_triangle = self.get_face_triangle(face_triangle_index, reflect, False)
         spherical_triangle = self.get_spherical_triangle(face_triangle_index, origin_id, reflect)
 
-        return self.polyhedral.forward(unprojected, spherical_triangle, face_triangle)
+        return self.equal_area.forward(unprojected, spherical_triangle, face_triangle)
 
     def inverse(self, face: Face, origin_id: OriginId) -> Spherical:
         """
@@ -91,7 +91,7 @@ class DodecahedronProjection:
         face_triangle = self.get_face_triangle(face_triangle_index, reflect, False)
         spherical_triangle = self.get_spherical_triangle(face_triangle_index, origin_id, reflect)
         
-        unprojected = self.polyhedral.inverse(face, face_triangle, spherical_triangle)
+        unprojected = self.equal_area.inverse(face, face_triangle, spherical_triangle)
         return to_spherical(unprojected)
 
     def should_reflect(self, polar: Polar) -> bool:
