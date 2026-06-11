@@ -115,7 +115,7 @@ These are the same checks that run in CI (.github/workflows/test.yml). Run these
   - 2. Create test files that load and verify against the fixtures
   - 3. Run tests and verify exact matches
 - Python port should NOT create its own fixture generators, copy them from TypeScript
-- IMPORTANT: The ports should verify that the behavior is exactly the same, it is NOT acceptable to round values or accept approximate equality
+- IMPORTANT: The ports should verify that the behavior is exactly the same, it is NOT acceptable to round values or accept approximate equality. Precisely: integer outputs (cell IDs, resolutions, counts) must match bit-for-bit; floating-point outputs are compared at the tolerance the tests define (typically 1e-10) — cross-language ulp-identity is not achievable and not required
 
 ## Important
 - Keep changes minimal and focused on requested tasks

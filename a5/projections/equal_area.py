@@ -52,9 +52,9 @@ class EqualAreaProjection:
     Caches the shape-only invariants of the spherical triangle. A5 only ever
     projects the congruent face-triangles of a single dodecahedron, so these
     depend only on the triangle's shape, not its position — they are computed
-    once from the canonical triangle passed to the constructor and reused for
-    every projection. Deriving them eagerly from a fixed triangle (rather than
-    lazily from whichever triangle is projected first) keeps results
+    once from the canonical triangle (see CRS.get_canonical_triangle) and
+    reused for every projection. Deriving them from a fixed triangle (rather
+    than lazily from whichever triangle is projected first) keeps results
     independent of call order: congruent triangles agree only to ~1 ulp, so a
     lazy cache would make outputs depend on process history.
 

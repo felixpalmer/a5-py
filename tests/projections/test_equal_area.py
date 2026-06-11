@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 from a5.projections.equal_area import EqualAreaProjection
 from a5.projections.dodecahedron import DodecahedronProjection
+from a5.projections.crs import CRS
 from a5.core.coordinate_systems import Cartesian
 from a5.math.vec3 import length
 from tests.matchers import is_close_array
@@ -102,9 +103,7 @@ class TestEqualAreaProjectionTriangleConstants:
 
     def test_constants_agree_across_all_triangles(self):
         dodecahedron = DodecahedronProjection()
-        canonical = EqualAreaProjection.compute_constants(
-            dodecahedron.get_spherical_triangle(0, 0, False)
-        )
+        canonical = EqualAreaProjection.compute_constants(CRS().get_canonical_triangle())
 
         RELATIVE_TOLERANCE = 1e-13
         for origin_id in range(12):

@@ -30,12 +30,8 @@ class DodecahedronProjection:
     def __init__(self):
         self.face_triangles: List[FaceTriangle] = []
         self.spherical_triangles: List[SphericalTriangle] = []
+        self.equal_area = EqualAreaProjection(crs.get_canonical_triangle())
         self.gnomonic = GnomonicProjection()
-        # All face triangles are congruent, so the equal-area projection derives
-        # its shape constants once from a canonical triangle. Using a fixed
-        # triangle (face 0, origin 0, unreflected) keeps results bit-identical
-        # regardless of which face is projected first.
-        self.equal_area = EqualAreaProjection(self.get_spherical_triangle(0, 0, False))
 
     def forward(self, spherical: Spherical, origin_id: OriginId) -> Face:
         """
