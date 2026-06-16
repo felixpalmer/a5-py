@@ -3,7 +3,7 @@
 # Copyright (c) A5 contributors
 
 import math
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Sequence, Set, Tuple, Union
 
 from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_to_spherical
@@ -22,14 +22,28 @@ from ..traversal.lattice_flood_fill import triple_space_flood_fill
 
 
 # Maps each boundary cell to the indices of the ring segments that produced it.
+# Segment indices are global across rings (outer ring first, then holes).
 SegmentMap = Dict[int, List[int]]
 
 
+def _point_in_polygon_rings(point: Cartesian, ring_vecs_list: List[List[Cartesian]]) -> bool:
+    """
+    Point-in-polygon for a polygon with holes: inside the outer ring and
+    outside every hole ring.
+    """
+    if not point_in_spherical_polygon(point, ring_vecs_list[0]):
+        return False
+    for ring_vecs in ring_vecs_list[1:]:
+        if point_in_spherical_polygon(point, ring_vecs):
+            return False
+    return True
+
+
 def _dense_sample_boundary(
-    ring: List[LonLat], ring_vecs: List[Cartesian], resolution: int,
+    rings: List[List[LonLat]], ring_vecs_list: List[List[Cartesian]], resolution: int,
 ) -> Tuple[List[int], Set[int], SegmentMap]:
     """
-    Dense-sample boundary cells along the closed polygon ring at
+    Dense-sample boundary cells along every closed ring (outer + holes) at
     cell_radius * 0.4 spacing, calling spherical_to_cell per sample.
     """
     boundary_cells: List[int] = []
@@ -49,27 +63,34 @@ def _dense_sample_boundary(
         else:
             segment_map[cell] = [seg_idx]
 
-    n = len(ring)
-    vertex_cells: List[int] = [0] * n
-    for i in range(n):
-        vertex_cells[i] = lonlat_to_cell(ring[i], resolution)
+    seg_offset = 0
+    for r in range(len(rings)):
+        ring = rings[r]
+        ring_vecs = ring_vecs_list[r]
 
-    for i in range(n):
-        next_i = (i + 1) % n
-        record_cell(vertex_cells[i], i)
+        n = len(ring)
+        vertex_cells: List[int] = [0] * n
+        for i in range(n):
+            vertex_cells[i] = lonlat_to_cell(ring[i], resolution)
 
-        # Skip the lonLat round-trip: samples are authalic-Cartesian already.
-        samples = sample_great_circle_arc(ring_vecs[i], ring_vecs[next_i], sample_interval)
-        for s in samples:
-            record_cell(spherical_to_cell(to_spherical(s), resolution), i)
-        record_cell(vertex_cells[next_i], i)
+        for i in range(n):
+            next_i = (i + 1) % n
+            record_cell(vertex_cells[i], seg_offset + i)
+
+            # Skip the lonLat round-trip: samples are authalic-Cartesian already.
+            samples = sample_great_circle_arc(ring_vecs[i], ring_vecs[next_i], sample_interval)
+            for s in samples:
+                record_cell(spherical_to_cell(to_spherical(s), resolution), seg_offset + i)
+            record_cell(vertex_cells[next_i], seg_offset + i)
+        seg_offset += n
 
     return boundary_cells, boundary_set, segment_map
 
 
 def _filter_boundary_cells(
     boundary_cells: List[int], segment_map: SegmentMap,
-    seg_normals: List[Cartesian], ring_vecs: List[Cartesian], interior_sign: int,
+    seg_normals: List[Cartesian], seg_signs: List[int],
+    ring_vecs_list: List[List[Cartesian]],
 ) -> List[int]:
     """
     Filter boundary cells to those whose center is inside the polygon.
@@ -84,7 +105,7 @@ def _filter_boundary_cells(
         cv = to_cartesian(cell_to_spherical(cell))
         segments = segment_map.get(cell)
         if segments is None:
-            if point_in_spherical_polygon(cv, ring_vecs):
+            if _point_in_polygon_rings(cv, ring_vecs_list):
                 out.append(cell)
             continue
         all_inside = True
@@ -96,12 +117,12 @@ def _filter_boundary_cells(
             if abs(dot) < 1e-14:
                 ambiguous = True
                 break
-            if dot * interior_sign > 0:
+            if dot * seg_signs[seg_idx] > 0:
                 any_inside = True
             else:
                 all_inside = False
         if ambiguous or (any_inside and not all_inside):
-            if point_in_spherical_polygon(cv, ring_vecs):
+            if _point_in_polygon_rings(cv, ring_vecs_list):
                 out.append(cell)
         elif all_inside:
             out.append(cell)
@@ -212,32 +233,69 @@ def _flood_interior(
     return interior_cells
 
 
-def polygon_to_cells(ring: List[LonLat], resolution: int) -> List[int]:
+def _strip_closing(ring: List[LonLat]) -> List[LonLat]:
+    """GeoJSON rings repeat the first vertex at the end -- drop the duplicate."""
+    last = len(ring) - 1
+    if last > 0 and ring[0][0] == ring[last][0] and ring[0][1] == ring[last][1]:
+        return ring[:-1]
+    return ring
+
+
+def polygon_to_cells(
+    polygon: Union[Sequence[LonLat], Sequence[Sequence[LonLat]]], resolution: int,
+) -> List[int]:
     """
     Find all cells within a polygon using center-point containment: a cell is
-    included iff its center lies inside the ring. The result is compacted -- use
-    `uncompact` to expand to the input resolution.
+    included iff its center lies inside the polygon. The result is compacted --
+    use `uncompact` to expand to the input resolution.
 
     Args:
-        ring: Polygon vertices [longitude, latitude] (unclosed -- closed automatically)
+        polygon: Either a single ring of [longitude, latitude] vertices, or
+            GeoJSON-style rings `[outer, *holes]` where cells inside a hole are
+            excluded. Rings may be open or closed (GeoJSON-style, first vertex
+            repeated at the end) -- closure is automatic either way. Holes with
+            fewer than 3 distinct vertices are ignored.
         resolution: Target resolution (0..30)
 
     Returns:
         Sorted, compacted list of cell IDs whose centers lie inside the polygon
     """
-    if len(ring) < 3:
+    # Normalize: a flat ring is shorthand for a polygon with no holes.
+    is_nested = len(polygon) > 0 and not isinstance(polygon[0][0], (int, float))
+    input_rings: List[List[LonLat]] = list(polygon) if is_nested else [list(polygon)]  # type: ignore[arg-type]
+
+    if len(input_rings) == 0:
         return []
+    outer = _strip_closing(list(input_rings[0]))
+    if len(outer) < 3:
+        return []
+    rings: List[List[LonLat]] = [outer]
+    for r in range(1, len(input_rings)):
+        hole = _strip_closing(list(input_rings[r]))
+        if len(hole) >= 3:
+            rings.append(hole)
 
     # Authalic-sphere ring vectors -- A5's internal sphere, so cell centers
     # compare directly with no geodetic<->authalic round-trip.
-    ring_vecs: List[Cartesian] = [to_cartesian(from_lonlat(ring[i])) for i in range(len(ring))]
+    ring_vecs_list: List[List[Cartesian]] = []
+    for ring in rings:
+        ring_vecs_list.append([to_cartesian(from_lonlat(ring[i])) for i in range(len(ring))])
 
-    boundary_cells, boundary_set, segment_map = _dense_sample_boundary(ring, ring_vecs, resolution)
+    boundary_cells, boundary_set, segment_map = _dense_sample_boundary(rings, ring_vecs_list, resolution)
 
-    interior_sign = ring_winding_sign(ring_vecs)
-    seg_normals = ring_segment_normals(ring_vecs)
+    # Flattened per-segment normals and interior-side signs, indexed like the
+    # segment map. The polygon interior lies on the *outside* of a hole ring,
+    # so hole segments get the opposite sign.
+    seg_normals: List[Cartesian] = []
+    seg_signs: List[int] = []
+    for r in range(len(rings)):
+        sign = (1 if r == 0 else -1) * ring_winding_sign(ring_vecs_list[r])
+        normals = ring_segment_normals(ring_vecs_list[r])
+        for normal in normals:
+            seg_normals.append(normal)
+            seg_signs.append(sign)
 
-    filtered_boundary = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, ring_vecs, interior_sign)
+    filtered_boundary = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, seg_signs, ring_vecs_list)
 
     # Dense sampling can leave gaps; the shell catches them, classifying each cell.
     shell_cells = _expand_shell(boundary_cells, boundary_set)
@@ -247,10 +305,10 @@ def polygon_to_cells(ring: List[LonLat], resolution: int) -> List[int]:
     interior_seeds: List[int] = []
     visited: Set[int] = set(boundary_set)
     for cell in shell_cells:
-        if point_in_spherical_polygon(to_cartesian(cell_to_spherical(cell)), ring_vecs):
+        if _point_in_polygon_rings(to_cartesian(cell_to_spherical(cell)), ring_vecs_list):
             interior_seeds.append(cell)
         else:
-            visited.add(cell)  # exterior shell joins the firewall
+            visited.add(cell)  # exterior shell (and hole interiors) join the firewall
     if len(interior_seeds) == 0:
         return compact(filtered_boundary)
 
