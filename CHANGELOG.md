@@ -19,6 +19,14 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v0.9.0] - June 17 2026
+
+- **BREAKING**: Remove cell_to_spherical
+- chore: align API (#50)
+- Support holes (#49)
+- Feat: refactor to use EqualAreaProjection (#48)
+- feat: Faster polyhedral projection (#47)
+
 #### pya5 [v0.8.0] - May 12 2026
 
 - fix(cell): Spiral unstable in polar regions (#46)
