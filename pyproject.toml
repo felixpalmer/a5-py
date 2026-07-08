@@ -16,13 +16,16 @@ packages = ["a5"]
 
 [project.optional-dependencies]
 test = ["pytest>=7.0.0"]
+bench = ["pytest-benchmark>=4.0.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py"]
+python_files = ["test_*.py", "bench_*.py"]
+python_functions = ["test_*", "bench_*"]
 addopts = "-v --tb=short"
 
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
+    "pytest-benchmark>=4.0.0",
 ]
