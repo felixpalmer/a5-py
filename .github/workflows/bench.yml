@@ -1,0 +1,55 @@
+name: bench
+
+# Compare benchmark performance of the PR against its merge-base with main.
+# Both runs execute on the same runner minutes apart, so machine variance
+# largely cancels out. The PR's benchmark files drive both runs; only the
+# library code in /a5 is switched to the baseline commit.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Create virtual environment
+        run: uv venv
+
+      - name: Install dependencies
+        run: uv pip install -e ".[test,bench]"
+
+      - name: Run benchmarks (PR)
+        run: uv run pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-current.json
+
+      - name: Switch library code to baseline
+        run: |
+          BASE=$(git merge-base origin/main HEAD)
+          echo "Baseline commit: $BASE"
+          git checkout "$BASE" -- a5
+
+      - name: Run benchmarks (baseline)
+        run: uv run pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-baseline.json
+
+      - name: Restore PR library code
+        run: git checkout HEAD -- a5
+
+      - name: Compare (fail on >15% regression)
+        shell: bash
+        run: python3 scripts/compare_benchmarks.py bench-baseline.json bench-current.json 15 | tee -a "$GITHUB_STEP_SUMMARY"
