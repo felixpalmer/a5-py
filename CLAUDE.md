@@ -66,6 +66,14 @@ uv publish
 - **Dependencies**: Core library has no runtime dependencies
 - **Coordinate Types**: LonLat is just a tuple `(float, float)` in Python - no special casting needed
 
+## Benchmarks
+- `/benchmarks` - performance benchmark suite (mirrors the TypeScript `../a5/benchmarks`), one `bench_<topic>.py` file per topic, using **pytest-benchmark**.
+- Shared helpers in `benchmarks/utils.py`: deterministic `create_random` (mulberry32) PRNG, `sample_points`, `sample_cells`, and fixture loaders (`load_countries`, `country_polygon`).
+- Hot calls rotate through `N=256` precomputed inputs via an `itertools.count()` counter passed to the `benchmark` fixture.
+- Run with: `uv run pytest benchmarks --benchmark-only`
+- `pytest-benchmark` is in the `bench` optional-dependency group and the `dev` dependency group; install via `uv sync --group dev` (or `uv pip install -e ".[bench]"`).
+- `testpaths` stays `["tests"]`, so a plain `uv run pytest` does NOT collect benchmarks; the ini also recognizes `bench_*.py` files/`bench_*` functions so `benchmarks/` collects when its path is given explicitly.
+
 ## Polyglot Mirroring
 A5 uses **Polyglot Mirroring** - any of the three implementations (TypeScript, Python, Rust) can be the source for porting changes to the others. See `../a5/docs/ecosystem/polyglot-mirroring.md` for philosophy.
 
