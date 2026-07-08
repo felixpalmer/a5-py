@@ -36,7 +36,7 @@ jobs:
         run: uv pip install -e ".[test,bench]"
 
       - name: Run benchmarks (PR)
-        run: uv run pytest benchmarks --benchmark-only --benchmark-json=bench-current.json
+        run: uv run pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-current.json
 
       - name: Switch library code to baseline
         run: |
@@ -45,7 +45,7 @@ jobs:
           git checkout "$BASE" -- a5
 
       - name: Run benchmarks (baseline)
-        run: uv run pytest benchmarks --benchmark-only --benchmark-json=bench-baseline.json
+        run: uv run pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-baseline.json
 
       - name: Restore PR library code
         run: git checkout HEAD -- a5
