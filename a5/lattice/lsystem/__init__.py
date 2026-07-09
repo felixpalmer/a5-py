@@ -32,7 +32,7 @@ from typing import NamedTuple, Tuple
 
 from ..types import Orientation, Triple
 from .grammar import RULES, DRAWS
-from .tables import compile_grammar, CurveTables, POW2, POW4
+from .tables import compile_grammar, CurveTables, POW2, POW4, BSP_EPS
 from .turtle import AB
 
 # The compiled A5 grammar.
@@ -113,6 +113,19 @@ def axiom_leaf_cell(t: CurveTables, s: int, R: int, axiom: int) -> LeafCell:
 
 
 # ---------- inverse: descend by which child's convex footprint contains the target ----------
+def _classify(t, state, rel_a, rel_b, scale):
+    """Branchless child pick: 3 separator dot products form a 3-bit pattern that
+    indexes the per-state lookup table. Used on the exact path, where the target
+    is strictly interior at every level."""
+    s = t.class_sep
+    b = state * 9
+    thr = -BSP_EPS * scale
+    b0 = 1 if (s[b] * rel_a + s[b + 1] * rel_b + s[b + 2] * scale) >= thr else 0
+    b1 = 1 if (s[b + 3] * rel_a + s[b + 4] * rel_b + s[b + 5] * scale) >= thr else 0
+    b2 = 1 if (s[b + 6] * rel_a + s[b + 7] * rel_b + s[b + 8] * scale) >= thr else 0
+    return t.class_lut[state * 8 + (b0 | (b1 << 1) | (b2 << 2))]
+
+
 def _inside_score(t, motif, flip, lvl, pos_a, pos_b, ta, tb, best):
     scale = POW2[lvl - 1]
     edges = t.fp_edges[motif * 2 + flip]
@@ -148,20 +161,27 @@ def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, 
     for level in range(R, 1, -1):
         scale = POW2[level - 2]
         sign = -scale if flip else scale
-        best_d = 0
-        best_score = -math.inf
-        for d in range(4):
-            ci = motif * 4 + d
-            score = _inside_score(
-                t, t.child_token[ci], flip ^ t.child_flip[ci], level - 1,
-                pos_a + t.child_off_a[ci] * sign, pos_b + t.child_off_b[ci] * sign,
-                ta, tb, best_score,
-            )
-            if score > best_score:
-                best_score = score
-                best_d = d
-                if score > 0.0:
-                    break  # strictly inside: the unique containing child
+        # Exact targets (real cell corner sums) are strictly interior at every
+        # level, so the branchless classifier is provably the containing child.
+        # Fractional targets can sit on a child boundary (different tie-break), so
+        # keep the exact argmax scan there; compat's ij_to_s is pinned bit-for-bit.
+        if exact:
+            best_d = _classify(t, motif * 2 + flip, ta - 3.0 * pos_a, tb - 3.0 * pos_b, scale)
+        else:
+            best_d = 0
+            best_score = -math.inf
+            for d in range(4):
+                ci = motif * 4 + d
+                score = _inside_score(
+                    t, t.child_token[ci], flip ^ t.child_flip[ci], level - 1,
+                    pos_a + t.child_off_a[ci] * sign, pos_b + t.child_off_b[ci] * sign,
+                    ta, tb, best_score,
+                )
+                if score > best_score:
+                    best_score = score
+                    best_d = d
+                    if score > 0.0:
+                        break  # strictly inside: the unique containing child
         ci = motif * 4 + best_d
         pos_a += t.child_off_a[ci] * sign
         pos_b += t.child_off_b[ci] * sign

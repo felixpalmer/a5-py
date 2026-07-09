@@ -41,7 +41,15 @@ class CurveTables(NamedTuple):
     leaf_sum: List[float]
     leaf_tri: List[float]
     leaf_flavor: List[int]
+    # Branchless child classifier per state k = motif*2+flip: 3 separating lines
+    # (class_sep[k*9 ..] = [nx0,ny0,c0, nx1,ny1,c1, nx2,ny2,c2]) evaluated against
+    # the normalised target give a 3-bit pattern; class_lut[k*8 + pat] is the
+    # child digit. Replaces the exact-path 4-hull scan with 3 dot products + a LUT.
+    class_sep: List[float]
+    class_lut: List[int]
 
+
+BSP_EPS = 1e-6
 
 # The pentagon FLAVOR (0-3) of the cell a draw symbol hosts: which of the four
 # pentagon orientations of the Cairo-like metatile it gets. The pentagon is a
@@ -213,6 +221,22 @@ def compile_grammar(rules: Dict[str, str], draws: Dict[str, str]) -> CurveTables
 
             walk(draw_str, AB(0, 0), 3 if flip == 1 else 0, on_draw)
 
+    # ---------- branchless child classifier (3 line tests + LUT per state) ----------
+    class_sep = [0.0] * (motif_count * 2 * 9)
+    class_lut = [0] * (motif_count * 2 * 8)
+    for m in range(motif_count):
+        for f in range(2):
+            k = m * 2 + f
+            tree = _build_bsp(_child_polys(m, f, child_token, child_flip, child_off_a, child_off_b, fp_edges))
+            seps: List[tuple] = []
+            _collect_seps(tree, seps)
+            for i, s in enumerate(seps):
+                class_sep[k * 9 + i * 3] = s[0]
+                class_sep[k * 9 + i * 3 + 1] = s[1]
+                class_sep[k * 9 + i * 3 + 2] = s[2]
+            for p in range(8):
+                class_lut[k * 8 + p] = _walk_bsp(tree, p, seps)
+
     return CurveTables(
         motif_idx=motif_idx,
         child_token=child_token,
@@ -223,7 +247,72 @@ def compile_grammar(rules: Dict[str, str], draws: Dict[str, str]) -> CurveTables
         leaf_sum=leaf_sum,
         leaf_tri=leaf_tri,
         leaf_flavor=leaf_flavor,
+        class_sep=class_sep,
+        class_lut=class_lut,
     )
+
+
+def _child_polys(motif, pflip, child_token, child_flip, child_off_a, child_off_b, fp_edges):
+    """The 4 child footprint polygons for state (motif, pflip), in the normalised
+    target-relative-to-cursor frame (scale-invariant), as (digit, verts)."""
+    psign = -1 if pflip else 1
+    out = []
+    for d in range(4):
+        ci = motif * 4 + d
+        tok = child_token[ci]
+        cfl = child_flip[ci]
+        oa = child_off_a[ci]
+        ob = child_off_b[ci]
+        edges = fp_edges[tok * 2 + (pflip ^ cfl)]
+        verts = [(3 * oa * psign + edges[e], 3 * ob * psign + edges[e + 1])
+                 for e in range(0, len(edges), 4)]
+        out.append((d, verts))
+    return out
+
+
+def _build_bsp(children):
+    """Build a child-selection BSP; children tile convexly, so a polygon edge
+    cleanly splits them into two groups. Returns ('leaf', digit) | ('node', (nx,ny,c), pos, neg)."""
+    if len(children) == 1:
+        return ('leaf', children[0][0])
+    for _, poly in children:
+        n = len(poly)
+        for i in range(n):
+            x1, y1 = poly[i]
+            x2, y2 = poly[(i + 1) % n]
+            nx = y2 - y1
+            ny = -(x2 - x1)
+            c = -(nx * x1 + ny * y1)
+            pos, neg, ok = [], [], True
+            for d, cp in children:
+                vals = [nx * x + ny * y + c for x, y in cp]
+                if min(vals) >= -BSP_EPS:
+                    pos.append((d, cp))
+                elif max(vals) <= BSP_EPS:
+                    neg.append((d, cp))
+                else:
+                    ok = False
+                    break
+            if ok and pos and neg:
+                return ('node', (nx, ny, c), _build_bsp(pos), _build_bsp(neg))
+    raise ValueError("lsystem: no clean BSP split for child set")
+
+
+def _collect_seps(tree, seps):
+    if tree[0] == 'leaf':
+        return
+    if tree[1] not in seps:
+        seps.append(tree[1])
+    _collect_seps(tree[2], seps)
+    _collect_seps(tree[3], seps)
+
+
+def _walk_bsp(tree, p, seps):
+    """Walk the tree for a fixed sign pattern p (bit i = which side of separator i)."""
+    if tree[0] == 'leaf':
+        return tree[1]
+    idx = seps.index(tree[1])
+    return _walk_bsp(tree[2] if (p >> idx) & 1 else tree[3], p, seps)
 
 
 # powers of 2 / 4 used by the descents (index by level / digit position)
