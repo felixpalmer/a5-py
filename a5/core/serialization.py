@@ -263,6 +263,10 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
     return (((c >> 58) // 5) << 58) | (1 << 57)
 
 
+# The 12 resolution-0 cells (dodecahedron faces) are a constant — compute once.
+_RES0_CELLS: Optional[List[int]] = None
+
+
 def get_res0_cells() -> List[int]:
     """
     Returns resolution 0 cells of the A5 system, which serve as a starting point
@@ -271,7 +275,10 @@ def get_res0_cells() -> List[int]:
     Returns:
         List of 12 cell indices
     """
-    return cell_to_children(WORLD_CELL, 0)
+    global _RES0_CELLS
+    if _RES0_CELLS is None:
+        _RES0_CELLS = cell_to_children(WORLD_CELL, 0)
+    return list(_RES0_CELLS)
 
 
 def is_first_child(index: int, resolution: Optional[int] = None) -> bool:
