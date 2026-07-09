@@ -12,8 +12,9 @@ from ..core.serialization import (
     cell_to_parent, cell_to_children, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
 )
 from ..core.compact import compact
-from ..geometry.spherical_polygon import (
-    point_in_spherical_polygon, ring_winding_sign, ring_segment_normals,
+from ..geometry.spherical_polygon import ring_winding_sign
+from ..geometry.prepared_polygon import (
+    PreparedPolygon, prepare_polygon, point_in_prepared_polygon,
 )
 from ..traversal.cap import estimate_cell_radius
 from ..utils.great_circle import sample_great_circle_arc
@@ -24,19 +25,6 @@ from ..traversal.lattice_flood_fill import triple_space_flood_fill
 # Maps each boundary cell to the indices of the ring segments that produced it.
 # Segment indices are global across rings (outer ring first, then holes).
 SegmentMap = Dict[int, List[int]]
-
-
-def _point_in_polygon_rings(point: Cartesian, ring_vecs_list: List[List[Cartesian]]) -> bool:
-    """
-    Point-in-polygon for a polygon with holes: inside the outer ring and
-    outside every hole ring.
-    """
-    if not point_in_spherical_polygon(point, ring_vecs_list[0]):
-        return False
-    for ring_vecs in ring_vecs_list[1:]:
-        if point_in_spherical_polygon(point, ring_vecs):
-            return False
-    return True
 
 
 def _dense_sample_boundary(
@@ -90,7 +78,7 @@ def _dense_sample_boundary(
 def _filter_boundary_cells(
     boundary_cells: List[int], segment_map: SegmentMap,
     seg_normals: List[Cartesian], seg_signs: List[int],
-    ring_vecs_list: List[List[Cartesian]],
+    prep: PreparedPolygon,
 ) -> List[int]:
     """
     Filter boundary cells to those whose center is inside the polygon.
@@ -105,7 +93,7 @@ def _filter_boundary_cells(
         cv = to_cartesian(cell_to_spherical(cell))
         segments = segment_map.get(cell)
         if segments is None:
-            if _point_in_polygon_rings(cv, ring_vecs_list):
+            if point_in_prepared_polygon(cv, prep):
                 out.append(cell)
             continue
         all_inside = True
@@ -122,7 +110,7 @@ def _filter_boundary_cells(
             else:
                 all_inside = False
         if ambiguous or (any_inside and not all_inside):
-            if _point_in_polygon_rings(cv, ring_vecs_list):
+            if point_in_prepared_polygon(cv, prep):
                 out.append(cell)
         elif all_inside:
             out.append(cell)
@@ -281,6 +269,8 @@ def polygon_to_cells(
     for ring in rings:
         ring_vecs_list.append([to_cartesian(from_lonlat(ring[i])) for i in range(len(ring))])
 
+    prep = prepare_polygon(ring_vecs_list)
+
     boundary_cells, boundary_set, segment_map = _dense_sample_boundary(rings, ring_vecs_list, resolution)
 
     # Flattened per-segment normals and interior-side signs, indexed like the
@@ -290,12 +280,12 @@ def polygon_to_cells(
     seg_signs: List[int] = []
     for r in range(len(rings)):
         sign = (1 if r == 0 else -1) * ring_winding_sign(ring_vecs_list[r])
-        normals = ring_segment_normals(ring_vecs_list[r])
+        normals = prep.ring_normals[r]
         for normal in normals:
             seg_normals.append(normal)
             seg_signs.append(sign)
 
-    filtered_boundary = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, seg_signs, ring_vecs_list)
+    filtered_boundary = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, seg_signs, prep)
 
     # Dense sampling can leave gaps; the shell catches them, classifying each cell.
     shell_cells = _expand_shell(boundary_cells, boundary_set)
@@ -305,7 +295,7 @@ def polygon_to_cells(
     interior_seeds: List[int] = []
     visited: Set[int] = set(boundary_set)
     for cell in shell_cells:
-        if _point_in_polygon_rings(to_cartesian(cell_to_spherical(cell)), ring_vecs_list):
+        if point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)), prep):
             interior_seeds.append(cell)
         else:
             visited.add(cell)  # exterior shell (and hole interiors) join the firewall

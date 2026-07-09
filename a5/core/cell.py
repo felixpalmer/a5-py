@@ -18,9 +18,9 @@ from .origin import (
 from ..projections.dodecahedron import DodecahedronProjection
 from .utils import A5Cell, Origin, OriginId
 from ..geometry.pentagon import PentagonShape
-from .tiling import get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
+from .tiling import get_face_vertices, get_pentagon_center, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
 from .constants import PI_OVER_5
-from ..lattice import ij_to_s, s_to_anchor
+from ..lattice import ij_to_s, s_to_cell
 from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL
 from ..geometry.spherical_polygon import SphericalPolygonShape
 from ..utils.spiral import Spiral, SPIRAL_SAMPLE_COUNT
@@ -213,8 +213,8 @@ def _get_pentagon(cell: A5Cell) -> PentagonShape:
         return get_face_vertices()
 
     hilbert_resolution = cell["resolution"] - FIRST_HILBERT_RESOLUTION + 1
-    anchor = s_to_anchor(cell["S"], hilbert_resolution, orientation)
-    return get_pentagon_vertices(hilbert_resolution, quintant, anchor)
+    cell_geom = s_to_cell(cell["S"], hilbert_resolution, orientation)
+    return get_pentagon_vertices(hilbert_resolution, quintant, cell_geom.triple, cell_geom.flavor)
 
 def cell_to_spherical(cell_id: int) -> Spherical:
     """
@@ -227,6 +227,14 @@ def cell_to_spherical(cell_id: int) -> Spherical:
         Spherical coordinates (theta, phi)
     """
     cell = deserialize(cell_id)
+    if cell["resolution"] >= FIRST_HILBERT_RESOLUTION:
+        # Fast path: the pentagon center is O(1) from (triple, flavor) -- no need
+        # to construct the pentagon itself.
+        quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
+        hilbert_resolution = cell["resolution"] - FIRST_HILBERT_RESOLUTION + 1
+        cell_geom = s_to_cell(cell["S"], hilbert_resolution, orientation)
+        center = get_pentagon_center(hilbert_resolution, quintant, cell_geom.triple, cell_geom.flavor)
+        return _dodecahedron.inverse(center, cell["origin"].id)
     pentagon = _get_pentagon(cell)
     return _dodecahedron.inverse(pentagon.get_center(), cell["origin"].id)
 

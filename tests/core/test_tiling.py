@@ -8,7 +8,7 @@ from a5.core.tiling import (
     get_face_vertices,
     get_quintant_polar
 )
-from a5.core.hilbert import Anchor
+from a5.lattice import Triple
 from tests.matchers import is_close_array
 
 
@@ -30,17 +30,15 @@ class TestGetPentagonVertices:
             input_data = fixture["input"]
             expected = fixture["output"]
             
-            # Create anchor from fixture data
-            anchor = Anchor(
-                offset=tuple(input_data["anchor"]["offset"]),
-                flips=tuple(input_data["anchor"]["flips"]),
-                k=input_data["anchor"]["q"]
-            )
-            
+            # Create triple from fixture data
+            t = input_data["triple"]
+            triple = Triple(t["x"], t["y"], t["z"])
+
             pentagon = get_pentagon_vertices(
                 input_data["resolution"],
                 input_data["quintant"],
-                anchor
+                triple,
+                input_data["flavor"]
             )
             
             # Check vertices match

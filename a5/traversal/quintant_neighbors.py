@@ -2,60 +2,54 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-from typing import List, Optional
+from typing import List
 from ..lattice import (
-    Anchor, Orientation, Triple,
-    s_to_anchor, anchor_to_triple, triple_to_anchor, triple_to_s, triple_in_bounds
+    Orientation, Triple,
+    s_to_cell, triple_to_s, triple_in_bounds,
 )
-from .neighbors import is_neighbor
+from .neighbors import NEIGHBOR_DELTAS
 
 
 def find_quintant_neighbor_s(
     source_triple: Triple,
-    uv_source_anchor: Optional[Anchor],
+    source_flavor: int,
     source_s: int,
     resolution: int,
     orientation: Orientation,
     edge_only: bool
 ) -> List[int]:
     """
-    Find within-quintant neighbors via triple coordinate search.
+    Find within-quintant neighbors via the cell's pentagon flavor.
 
-    Generates +/-1 candidate triples, validates with is_neighbor() in uv space,
-    and converts validated triples to s-values in the requested orientation.
+    A cell's neighbors sit at fixed triple deltas determined by its flavor
+    (NEIGHBOR_DELTAS -- 5 edge-sharing + 2 vertex-only), so no per-candidate
+    validation is needed: each in-bounds delta is a neighbor.
+
+    Args:
+        source_triple: Triple coordinates of the source cell
+        source_flavor: Pentagon flavor of the source cell (0-3)
+        source_s: Source s-value to exclude from results
+        resolution: Resolution level
+        orientation: Curve orientation
+        edge_only: If True, only the 5 edge-sharing neighbors
     """
     max_s = 4 ** resolution
     max_row = (1 << resolution) - 1
+    deltas = NEIGHBOR_DELTAS[source_flavor]
     neighbors: List[int] = []
 
-    for dx in range(-1, 2):
-        for dy in range(-1, 2):
-            for dz in range(-1, 2):
-                if dx == 0 and dy == 0 and dz == 0:
-                    continue
-                if abs(dx) + abs(dy) + abs(dz) > 3:
-                    continue
-                if edge_only and abs(dx) + abs(dy) + abs(dz) > 2:
-                    continue
-
-                neighbor_triple = Triple(
-                    source_triple.x + dx,
-                    source_triple.y + dy,
-                    source_triple.z + dz
-                )
-                if not triple_in_bounds(neighbor_triple, max_row):
-                    continue
-
-                # Validate in uv space where is_neighbor is known to work
-                uv_neighbor_anchor = triple_to_anchor(neighbor_triple, resolution, 'uv')
-                if uv_neighbor_anchor is None or uv_source_anchor is None:
-                    continue
-                if not is_neighbor(uv_source_anchor, uv_neighbor_anchor):
-                    continue
-
-                neighbor_s = triple_to_s(neighbor_triple, resolution, orientation)
-                if neighbor_s is not None and 0 <= neighbor_s < max_s and neighbor_s != source_s:
-                    neighbors.append(neighbor_s)
+    lst = deltas.edge if edge_only else deltas.all
+    for d in lst:
+        neighbor_triple = Triple(
+            source_triple.x + d.x,
+            source_triple.y + d.y,
+            source_triple.z + d.z,
+        )
+        if not triple_in_bounds(neighbor_triple, max_row):
+            continue
+        neighbor_s = triple_to_s(neighbor_triple, resolution, orientation)
+        if neighbor_s is not None and 0 <= neighbor_s < max_s and neighbor_s != source_s:
+            neighbors.append(neighbor_s)
 
     return neighbors
 
@@ -67,20 +61,17 @@ def get_cell_neighbors(
     edge_only: bool = False
 ) -> List[int]:
     """
-    Fast neighbor finding using triple coordinates.
+    Neighbor finding via triple coordinates and pentagon flavor.
 
-    Strategy:
-    1. Convert cell to triple coordinates (x, y, z) -- orientation-independent
-    2. Generate neighbor triples (Manhattan distance <= 3) -- ~12 candidates
-    3. Validate with is_neighbor() in 'uv' space
-    4. Convert validated triples to s-values in the requested orientation
+    Triple coordinates are orientation-independent -- the same geometric cell
+    always has the same triple coords regardless of curve orientation. Only the
+    s-value changes between orientations, so neighbors are found in triple space
+    and converted back to the requested orientation.
     """
-    anchor = s_to_anchor(s, resolution, orientation)
-    triple = anchor_to_triple(anchor)
-    uv_source_anchor = triple_to_anchor(triple, resolution, 'uv')
+    cell = s_to_cell(s, resolution, orientation)
 
     result = find_quintant_neighbor_s(
-        triple, uv_source_anchor, s, resolution, orientation, edge_only
+        cell.triple, cell.flavor, s, resolution, orientation, edge_only
     )
     result.sort()
     return result

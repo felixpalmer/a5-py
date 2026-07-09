@@ -7,13 +7,10 @@ from typing import List, Tuple
 from ..geometry.pentagon import PentagonShape, Pentagon
 from .pentagon import a, BASIS, PENTAGON, TRIANGLE, v, V, w
 from .constants import TWO_PI, TWO_PI_OVER_5
-from ..lattice import NO, Anchor, YES
+from ..lattice import Triple
 from ..math import vec2
 
 TRIANGLE_MODE = False
-
-shift_right = w  # No need to copy, just reference
-shift_left = (-w[0], -w[1])
 
 # Define transforms for each pentagon in the primitive unit
 # Using pentagon vertices and angle as the basis for the transform
@@ -25,78 +22,83 @@ QUINTANT_ROTATIONS = [
     for quintant in range(5)
 ]
 
-def get_pentagon_vertices(resolution: int, quintant: int, anchor: Anchor) -> PentagonShape:
+# Center of the base PENTAGON under each flavor's orientation ops. The vertex
+# mean is linear, so an oriented pentagon's center is the transformed base
+# center -- no need to construct the five vertices when only the center is
+# wanted (see get_pentagon_center).
+def _flavor_centers() -> List[Tuple[float, float]]:
+    centers = []
+    for flavor in range(4):
+        p = PENTAGON.clone()
+        if flavor & 1:
+            p.rotate180()
+        if flavor & 2:
+            p.reflect_y()
+        centers.append(p.get_center())
+    return centers
+
+
+FLAVOR_CENTERS = _flavor_centers()
+
+
+def _basis_translation(ref_ij: Tuple[float, float]) -> Tuple[float, float]:
+    """BASIS @ ref_ij (gl-matrix column-major convention)."""
+    basis_flat = [BASIS[0][0], BASIS[1][0], BASIS[0][1], BASIS[1][1]]
+    out = vec2.create()
+    vec2.transformMat2(out, ref_ij, basis_flat)
+    return (out[0], out[1])
+
+
+def get_pentagon_vertices(resolution: int, quintant: int, triple: Triple, flavor: int) -> PentagonShape:
     """
-    Get pentagon vertices
-    
+    Get pentagon vertices for a cell.
+
+    A cell's pentagon is one of exactly FOUR orientations of the base PENTAGON
+    (the Cairo-like metatile): flavor bit 0 is a 180 deg rotation, bit 1 a Y
+    reflection. The oriented pentagon sits at the triple-derived lattice point
+    ref = (x+y, -x) in IJ, shifted by one j unit for the rotated flavors.
+    The flavor is a 1:1 function of the cell's L-system jigsaw piece and is
+    produced by the descent (s_to_cell); the placement was derived and verified
+    exhaustively against the pentagon geometry.
+
     Args:
         resolution: The resolution level
         quintant: The quintant index (0-4)
-        anchor: The anchor information
-        
+        triple: The cell's triple coordinates
+        flavor: The cell's pentagon flavor (0-3)
+
     Returns:
         A pentagon shape with transformed vertices
     """
     pentagon = (TRIANGLE if TRIANGLE_MODE else PENTAGON).clone()
-    
-    # Matrix-vector multiplication using gl-matrix style: BASIS @ anchor.offset
-    # Convert 2x2 matrix from ((a,b),(c,d)) to [a,c,b,d] (column-major)
-    basis_flat = [BASIS[0][0], BASIS[1][0], BASIS[0][1], BASIS[1][1]]
-    translation_vec = vec2.create()
-    vec2.transformMat2(translation_vec, anchor.offset, basis_flat)
-    translation = (translation_vec[0], translation_vec[1])
 
-    # Apply transformations based on anchor properties
-    if anchor.flips[0] == NO and anchor.flips[1] == YES:
+    if flavor & 1:
         pentagon.rotate180()
-
-    q = anchor.q
-    F = anchor.flips[0] + anchor.flips[1]
-    if (
-        # Orient last two pentagons when both or neither flips are YES
-        ((F == -2 or F == 2) and q > 1) or
-        # Orient first & last pentagons when only one of flips is YES
-        (F == 0 and (q == 0 or q == 3))
-    ):
+    if flavor & 2:
         pentagon.reflect_y()
 
-    if anchor.flips[0] == YES and anchor.flips[1] == YES:
-        pentagon.rotate180()
-    elif anchor.flips[0] == YES:
-        pentagon.translate(shift_left)
-    elif anchor.flips[1] == YES:
-        pentagon.translate(shift_right)
-
-    # Position within quintant
+    # Position within quintant: ref(triple), plus (0, 1) for the rotated flavors
+    translation = _basis_translation((triple.x + triple.y, -triple.x + (flavor & 1)))
     pentagon.translate(translation)
     pentagon.scale(1 / (2 ** resolution))
     pentagon.transform(QUINTANT_ROTATIONS[quintant])
 
     return pentagon
 
-PentagonFlavor = int  # 0-7
 
-
-def get_pentagon_flavor(anchor: Anchor) -> PentagonFlavor:
-    """Get the flavor (0-7) of a pentagon from its anchor."""
-    f = 0
-    if anchor.flips[1] == YES:
-        f += 2
-
-    q = anchor.q
-    F = anchor.flips[0] + anchor.flips[1]
-    if (
-        # Orient last two pentagons when both or neither flips are YES
-        ((F == -2 or F == 2) and q > 1) or
-        # Orient first & last pentagons when only one of flips is YES
-        (F == 0 and (q == 0 or q == 3))
-    ):
-        f += 1
-
-    if F == -2 or F == 2:
-        f += 4
-
-    return f
+def get_pentagon_center(resolution: int, quintant: int, triple: Triple, flavor: int) -> Tuple[float, float]:
+    """
+    The center of a cell's pentagon, without constructing the pentagon --
+    O(1) via the precomputed flavor centers. Equivalent to
+    get_pentagon_vertices(...).get_center() (up to float associativity).
+    """
+    c = FLAVOR_CENTERS[flavor]
+    translation = _basis_translation((triple.x + triple.y, -triple.x + (flavor & 1)))
+    scale = 2 ** resolution
+    ox = (c[0] + translation[0]) / scale
+    oy = (c[1] + translation[1]) / scale
+    rot = QUINTANT_ROTATIONS[quintant]
+    return (rot[0][0] * ox + rot[0][1] * oy, rot[1][0] * ox + rot[1][1] * oy)
 
 
 def get_quintant_vertices(quintant: int) -> PentagonShape:

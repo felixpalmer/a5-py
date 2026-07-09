@@ -9,11 +9,11 @@ from ..core.coordinate_systems import Cartesian, Spherical
 from ..core.coordinate_transforms import to_cartesian
 from ..math import quat, vec3
 
-# Number of perturbed sample points the spiral can produce. Tuned via
-# debug-scripts/tune-spiral.ts so that on a corpus of ~3500 spherical
-# points x 8 resolutions, the spiral hits a strictly-containing cell
-# within these many iterations for all but a handful of points right at
-# the polar singularity at very high resolutions.
+# Number of perturbed sample points the spiral can produce. Tuned on a
+# corpus of ~3500 spherical points x 8 resolutions, such that the spiral
+# hits a strictly-containing cell within these many iterations for all
+# but a handful of points right at the polar singularity at very high
+# resolutions.
 SPIRAL_SAMPLE_COUNT = 24
 
 # Azimuthal step between consecutive samples in the rotated tangent plane.
