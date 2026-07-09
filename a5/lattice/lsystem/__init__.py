@@ -116,11 +116,14 @@ def axiom_leaf_cell(t: CurveTables, s: int, R: int, axiom: int) -> LeafCell:
 def _inside_score(t, motif, flip, lvl, pos_a, pos_b, ta, tb, best):
     scale = POW2[lvl - 1]
     edges = t.fp_edges[motif * 2 + flip]
+    # pos is fixed across this hull; fold 3*pos into the target once.
+    ra = ta - 3.0 * pos_a
+    rb = tb - 3.0 * pos_b
     min_cross = math.inf
     e = 0
     while e < len(edges):
-        dta = ta - (3.0 * pos_a + edges[e] * scale)
-        dtb = tb - (3.0 * pos_b + edges[e + 1] * scale)
+        dta = ra - edges[e] * scale
+        dtb = rb - edges[e + 1] * scale
         cross = edges[e + 2] * dtb - edges[e + 3] * dta
         if cross < min_cross:
             min_cross = cross
@@ -133,7 +136,10 @@ def _inside_score(t, motif, flip, lvl, pos_a, pos_b, ta, tb, best):
 # Shared descent for both leaf modes. `exact` targets are corner sums of real
 # cells (leaf resolved by exact sum match); fractional targets resolve the leaf
 # by point-in-cell over the 4 level-1 triangles. Internal; also used by compat.py.
-def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, exact: bool) -> int:
+def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, exact: bool):
+    """Returns (s, leaf_flavor). Callers that only need `s` take [0]; the flavor
+    lets compat resolve the pentagon flavor in this same descent (see
+    a5_triple_to_flavor) instead of a second forward descent."""
     motif = axiom
     flip = 0
     pos_a = 0.0
@@ -178,13 +184,15 @@ def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, 
         if not found:
             raise ValueError(f'lsystem inverse: no leaf match for corner sum ({ta},{tb})')
     else:
+        ra = ta - 3.0 * pos_a
+        rb = tb - 3.0 * pos_b
         best_score = -math.inf
         for d in range(4):
             min_cross = math.inf
             for e in range(3):
                 o = base * 48 + d * 12 + e * 4
-                dta = ta - (3.0 * pos_a + t.leaf_tri[o])
-                dtb = tb - (3.0 * pos_b + t.leaf_tri[o + 1])
+                dta = ra - t.leaf_tri[o]
+                dtb = rb - t.leaf_tri[o + 1]
                 cross = t.leaf_tri[o + 2] * dtb - t.leaf_tri[o + 3] * dta
                 if cross < min_cross:
                     min_cross = cross
@@ -193,20 +201,21 @@ def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, 
                 d0 = d
                 if min_cross > 0.0:
                     break
-    return s_val + d0
+    return s_val + d0, t.leaf_flavor[base * 4 + d0]
 
 
 # ---------- orientation = which triforce motif is the axiom ----------
 # Each orientation is one of the three triforce motifs used as the axiom
 # (uv->A, uw->C, wv->B), with the reverse orientations (vu, wu, vw) walking the
-# same curve backward (s -> N-1-s).
+# same curve backward (s -> N-1-s). The axiom motif index is resolved once here
+# (not per call) — motif_idx is a dict, so the per-call lookup was pure overhead.
 _ORIENT = {
-    'uv': ('A', False, False),
-    'vu': ('A', True, False),
-    'uw': ('C', False, False),
-    'wu': ('C', True, False),
-    'vw': ('B', True, True),
-    'wv': ('B', False, True),
+    'uv': (A5.motif_idx['A'], False, False),
+    'vu': (A5.motif_idx['A'], True, False),
+    'uw': (A5.motif_idx['C'], False, False),
+    'wu': (A5.motif_idx['C'], True, False),
+    'vw': (A5.motif_idx['B'], True, True),
+    'wv': (A5.motif_idx['B'], False, True),
 }
 
 
@@ -216,10 +225,8 @@ def s_to_cell(s: int, resolution: int, orientation: Orientation = 'uv') -> Cell:
     a given resolution and orientation. The triple is bijective with
     `triple_to_s_lattice`.
     """
-    n = 1 << (2 * resolution)
-    axiom_char, reverse, is_b = _ORIENT[orientation]
-    axiom = A5.motif_idx[axiom_char]
-    s_axiom = (n - 1 - s) if reverse else s
+    axiom, reverse, is_b = _ORIENT[orientation]
+    s_axiom = ((1 << (2 * resolution)) - 1 - s) if reverse else s
     cell = axiom_leaf_cell(A5, s_axiom, resolution, axiom)
     base = ab_to_triple(cell.a, cell.b)
     if not is_b:
@@ -233,15 +240,23 @@ def s_to_triple(s: int, resolution: int, orientation: Orientation = 'uv') -> Tri
     return s_to_cell(s, resolution, orientation).triple
 
 
+def a5_triple_to_flavor(triple: Triple, resolution: int) -> int:
+    """The pentagon flavor of a cell given its triple, via a single A5 inverse
+    descent (reads the leaf flavor directly). Used by compat.py, whose forward
+    (W/Z) descent cannot recover the flavor. One descent, versus the
+    `triple_to_s_lattice` + `s_to_cell` round-trip it replaces."""
+    axiom = _ORIENT['uv'][0]  # uv: no reverse, no tau shift
+    ab_a, ab_b = triple_to_ab(triple)
+    return axiom_target_to_s(A5, ab_a, ab_b, resolution, axiom, True)[1]
+
+
 def triple_to_s_lattice(triple: Triple, resolution: int, orientation: Orientation = 'uv') -> int:
     """Triple coordinate -> the A5 curve position `s`. Inverse of `s_to_triple`."""
-    n = 1 << (2 * resolution)
-    axiom_char, reverse, is_b = _ORIENT[orientation]
-    axiom = A5.motif_idx[axiom_char]
+    axiom, reverse, is_b = _ORIENT[orientation]
     ab_a, ab_b = triple_to_ab(triple)
     tau_sum = 12.0 * POW2[resolution] if is_b else 0.0
-    s_axiom = axiom_target_to_s(A5, ab_a - tau_sum, ab_b + tau_sum, resolution, axiom, True)
-    return (n - 1 - s_axiom) if reverse else s_axiom
+    s_axiom = axiom_target_to_s(A5, ab_a - tau_sum, ab_b + tau_sum, resolution, axiom, True)[0]
+    return ((1 << (2 * resolution)) - 1 - s_axiom) if reverse else s_axiom
 
 
 def sum_point_to_s(ta: float, tb: float, resolution: int, orientation: Orientation = 'uv') -> int:
@@ -251,9 +266,7 @@ def sum_point_to_s(ta: float, tb: float, resolution: int, orientation: Orientati
     point frame); callers map their coordinate system into it (for the IJ plane
     the exact affine map is target = (12*(i+j), -12*j), see curve.py).
     """
-    n = 1 << (2 * resolution)
-    axiom_char, reverse, is_b = _ORIENT[orientation]
-    axiom = A5.motif_idx[axiom_char]
+    axiom, reverse, is_b = _ORIENT[orientation]
     tau_sum = 12.0 * POW2[resolution] if is_b else 0.0
-    s_axiom = axiom_target_to_s(A5, ta - tau_sum, tb + tau_sum, resolution, axiom, False)
-    return (n - 1 - s_axiom) if reverse else s_axiom
+    s_axiom = axiom_target_to_s(A5, ta - tau_sum, tb + tau_sum, resolution, axiom, False)[0]
+    return ((1 << (2 * resolution)) - 1 - s_axiom) if reverse else s_axiom

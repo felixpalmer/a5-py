@@ -28,8 +28,8 @@ from typing import List, Optional
 from ..core.coordinate_systems import IJ
 from .lsystem.tables import compile_grammar, POW2
 from .lsystem import (
-    Cell, ab_to_triple, axiom_leaf_cell, axiom_target_to_s, s_to_cell,
-    triple_to_ab, triple_to_s_lattice,
+    Cell, a5_triple_to_flavor, ab_to_triple, axiom_leaf_cell, axiom_target_to_s,
+    triple_to_ab,
 )
 from .types import Orientation, Triple
 
@@ -139,11 +139,11 @@ _COMPAT_ORIENT = {
 }
 
 
-def compat_s_to_cell(s: int, resolution: int, orientation: Orientation = 'uv') -> Cell:
-    """Old-curve position `s` -> cell (triple + pentagon flavor)."""
+def compat_s_to_triple(s: int, resolution: int, orientation: Orientation = 'uv') -> Triple:
+    """Old-curve position `s` -> triple coordinate, via the ORIGINAL (W/Z) forward
+    descent + shiftDigits recode. No flavor (that needs a second, A5, descent)."""
     reverse, invert_j, flip_ij = _COMPAT_ORIENT[orientation]
-    n = 1 << (2 * resolution)
-    v = (n - 1 - s) if reverse else s
+    v = ((1 << (2 * resolution)) - 1 - s) if reverse else s
     digits = _digits_of(v, resolution)
     _forward_shift(digits, invert_j, flip_ij)
     raw = axiom_leaf_cell(ORIGINAL, _pack_digits(digits), resolution, _AXIOM_W)
@@ -153,21 +153,17 @@ def compat_s_to_cell(s: int, resolution: int, orientation: Orientation = 'uv') -
     if invert_j:
         n1 = int(POW2[resolution]) - 1
         triple = Triple(triple.y - n1, triple.x + n1, triple.z)
+    return triple
+
+
+def compat_s_to_cell(s: int, resolution: int, orientation: Orientation = 'uv') -> Cell:
+    """Old-curve position `s` -> cell (triple + pentagon flavor)."""
+    triple = compat_s_to_triple(s, resolution, orientation)
     # The X/Y walk hosts every cell via a diagonal (E/e) segment, so its leaf
     # state cannot distinguish all four pentagon flavors -- that missing bit is
     # exactly why the original engine carried its fractal flips field. The
     # flavor is a per-cell geometric property, so read it off the A5 descent.
-    return Cell(triple=triple, flavor=_cell_flavor(triple, resolution))
-
-
-def _cell_flavor(triple: Triple, resolution: int) -> int:
-    """The pentagon flavor of a cell -- orientation-independent, via the A5 descent."""
-    return s_to_cell(triple_to_s_lattice(triple, resolution, 'uv'), resolution, 'uv').flavor
-
-
-def compat_s_to_triple(s: int, resolution: int, orientation: Orientation = 'uv') -> Triple:
-    """Old-curve position `s` -> triple coordinate."""
-    return compat_s_to_cell(s, resolution, orientation).triple
+    return Cell(triple=triple, flavor=a5_triple_to_flavor(triple, resolution))
 
 
 def compat_triple_to_s(t: Triple, resolution: int, orientation: Orientation = 'uv') -> Optional[int]:
@@ -184,7 +180,7 @@ def compat_triple_to_s(t: Triple, resolution: int, orientation: Orientation = 'u
     if flip_ij:
         raw = Triple(raw.z, raw.y, raw.x)
     ab_a, ab_b = triple_to_ab(raw)
-    s_geo = axiom_target_to_s(ORIGINAL, ab_a, ab_b, resolution, _AXIOM_W, True)
+    s_geo = axiom_target_to_s(ORIGINAL, ab_a, ab_b, resolution, _AXIOM_W, True)[0]
     digits = _digits_of(s_geo, resolution)
     _inverse_shift(digits, invert_j, flip_ij)
     v = _pack_digits(digits)
@@ -200,7 +196,7 @@ def compat_ij_to_s(ij: IJ, resolution: int, orientation: Orientation = 'uv') -> 
         i, j = j, i
     if invert_j:
         j = POW2[resolution] - (i + j)
-    s_geo = axiom_target_to_s(ORIGINAL, 12.0 * (i + j), -12.0 * j, resolution, _AXIOM_W, False)
+    s_geo = axiom_target_to_s(ORIGINAL, 12.0 * (i + j), -12.0 * j, resolution, _AXIOM_W, False)[0]
     digits = _digits_of(s_geo, resolution)
     _inverse_shift(digits, invert_j, flip_ij)
     v = _pack_digits(digits)
