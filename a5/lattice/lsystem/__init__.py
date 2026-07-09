@@ -150,9 +150,7 @@ def _inside_score(t, motif, flip, lvl, pos_a, pos_b, ta, tb, best):
 # cells (leaf resolved by exact sum match); fractional targets resolve the leaf
 # by point-in-cell over the 4 level-1 triangles. Internal; also used by compat.py.
 def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, exact: bool):
-    """Returns (s, leaf_flavor). Callers that only need `s` take [0]; the flavor
-    lets compat resolve the pentagon flavor in this same descent (see
-    a5_triple_to_flavor) instead of a second forward descent."""
+    """Returns (s, leaf_flavor). Callers that only need `s` take [0]."""
     motif = axiom
     flip = 0
     pos_a = 0.0
@@ -258,16 +256,6 @@ def s_to_cell(s: int, resolution: int, orientation: Orientation = 'uv') -> Cell:
 def s_to_triple(s: int, resolution: int, orientation: Orientation = 'uv') -> Triple:
     """The A5 curve position `s` -> triple coordinate. Bijective with `triple_to_s_lattice`."""
     return s_to_cell(s, resolution, orientation).triple
-
-
-def a5_triple_to_flavor(triple: Triple, resolution: int) -> int:
-    """The pentagon flavor of a cell given its triple, via a single A5 inverse
-    descent (reads the leaf flavor directly). Used by compat.py, whose forward
-    (W/Z) descent cannot recover the flavor. One descent, versus the
-    `triple_to_s_lattice` + `s_to_cell` round-trip it replaces."""
-    axiom = _ORIENT['uv'][0]  # uv: no reverse, no tau shift
-    ab_a, ab_b = triple_to_ab(triple)
-    return axiom_target_to_s(A5, ab_a, ab_b, resolution, axiom, True)[1]
 
 
 def triple_to_s_lattice(triple: Triple, resolution: int, orientation: Orientation = 'uv') -> int:
