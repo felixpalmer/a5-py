@@ -4,7 +4,7 @@
 
 from typing import Optional
 
-from .compat import compat_triple_to_s
+from .lsystem import triple_to_s_lattice
 from .types import Orientation, Triple
 
 
@@ -24,10 +24,14 @@ def triple_in_bounds(t: Triple, max_row: int) -> bool:
 
 def triple_to_s(t: Triple, resolution: int, orientation: Orientation = 'uv') -> Optional[int]:
     """
-    Convert triple coordinates to an s-value (curve index).
+    Convert triple coordinates to an s-value on the A5 (L-system) curve.
+    The engine's `a5.lattice.triple_to_s` is currently the compat alias; this is
+    the pure-curve form it swaps to at the canonical cutover (mirrors the other
+    ports' triple modules).
+
     Returns s-value, or None if the triple has invalid parity.
     """
     s = t.x + t.y + t.z
     if s != 0 and s != 1:
         return None
-    return compat_triple_to_s(t, resolution, orientation)
+    return triple_to_s_lattice(t, resolution, orientation)

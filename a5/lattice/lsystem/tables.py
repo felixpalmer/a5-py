@@ -315,6 +315,5 @@ def _walk_bsp(tree, p, seps):
     return _walk_bsp(tree[2] if (p >> idx) & 1 else tree[3], p, seps)
 
 
-# powers of 2 / 4 used by the descents (index by level / digit position)
+# powers of 2 used by the descents (index by level), the child-offset scale
 POW2 = [2.0 ** i for i in range(32)]
-POW4 = [4.0 ** i for i in range(20)]

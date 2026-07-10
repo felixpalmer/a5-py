@@ -32,7 +32,7 @@ from typing import NamedTuple, Tuple
 
 from ..types import Orientation, Triple
 from .grammar import RULES, DRAWS
-from .tables import compile_grammar, CurveTables, POW2, POW4, BSP_EPS
+from .tables import compile_grammar, CurveTables, POW2, BSP_EPS
 from .turtle import AB
 
 # The compiled A5 grammar.
@@ -161,8 +161,10 @@ def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, 
         sign = -scale if flip else scale
         # Exact targets (real cell corner sums) are strictly interior at every
         # level, so the branchless classifier is provably the containing child.
-        # Fractional targets can sit on a child boundary (different tie-break), so
-        # keep the exact argmax scan there; compat's ij_to_s is pinned bit-for-bit.
+        # Fractional targets can sit on a child boundary, where the classifier's
+        # tie-break can differ from the argmax, so keep the exact argmax scan for
+        # that path (only sum_point_to_s uses it -- compat locates points via the
+        # old sign tests).
         if exact:
             best_d = _classify(t, motif * 2 + flip, ta - 3.0 * pos_a, tb - 3.0 * pos_b, scale)
         else:
