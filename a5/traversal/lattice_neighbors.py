@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 
 from ..lattice import (
     Orientation, Triple,
-    s_to_anchor, anchor_to_triple, triple_to_s, triple_in_bounds, triple_parity,
+    s_to_triple, triple_to_s, triple_in_bounds, triple_parity,
 )
 from ..core.utils import Origin
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
@@ -40,8 +40,7 @@ def _decode_source(cell_id: int) -> Optional[_LatticeSource]:
 
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     quintant, orientation = segment_to_quintant(segment, origin)
-    anchor = s_to_anchor(S, hilbert_res, orientation)
-    triple = anchor_to_triple(anchor)
+    triple = s_to_triple(S, hilbert_res, orientation)
 
     return _LatticeSource(
         origin=origin, segment=segment, S=S, resolution=resolution,

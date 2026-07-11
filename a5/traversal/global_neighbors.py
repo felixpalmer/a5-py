@@ -3,9 +3,7 @@
 # Copyright (c) A5 contributors
 
 from typing import List, Set
-from ..lattice import (
-    s_to_anchor, anchor_to_triple, triple_to_anchor, triple_parity,
-)
+from ..lattice import s_to_cell, triple_parity
 from ..core.utils import Origin
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
 from ..core.origin import segment_to_quintant, quintant_to_segment, origins
@@ -81,7 +79,7 @@ def get_global_cell_neighbors(cell_id: int, edge_only: bool = False) -> List[int
     """
     Get all neighbors of a cell across quintant and face boundaries.
 
-    Within-quintant candidates are validated with is_neighbor() in uv space
+    Within-quintant neighbors come from the fixed per-flavor triple deltas
     (via find_quintant_neighbor_s). Cross-quintant, cross-face, apex, and
     corner neighbors are emitted by the shared get_boundary_neighbors helper
     using fixed delta tables -- see lattice_boundary.py.
@@ -95,18 +93,15 @@ def get_global_cell_neighbors(cell_id: int, edge_only: bool = False) -> List[int
 
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     source_quintant, source_orientation = segment_to_quintant(segment, origin)
-    anchor = s_to_anchor(S, hilbert_res, source_orientation)
 
     # Triple coordinates are orientation-independent
-    triple = anchor_to_triple(anchor)
-
-    # Get uv anchor for is_neighbor validation (within-quintant)
-    uv_source_anchor = triple_to_anchor(triple, hilbert_res, 'uv')
+    source_cell = s_to_cell(S, hilbert_res, source_orientation)
+    triple = source_cell.triple
 
     neighbor_set: Set[int] = set()
 
-    # --- Within-quintant: validated by is_neighbor() in uv space ---
-    for neighbor_s in find_quintant_neighbor_s(triple, uv_source_anchor, S, hilbert_res, source_orientation, edge_only):
+    # --- Within-quintant: fixed per-flavor triple deltas ---
+    for neighbor_s in find_quintant_neighbor_s(triple, source_cell.flavor, S, hilbert_res, source_orientation, edge_only):
         neighbor_set.add(serialize({
             'origin': origin, 'segment': segment,
             'S': neighbor_s, 'resolution': resolution

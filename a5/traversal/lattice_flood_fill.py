@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Set, Union
 
 from ..lattice import (
-    Orientation, s_to_anchor, anchor_to_triple, triple_to_s,
+    Orientation, s_to_triple, triple_to_s,
 )
 from ..core.utils import Origin
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
@@ -72,8 +72,7 @@ def _cell_to_quintant_key(cell_id: int, hilbert_res: int, max_row: int, y_stride
     cell = deserialize(cell_id)
     origin, segment, S = cell['origin'], cell['segment'], cell['S']
     quintant, orientation = segment_to_quintant(segment, origin)
-    anchor = s_to_anchor(S, hilbert_res, orientation)
-    triple = anchor_to_triple(anchor)
+    triple = s_to_triple(S, hilbert_res, orientation)
     parity = triple.x + triple.y + triple.z  # 0 or 1
     return (
         origin.id * 60 + segment,
