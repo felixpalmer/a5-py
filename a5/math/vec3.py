@@ -12,12 +12,6 @@ from typing import Tuple, Union, List, cast
 # Type alias for 3D vectors - can be list or tuple
 Vec3 = Union[List[float], Tuple[float, float, float]]
 
-# Pre-allocated temporary vectors for performance (like TypeScript gl-matrix)
-midpointAB = [0.0, 0.0, 0.0]
-crossCD = [0.0, 0.0, 0.0]
-scaledA = [0.0, 0.0, 0.0]
-scaledB = [0.0, 0.0, 0.0]
-
 def create() -> List[float]:
     """
     Creates a new vec3 initialized to [0, 0, 0]
@@ -125,6 +119,24 @@ def scale(out: Vec3, a: Vec3, s: float) -> Vec3:
     out[0] = a[0] * s
     out[1] = a[1] * s
     out[2] = a[2] * s
+    return out
+
+def scaleAndAdd(out: Vec3, a: Vec3, b: Vec3, s: float) -> Vec3:
+    """
+    Adds two vec3's after scaling the second by a scalar value
+
+    Args:
+        out: the receiving vector
+        a: the first operand
+        b: the second operand
+        s: amount to scale b by before adding
+
+    Returns:
+        out
+    """
+    out[0] = a[0] + b[0] * s
+    out[1] = a[1] + b[1] * s
+    out[2] = a[2] + b[2] * s
     return out
 
 def dot(a: Vec3, b: Vec3) -> float:
@@ -304,76 +316,15 @@ def transformQuat(out: Vec3, a: Vec3, q: List[float]) -> Vec3:
 
 def tripleProduct(a: Vec3, b: Vec3, c: Vec3) -> float:
     """
-    Computes the triple product of three vectors: a · (b × c)
-    
-    Args:
-        a: first vector
-        b: second vector  
-        c: third vector
-        
-    Returns:
-        scalar result a · (b × c)
+    Computes the scalar triple product a · (b × c).
+    Written out fully (same operation order as cross followed by dot,
+    so results are bit-identical) to avoid a scratch-vector store on hot paths.
     """
-    # Compute cross product b × c using global temp vector
-    cross(crossCD, b, c)
-    # Return dot product a · (b × c)
-    return dot(a, crossCD)
-
-def vectorDifference(A: "Cartesian", B: "Cartesian") -> float:
-    """
-    Returns a difference measure between two vectors, a - b
-    D = sqrt(1 - dot(a,b)) / sqrt(2)
-    D = 1: a and b are perpendicular
-    D = 0: a and b are the same
-    D = NaN: a and b are opposite (shouldn't happen in IVEA as we're using normalized vectors in the same hemisphere)
-    
-    D is a measure of the angle between the two vectors. sqrt(2) can be ignored when comparing ratios.
-    
-    Args:
-        A: first vector
-        B: second vector
-        
-    Returns:
-        difference measure between A and B
-    """
-    # Original implementation is unstable for small angles as dot(A, B) approaches 1
-    # dot(A, B) = cos(x) as A and B are normalized
-    # Using double angle formula for cos(2x) = 1 - 2sin(x)^2, can rewrite as:
-    # 1 - cos(x) = 2 * sin(x/2)^2)
-    #            = 2 * sin(x/2)^2
-    # ⇒ sqrt(1 - cos(x)) = sqrt(2) * sin(x/2) 
-    # Angle x/2 can be obtained as the angle between A and the normalized midpoint of A and B
-    # ⇒ sin(x/2) = |cross(A, midpointAB)|
-    lerp(midpointAB, A, B, 0.5)
-    normalize(midpointAB, midpointAB)
-    cross(midpointAB, A, midpointAB)
-    D = length(midpointAB)
-
-    # Math.sin(x) = x for x < 1e-8
-    if D < 1e-8:
-        # When A and B are close or equal sin(x/2) ≈ x/2, just take the half-distance between A and B
-        subtract(crossCD, A, B)
-        half_distance = 0.5 * length(crossCD)
-        return half_distance
-    return D
-
-def quadrupleProduct(out: Vec3, A: "Cartesian", B: "Cartesian", C: "Cartesian", D: "Cartesian") -> Vec3:
-    """
-    Computes the quadruple product of four vectors
-    
-    Args:
-        out: output vector
-        A, B, C, D: input vectors
-        
-    Returns:
-        out
-    """
-    cross(crossCD, C, D)
-    triple_product_acd = dot(A, crossCD)
-    triple_product_bcd = dot(B, crossCD)
-    scale(scaledA, A, triple_product_bcd)
-    scale(scaledB, B, triple_product_acd)
-    return subtract(out, scaledB, scaledA)
+    return (
+        a[0] * (b[1] * c[2] - b[2] * c[1])
+        + a[1] * (b[2] * c[0] - b[0] * c[2])
+        + a[2] * (b[0] * c[1] - b[1] * c[0])
+    )
 
 def precompute_slerp(A: "Cartesian", B: "Cartesian") -> dict:
     """

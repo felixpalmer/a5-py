@@ -5,17 +5,12 @@
 from typing import List, Tuple, Union, cast
 import math
 from ..core.coordinate_systems import Cartesian
-from ..math import vec3, quat
+from ..math import vec3
 
 # Type aliases for clarity
 SphericalPolygon = List[Cartesian]
 
 _winding_centroid = vec3.create()
-
-# Pre-allocated vectors for midpoints. midA is the midpoint opposite the vertex A
-_mid_a = vec3.create()
-_mid_b = vec3.create()
-_mid_c = vec3.create()
 _center = vec3.create()
 
 # Use Cartesian system for all calculations for greater accuracy
@@ -25,25 +20,22 @@ UP = (0.0, 0.0, 1.0)
 
 def spherical_triangle_area(v1: Cartesian, v2: Cartesian, v3: Cartesian) -> float:
     """
-    Area of the spherical triangle (v1, v2, v3) on the unit sphere, in radians.
+    Signed area (spherical excess) of the spherical triangle (v1, v2, v3) on the
+    unit sphere, in radians.
 
+    Uses the Van Oosterom–Strackee formula.
+    atan2 keeps full precision for tiny triangles (numerator -> area/2) and
+    does not fold areas above pi back into [-pi, pi].
     Free-function form avoids the class allocation of
     `SphericalTriangleShape([…]).get_area()` on the lon_lat_to_cell hot path.
     """
-    vec3.lerp(_mid_a, v2, v3, 0.5)
-    vec3.normalize(_mid_a, _mid_a)
-    vec3.lerp(_mid_b, v3, v1, 0.5)
-    vec3.normalize(_mid_b, _mid_b)
-    vec3.lerp(_mid_c, v1, v2, 0.5)
-    vec3.normalize(_mid_c, _mid_c)
-
-    S = vec3.tripleProduct(_mid_a, _mid_b, _mid_c)
-    clamped = max(-1.0, min(1.0, S))
-
-    # sin(x) ≈ x for small x — keep precision on tiny triangles.
-    if abs(clamped) < 1e-8:
-        return 2 * clamped
-    return math.asin(clamped) * 2
+    norm = (
+        1
+        + (v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2])
+        + (v2[0] * v3[0] + v2[1] * v3[1] + v2[2] * v3[2])
+        + (v3[0] * v1[0] + v3[1] * v1[1] + v3[2] * v1[2])
+    )
+    return 2 * math.atan2(vec3.tripleProduct(v1, v2, v3), norm)
 
 
 def point_in_spherical_polygon(point: Cartesian, vertices: List[Cartesian]) -> bool:

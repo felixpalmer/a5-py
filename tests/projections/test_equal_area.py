@@ -11,7 +11,7 @@ from a5.projections.dodecahedron import DodecahedronProjection
 from a5.projections.crs import CRS
 from a5.core.coordinate_systems import Cartesian
 from a5.math.vec3 import length
-from tests.matchers import is_close_array
+from tests.matchers import is_close_array, is_close
 
 # Load test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -96,22 +96,40 @@ class TestEqualAreaProjectionInverse:
 
 
 class TestEqualAreaProjectionTriangleConstants:
-    """The projection caches shape constants from one canonical triangle, which
-    is only valid if every spherical triangle the dodecahedron can supply is
-    congruent AND consistently wound (the sign of V is chirality-sensitive).
-    This enforces the invariant documented in equal_area.py."""
+    """The projection caches constants from one canonical triangle and reuses
+    them for every face. That is valid because all dodecahedron face triangles
+    are congruent and consistently wound:
+      - volumeABC and area_abc are identical on every face (forward relies on this);
+      - A·B / A·C only ever take the two canonical values — they are equal for
+        "even" faces and swapped for the mirror-image "odd" faces, which
+        inverse() handles by swapping B↔C — so on even faces the cached
+        alphaTransform matrix matches exactly."""
 
     def test_constants_agree_across_all_triangles(self):
         dodecahedron = DodecahedronProjection()
         canonical = EqualAreaProjection.compute_constants(CRS().get_canonical_triangle())
 
-        RELATIVE_TOLERANCE = 1e-13
         for origin_id in range(12):
             for face_triangle_index in range(10):
                 for reflected in (False, True):
                     triangle = dodecahedron.get_spherical_triangle(face_triangle_index, origin_id, reflected)
-                    constants = EqualAreaProjection.compute_constants(triangle)
-                    for key, expected in canonical.items():
-                        actual = constants[key]
-                        assert abs(actual - expected) < abs(expected) * RELATIVE_TOLERANCE, \
-                            f"{key} mismatch at face {face_triangle_index}, origin {origin_id}, reflected {reflected}"
+                    c = EqualAreaProjection.compute_constants(triangle)
+                    where = f"face {face_triangle_index}, origin {origin_id}, reflected {reflected}"
+
+                    # Invariant on every face.
+                    assert is_close(c['volumeABC'], canonical['volumeABC'], 12), f"volumeABC at {where}"
+                    assert is_close(c['area_abc'], canonical['area_abc'], 12), f"area_abc at {where}"
+
+                    # A·B / A·C take the two canonical values; the orientation is
+                    # whichever canonical value A·B is nearer to (as inverse() uses).
+                    even = abs(c['AdotB'] - canonical['AdotB']) < abs(c['AdotB'] - canonical['AdotC'])
+                    if even:
+                        assert is_close(c['AdotB'], canonical['AdotB'], 12), f"A·B at {where}"
+                        assert is_close(c['AdotC'], canonical['AdotC'], 12), f"A·C at {where}"
+                        # The cached coefficient matrix matches exactly on even faces.
+                        assert is_close_array(c['alphaTransform'], canonical['alphaTransform']), \
+                            f"alphaTransform at {where}"
+                    else:
+                        # Mirror-image face: A·B and A·C swapped (inverse() swaps B↔C).
+                        assert is_close(c['AdotB'], canonical['AdotC'], 12), f"A·B at {where}"
+                        assert is_close(c['AdotC'], canonical['AdotB'], 12), f"A·C at {where}"
