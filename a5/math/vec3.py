@@ -12,9 +12,6 @@ from typing import Tuple, Union, List, cast
 # Type alias for 3D vectors - can be list or tuple
 Vec3 = Union[List[float], Tuple[float, float, float]]
 
-# Pre-allocated temporary vector for performance (like TypeScript gl-matrix)
-crossCD = [0.0, 0.0, 0.0]
-
 def create() -> List[float]:
     """
     Creates a new vec3 initialized to [0, 0, 0]
@@ -319,20 +316,15 @@ def transformQuat(out: Vec3, a: Vec3, q: List[float]) -> Vec3:
 
 def tripleProduct(a: Vec3, b: Vec3, c: Vec3) -> float:
     """
-    Computes the triple product of three vectors: a · (b × c)
-    
-    Args:
-        a: first vector
-        b: second vector  
-        c: third vector
-        
-    Returns:
-        scalar result a · (b × c)
+    Computes the scalar triple product a · (b × c).
+    Written out fully (same operation order as cross followed by dot,
+    so results are bit-identical) to avoid a scratch-vector store on hot paths.
     """
-    # Compute cross product b × c using global temp vector
-    cross(crossCD, b, c)
-    # Return dot product a · (b × c)
-    return dot(a, crossCD)
+    return (
+        a[0] * (b[1] * c[2] - b[2] * c[1])
+        + a[1] * (b[2] * c[0] - b[0] * c[2])
+        + a[2] * (b[0] * c[1] - b[1] * c[0])
+    )
 
 def precompute_slerp(A: "Cartesian", B: "Cartesian") -> dict:
     """

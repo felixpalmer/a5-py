@@ -4,9 +4,9 @@
 
 from typing import List
 from ..core.coordinate_systems import Cartesian
-from .spherical_polygon import SphericalPolygonShape, spherical_triangle_area
+from .spherical_polygon import SphericalPolygonShape
 
-__all__ = ['SphericalTriangle', 'SphericalTriangleShape', 'spherical_triangle_area']
+__all__ = ['SphericalTriangle', 'SphericalTriangleShape']
 
 # Type alias for clarity
 SphericalTriangle = List[Cartesian]
