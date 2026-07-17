@@ -18,10 +18,13 @@ from .origin import (
 from ..projections.dodecahedron import DodecahedronProjection
 from .utils import A5Cell, Origin, OriginId
 from ..geometry.pentagon import PentagonShape
-from .tiling import get_face_vertices, get_pentagon_center, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
+from .tiling import cell_contains_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
 from .constants import PI_OVER_5
-from ..lattice import ij_to_s, s_to_cell
-from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL
+from ..lattice import ij_to_s, s_to_cell, triple_flavor, triple_in_bounds
+from ..lattice.triple import triple_to_s
+from ..lattice.curve import round_to_triple
+from ..lattice.types import Triple
+from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL
 from ..geometry.spherical_polygon import SphericalPolygonShape
 from ..utils.spiral import Spiral, SPIRAL_SAMPLE_COUNT
 
@@ -83,13 +86,82 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
         # For low resolutions there is no Hilbert curve, so we can just return as the result is exact
         return serialize(_spherical_to_estimate(spherical, resolution))
 
-    # Try the cached pentagon first -- skips the full estimate pipeline when
-    # consecutive calls land in the same cell (common in dense-sample loops).
+    # Try the cached pentagon first -- skips the full lookup when consecutive
+    # calls land in the same cell (common in dense-sample loops).
+    global _last_result
     if _last_result is not None and _last_result['resolution'] == resolution:
         projected = _dodecahedron.forward(spherical, _last_result['origin_id'])
         if _last_result['pentagon'].contains_point(projected) > 0:
             return _last_result['cell_id']
 
+    # Fast path: locate the containing pentagon directly. Round to the leaf
+    # triangle, get the closed-form flavor, and test the pentagon geometrically
+    # in the scaled quintant frame; the triangular and pentagonal lattices are
+    # not congruent, but the containing pentagon is always the triangle's cell
+    # or one of its fixed neighbor deltas (verified exhaustively), so at most
+    # one 7-candidate walk resolves it -- then a single curve encode.
+    origin = find_nearest_origin(spherical)
+    dodec_point = _dodecahedron.forward(spherical, origin.id)
+    quintant = get_quintant_polar(to_polar(dodec_point))
+    segment, orientation = quintant_to_segment(quintant, origin)
+
+    # Res-30 ids cannot encode quintants > 41 (serialize degrades them to the
+    # res-29 parent), and the legacy search's answer there is path-dependent.
+    # TODO(res30): pick canonical semantics; until then keep legacy behavior.
+    degraded = (
+        resolution == MAX_RESOLUTION
+        and 5 * origin.id + (segment - origin.first_quintant + 5) % 5 > 41
+    )
+
+    if not degraded:
+        px, py = dodec_point
+        if quintant != 0:
+            extra_angle = 2 * PI_OVER_5 * quintant
+            c, s = math.cos(-extra_angle), math.sin(-extra_angle)
+            px, py = c * px - s * py, s * px + c * py
+        hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
+        scale = 1 << hilbert_resolution
+        px *= scale
+        py *= scale
+        ij = face_to_ij((px, py))
+
+        triple = round_to_triple(ij, hilbert_resolution)
+        flavor = triple_flavor(triple)
+        found = cell_contains_scaled(px, py, triple.x, triple.y, flavor)
+        if not found:
+            max_row = scale - 1
+            for d in NEIGHBOR_DELTAS[flavor].all:
+                neighbor = Triple(triple.x + d.x, triple.y + d.y, triple.z + d.z)
+                if not triple_in_bounds(neighbor, max_row):
+                    continue
+                neighbor_flavor = triple_flavor(neighbor)
+                if cell_contains_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor):
+                    triple = neighbor
+                    flavor = neighbor_flavor
+                    found = True
+                    break
+        if found:
+            S = triple_to_s(triple, hilbert_resolution, orientation)
+            if S is not None:
+                cell_id = serialize({'origin': origin, 'segment': segment, 'S': S, 'resolution': resolution})
+                # Cache the pentagon for the dense-sample fast accept above --
+                # built directly from (triple, flavor), no curve decode needed.
+                _last_result = {
+                    'cell_id': cell_id,
+                    'pentagon': get_pentagon_vertices(hilbert_resolution, quintant, triple, flavor),
+                    'origin_id': origin.id,
+                    'resolution': resolution,
+                }
+                return cell_id
+        # No strict container among the candidates: the point is on a pentagon
+        # boundary or belongs to a neighboring quintant/face -- search robustly.
+    return _spherical_to_cell_search(spherical, resolution)
+
+
+def _spherical_to_cell_search(spherical: Spherical, resolution: int) -> int:
+    """Legacy search: estimate + verification + spiral + neighbor/closest
+    fallback. Reached only from the fast path's fallthrough (boundary points,
+    cross-quintant points, the degraded res-30 zone) -- rare, but fully robust."""
     # Try the original point's projection-based estimate. Common case for
     # non-boundary points.
     first_estimate = _spherical_to_estimate(spherical, resolution)
@@ -344,3 +416,8 @@ def cell_intersects_segment(cell_id: int, a: LonLat, b: LonLat) -> bool:
     a_face = _dodecahedron.forward(from_lonlat(a), cell['origin'].id)
     b_face = _dodecahedron.forward(from_lonlat(b), cell['origin'].id)
     return pentagon.intersects_segment(a_face, b_face)
+
+
+# Imported last to break the circular import with the traversal package
+# (traversal.cap imports cell_to_spherical from this module).
+from ..traversal.neighbors import NEIGHBOR_DELTAS  # noqa: E402

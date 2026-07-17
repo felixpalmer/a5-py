@@ -13,7 +13,7 @@ from .types import Orientation, Triple
 from .curve import ij_to_s
 from .lsystem import Cell, s_to_cell, s_to_triple
 
-from .triple import triple_parity, triple_in_bounds, triple_to_s
+from .triple import triple_parity, triple_in_bounds, triple_flavor, triple_to_s
 
 # The ORIGINAL (pre-L-system) curve, bit-for-bit, for the migration path --
 # same cells, same pentagon flavors, old visiting order (tests/lattice/test_compat.py).

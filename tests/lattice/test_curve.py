@@ -53,3 +53,13 @@ class TestCurve:
         for f in load_fixtures()["tripleInBounds"]:
             triple = Triple(f["x"], f["y"], f["z"])
             assert triple_in_bounds(triple, f["maxRow"]) == f["expected"]
+
+
+def test_triple_flavor_closed_form():
+    """The pentagon flavor depends only on (parity, y mod 2); pin the closed
+    form against the descent over all cells at res 6, two orientations."""
+    from a5.lattice import s_to_cell, triple_flavor
+    for orientation in ['uv', 'wu']:
+        for s in range(1 << 12):
+            cell = s_to_cell(s, 6, orientation)
+            assert triple_flavor(cell.triple) == cell.flavor, (s, orientation)
