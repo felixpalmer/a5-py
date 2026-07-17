@@ -105,56 +105,56 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
     quintant = get_quintant_polar(to_polar(dodec_point))
     segment, orientation = quintant_to_segment(quintant, origin)
 
-    # Res-30 ids cannot encode quintants > 41 (serialize degrades them to the
-    # res-29 parent), and the legacy search's answer there is path-dependent.
-    # TODO(res30): pick canonical semantics; until then keep legacy behavior.
-    degraded = (
-        resolution == MAX_RESOLUTION
-        and 5 * origin.id + (segment - origin.first_quintant + 5) % 5 > 41
-    )
+    # Res-30 ids can only encode quintants 0-41 (by design: 64 bits cannot fit
+    # res 30 globally, so A5 covers the populous region). In the unsupported
+    # quintants, answer at the finest representable resolution instead -- the
+    # res-29 cell CONTAINING the point. (Previously the cap lived only in
+    # serialize, which swapped in the res-29 parent of a res-30 search result --
+    # a cell that fails to contain the query point ~44% of the time there.)
+    if resolution == MAX_RESOLUTION and 5 * origin.id + (segment - origin.first_quintant + 5) % 5 > 41:
+        resolution = MAX_RESOLUTION - 1
 
-    if not degraded:
-        px, py = dodec_point
-        if quintant != 0:
-            extra_angle = 2 * PI_OVER_5 * quintant
-            c, s = math.cos(-extra_angle), math.sin(-extra_angle)
-            px, py = c * px - s * py, s * px + c * py
-        hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
-        scale = 1 << hilbert_resolution
-        px *= scale
-        py *= scale
-        ij = face_to_ij((px, py))
+    px, py = dodec_point
+    if quintant != 0:
+        extra_angle = 2 * PI_OVER_5 * quintant
+        c, s = math.cos(-extra_angle), math.sin(-extra_angle)
+        px, py = c * px - s * py, s * px + c * py
+    hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
+    scale = 1 << hilbert_resolution
+    px *= scale
+    py *= scale
+    ij = face_to_ij((px, py))
 
-        triple = round_to_triple(ij, hilbert_resolution)
-        flavor = triple_flavor(triple)
-        found = cell_contains_scaled(px, py, triple.x, triple.y, flavor)
-        if not found:
-            max_row = scale - 1
-            for d in NEIGHBOR_DELTAS[flavor].all:
-                neighbor = Triple(triple.x + d.x, triple.y + d.y, triple.z + d.z)
-                if not triple_in_bounds(neighbor, max_row):
-                    continue
-                neighbor_flavor = triple_flavor(neighbor)
-                if cell_contains_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor):
-                    triple = neighbor
-                    flavor = neighbor_flavor
-                    found = True
-                    break
-        if found:
-            S = triple_to_s(triple, hilbert_resolution, orientation)
-            if S is not None:
-                cell_id = serialize({'origin': origin, 'segment': segment, 'S': S, 'resolution': resolution})
-                # Cache the pentagon for the dense-sample fast accept above --
-                # built directly from (triple, flavor), no curve decode needed.
-                _last_result = {
-                    'cell_id': cell_id,
-                    'pentagon': get_pentagon_vertices(hilbert_resolution, quintant, triple, flavor),
-                    'origin_id': origin.id,
-                    'resolution': resolution,
-                }
-                return cell_id
-        # No strict container among the candidates: the point is on a pentagon
-        # boundary or belongs to a neighboring quintant/face -- search robustly.
+    triple = round_to_triple(ij, hilbert_resolution)
+    flavor = triple_flavor(triple)
+    found = cell_contains_scaled(px, py, triple.x, triple.y, flavor)
+    if not found:
+        max_row = scale - 1
+        for d in NEIGHBOR_DELTAS[flavor].all:
+            neighbor = Triple(triple.x + d.x, triple.y + d.y, triple.z + d.z)
+            if not triple_in_bounds(neighbor, max_row):
+                continue
+            neighbor_flavor = triple_flavor(neighbor)
+            if cell_contains_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor):
+                triple = neighbor
+                flavor = neighbor_flavor
+                found = True
+                break
+    if found:
+        S = triple_to_s(triple, hilbert_resolution, orientation)
+        if S is not None:
+            cell_id = serialize({'origin': origin, 'segment': segment, 'S': S, 'resolution': resolution})
+            # Cache the pentagon for the dense-sample fast accept above --
+            # built directly from (triple, flavor), no curve decode needed.
+            _last_result = {
+                'cell_id': cell_id,
+                'pentagon': get_pentagon_vertices(hilbert_resolution, quintant, triple, flavor),
+                'origin_id': origin.id,
+                'resolution': resolution,
+            }
+            return cell_id
+    # No strict container among the candidates: the point is on a pentagon
+    # boundary or belongs to a neighboring quintant/face -- search robustly.
     return _spherical_to_cell_search(spherical, resolution)
 
 
