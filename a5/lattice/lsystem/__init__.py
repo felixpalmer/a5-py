@@ -126,30 +126,12 @@ def _classify(t, state, rel_a, rel_b, scale):
     return t.class_lut[state * 8 + (b0 | (b1 << 1) | (b2 << 2))]
 
 
-def _inside_score(t, motif, flip, lvl, pos_a, pos_b, ta, tb, best):
-    scale = POW2[lvl - 1]
-    edges = t.fp_edges[motif * 2 + flip]
-    # pos is fixed across this hull; fold 3*pos into the target once.
-    ra = ta - 3.0 * pos_a
-    rb = tb - 3.0 * pos_b
-    min_cross = math.inf
-    e = 0
-    while e < len(edges):
-        dta = ra - edges[e] * scale
-        dtb = rb - edges[e + 1] * scale
-        cross = edges[e + 2] * dtb - edges[e + 3] * dta
-        if cross < min_cross:
-            min_cross = cross
-            if min_cross <= 0.0 and min_cross <= best:
-                return min_cross
-        e += 4
-    return min_cross
-
-
-# Shared descent for both leaf modes. `exact` targets are corner sums of real
-# cells (leaf resolved by exact sum match); fractional targets resolve the leaf
-# by point-in-cell over the 4 level-1 triangles. Internal; also used by compat.py.
-def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, exact: bool):
+# Shared descent: the target is the corner sum of a real cell, which is
+# strictly interior at every level, so the branchless classifier is provably
+# the containing child (and the leaf resolves by exact sum match). Fractional
+# point location no longer descends at all -- ij_to_s rounds to a triple first
+# (see curve.py round_to_triple). Internal; also used by compat.py.
+def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int):
     """Returns (s, leaf_flavor). Callers that only need `s` take [0]."""
     motif = axiom
     flip = 0
@@ -158,30 +140,8 @@ def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, 
     s_val = 0
     for level in range(R, 1, -1):
         scale = POW2[level - 2]
+        best_d = _classify(t, motif * 2 + flip, ta - 3.0 * pos_a, tb - 3.0 * pos_b, scale)
         sign = -scale if flip else scale
-        # Exact targets (real cell corner sums) are strictly interior at every
-        # level, so the branchless classifier is provably the containing child.
-        # Fractional targets can sit on a child boundary, where the classifier's
-        # tie-break can differ from the argmax, so keep the exact argmax scan for
-        # that path (only sum_point_to_s uses it -- compat locates points via the
-        # old sign tests).
-        if exact:
-            best_d = _classify(t, motif * 2 + flip, ta - 3.0 * pos_a, tb - 3.0 * pos_b, scale)
-        else:
-            best_d = 0
-            best_score = -math.inf
-            for d in range(4):
-                ci = motif * 4 + d
-                score = _inside_score(
-                    t, t.child_token[ci], flip ^ t.child_flip[ci], level - 1,
-                    pos_a + t.child_off_a[ci] * sign, pos_b + t.child_off_b[ci] * sign,
-                    ta, tb, best_score,
-                )
-                if score > best_score:
-                    best_score = score
-                    best_d = d
-                    if score > 0.0:
-                        break  # strictly inside: the unique containing child
         ci = motif * 4 + best_d
         pos_a += t.child_off_a[ci] * sign
         pos_b += t.child_off_b[ci] * sign
@@ -189,38 +149,19 @@ def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, 
         motif = t.child_token[ci]
         idx = level - 1
         s_val += best_d << (2 * idx)
-    # level 1: pick the leaf cell, by exact corner-sum match or point-in-cell
+    # level 1: pick the leaf cell by exact corner-sum match
     base = motif * 2 + flip
     d0 = 0
-    if exact:
-        rel_a = ta - 3.0 * pos_a
-        rel_b = tb - 3.0 * pos_b
-        found = False
-        for d in range(4):
-            if t.leaf_sum[base * 8 + d * 2] == rel_a and t.leaf_sum[base * 8 + d * 2 + 1] == rel_b:
-                d0 = d
-                found = True
-                break
-        if not found:
-            raise ValueError(f'lsystem inverse: no leaf match for corner sum ({ta},{tb})')
-    else:
-        ra = ta - 3.0 * pos_a
-        rb = tb - 3.0 * pos_b
-        best_score = -math.inf
-        for d in range(4):
-            min_cross = math.inf
-            for e in range(3):
-                o = base * 48 + d * 12 + e * 4
-                dta = ra - t.leaf_tri[o]
-                dtb = rb - t.leaf_tri[o + 1]
-                cross = t.leaf_tri[o + 2] * dtb - t.leaf_tri[o + 3] * dta
-                if cross < min_cross:
-                    min_cross = cross
-            if min_cross > best_score:
-                best_score = min_cross
-                d0 = d
-                if min_cross > 0.0:
-                    break
+    rel_a = ta - 3.0 * pos_a
+    rel_b = tb - 3.0 * pos_b
+    found = False
+    for d in range(4):
+        if t.leaf_sum[base * 8 + d * 2] == rel_a and t.leaf_sum[base * 8 + d * 2 + 1] == rel_b:
+            d0 = d
+            found = True
+            break
+    if not found:
+        raise ValueError(f'lsystem inverse: no leaf match for corner sum ({ta},{tb})')
     return s_val + d0, t.leaf_flavor[base * 4 + d0]
 
 
@@ -265,18 +206,6 @@ def triple_to_s_lattice(triple: Triple, resolution: int, orientation: Orientatio
     axiom, reverse, is_b = _ORIENT[orientation]
     ab_a, ab_b = triple_to_ab(triple)
     tau_sum = 12.0 * POW2[resolution] if is_b else 0.0
-    s_axiom = axiom_target_to_s(A5, ab_a - tau_sum, ab_b + tau_sum, resolution, axiom, True)[0]
+    s_axiom = axiom_target_to_s(A5, ab_a - tau_sum, ab_b + tau_sum, resolution, axiom)[0]
     return ((1 << (2 * resolution)) - 1 - s_axiom) if reverse else s_axiom
 
-
-def sum_point_to_s(ta: float, tb: float, resolution: int, orientation: Orientation = 'uv') -> int:
-    """
-    Fractional point -> the curve position `s` of the containing cell, by direct
-    descent. The target is given in the corner-sum frame (= 3x the L-system (a,b)
-    point frame); callers map their coordinate system into it (for the IJ plane
-    the exact affine map is target = (12*(i+j), -12*j), see curve.py).
-    """
-    axiom, reverse, is_b = _ORIENT[orientation]
-    tau_sum = 12.0 * POW2[resolution] if is_b else 0.0
-    s_axiom = axiom_target_to_s(A5, ta - tau_sum, tb + tau_sum, resolution, axiom, False)[0]
-    return ((1 << (2 * resolution)) - 1 - s_axiom) if reverse else s_axiom
