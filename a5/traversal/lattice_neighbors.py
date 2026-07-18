@@ -11,7 +11,7 @@ from ..lattice import (
 )
 from ..core.utils import Origin
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from ..core.origin import segment_to_quintant
+from ..core.origin import SEGMENT_TO_ORIENTATION, SEGMENT_TO_QUINTANT
 from .global_neighbors import get_global_cell_neighbors
 from .lattice_boundary import BoundaryContext, get_boundary_neighbors
 
@@ -39,7 +39,9 @@ def _decode_source(cell_id: int) -> Optional[_LatticeSource]:
         return None
 
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    quintant, orientation = segment_to_quintant(segment, origin)
+    global_quintant = origin.id * 5 + segment
+    quintant = SEGMENT_TO_QUINTANT[global_quintant]
+    orientation = SEGMENT_TO_ORIENTATION[global_quintant]
     triple = s_to_triple(S, hilbert_res, orientation)
 
     return _LatticeSource(

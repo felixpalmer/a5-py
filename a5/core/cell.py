@@ -12,8 +12,10 @@ from .coordinate_transforms import (
 from .origin import (
     find_nearest_origin,
     find_nearest_origins,
-    quintant_to_segment,
-    segment_to_quintant,
+    QUINTANT_TO_ORIENTATION,
+    QUINTANT_TO_SEGMENT,
+    SEGMENT_TO_ORIENTATION,
+    SEGMENT_TO_QUINTANT,
 )
 from ..projections.dodecahedron import DodecahedronProjection
 from .utils import A5Cell, Origin, OriginId
@@ -75,7 +77,7 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
         origin = find_nearest_origin(spherical)
         dodec_point = _dodecahedron.forward(spherical, origin.id)
         quintant = get_quintant_polar(to_polar(dodec_point))
-        segment, _ = quintant_to_segment(quintant, origin)
+        segment = QUINTANT_TO_SEGMENT[origin.id * 5 + quintant]
         return serialize({'origin': origin, 'segment': segment, 'S': 0, 'resolution': resolution})
 
     # Try the cached pentagon first -- skips the full lookup when consecutive
@@ -111,7 +113,9 @@ def _lookup_in_quintant(dodec_point, origin, quintant: int, resolution: int):
     quintant: round to the leaf triangle, closed-form flavor, geometric
     margin, and -- when the triangle's cell doesn't strictly contain the
     point -- the best of its fixed neighbor deltas."""
-    segment, orientation = quintant_to_segment(quintant, origin)
+    global_quintant = origin.id * 5 + quintant
+    segment = QUINTANT_TO_SEGMENT[global_quintant]
+    orientation = QUINTANT_TO_ORIENTATION[global_quintant]
 
     # Res-30 ids can only encode quintants 0-41 (by design: 64 bits cannot fit
     # res 30 globally, so A5 covers the populous region). In the unsupported
@@ -229,7 +233,9 @@ def _get_pentagon(cell: A5Cell) -> PentagonShape:
     Returns:
         PentagonShape object
     """
-    quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
+    global_quintant = cell["origin"].id * 5 + cell["segment"]
+    quintant = SEGMENT_TO_QUINTANT[global_quintant]
+    orientation = SEGMENT_TO_ORIENTATION[global_quintant]
     if cell["resolution"] == (FIRST_HILBERT_RESOLUTION - 1):
         out = get_quintant_vertices(quintant)
         return out
@@ -254,7 +260,9 @@ def cell_to_spherical(cell_id: int) -> Spherical:
     if cell["resolution"] >= FIRST_HILBERT_RESOLUTION:
         # Fast path: the pentagon center is O(1) from (triple, flavor) -- no need
         # to construct the pentagon itself.
-        quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
+        global_quintant = cell["origin"].id * 5 + cell["segment"]
+        quintant = SEGMENT_TO_QUINTANT[global_quintant]
+        orientation = SEGMENT_TO_ORIENTATION[global_quintant]
         hilbert_resolution = cell["resolution"] - FIRST_HILBERT_RESOLUTION + 1
         cell_geom = s_to_cell(cell["S"], hilbert_resolution, orientation)
         center = get_pentagon_center(hilbert_resolution, quintant, cell_geom.triple, cell_geom.flavor)

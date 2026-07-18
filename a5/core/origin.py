@@ -126,6 +126,23 @@ def segment_to_quintant(segment: int, origin: Origin) -> Tuple[int, Orientation]
 
     return quintant, orientation
 
+# Lookup tables for the two mappings above, built once at import — there are
+# only 60 (origin, quintant) pairs. Indexed by origin.id * 5 + quintant
+# (resp. + segment, the global quintant number as encoded in serialized cell
+# ids). Call sites read these directly: two list indexes instead of a call.
+QUINTANT_TO_SEGMENT: List[int] = [0] * 60
+QUINTANT_TO_ORIENTATION: List[Orientation] = [None] * 60  # type: ignore[list-item]
+SEGMENT_TO_QUINTANT: List[int] = [0] * 60
+SEGMENT_TO_ORIENTATION: List[Orientation] = [None] * 60  # type: ignore[list-item]
+for _origin in origins:
+    for _i in range(5):
+        _segment, _orientation = quintant_to_segment(_i, _origin)
+        QUINTANT_TO_SEGMENT[_origin.id * 5 + _i] = _segment
+        QUINTANT_TO_ORIENTATION[_origin.id * 5 + _i] = _orientation
+        _quintant, _orientation = segment_to_quintant(_i, _origin)
+        SEGMENT_TO_QUINTANT[_origin.id * 5 + _i] = _quintant
+        SEGMENT_TO_ORIENTATION[_origin.id * 5 + _i] = _orientation
+
 def find_nearest_origins(point: Spherical, count: int) -> list:
     """
     The `count` origins nearest to a point, by haversine distance, nearest
