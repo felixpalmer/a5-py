@@ -9,8 +9,7 @@
 import math
 
 from ..core.coordinate_systems import IJ
-from .lsystem import triple_to_s_lattice
-from .types import Orientation, Triple
+from .types import Triple
 
 
 def round_to_triple(ij: IJ, resolution: int) -> Triple:
@@ -22,8 +21,9 @@ def round_to_triple(ij: IJ, resolution: int) -> Triple:
     (the parity-0 cell (-n, m+n, -m), centroid (m+1/3, n+1/3)) and an upper
     triangle (the parity-1 cell (-n, m+n+1, -m), centroid (m+2/3, n+2/3)) -- the
     centroid correspondences follow from the exact IJ <-> corner-sum affine map
-    (see the note on `ij_to_s`). So point location is two floors + one diagonal
-    comparison. Points exactly on a triangle edge have no unique cell; the >=
+    were derived from the exact IJ <-> corner-sum affine map
+    target = (12*(i+j), -12*j) and validated against the old-engine
+    discretization. Point location is two floors + one diagonal comparison. Points exactly on a triangle edge have no unique cell; the >=
     tie-break below is the fixed convention.
 
     The result is clamped into quintant bounds (m >= 0, n >= 0, m+n+parity <=
@@ -49,17 +49,3 @@ def round_to_triple(ij: IJ, resolution: int) -> Triple:
             m -= dm
             n -= over - dm
     return Triple(-n, m + n + parity, -m)
-
-
-def ij_to_s(ij: IJ, resolution: int, orientation: Orientation = 'uv') -> int:
-    """
-    Fractional IJ point -> curve position `s` of the containing cell: triangular
-    point location (`round_to_triple`) followed by the exact branchless encode.
-    Replaces the per-level footprint-containment descent -- one rounding for the
-    whole point instead of a ~4-hull scan per level.
-
-    Note on frames: the IJ plane maps onto the L-system's corner-sum frame by
-    the exact affine map target = (12*(i+j), -12*j) -- derived by matching cell
-    centroids across the two frames.
-    """
-    return triple_to_s_lattice(round_to_triple(ij, resolution), resolution, orientation)

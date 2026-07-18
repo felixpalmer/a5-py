@@ -126,6 +126,16 @@ def segment_to_quintant(segment: int, origin: Origin) -> Tuple[int, Orientation]
 
     return quintant, orientation
 
+def find_nearest_origins(point: Spherical, count: int) -> list:
+    """
+    The `count` origins nearest to a point, by haversine distance, nearest
+    first. Used by the boundary resolution in `spherical_to_cell`: a point on
+    (or within float noise of) a face seam or dodecahedron vertex may belong
+    to a cell of the 2nd- or 3rd-nearest face.
+    """
+    return sorted(origins, key=lambda o: haversine(point, o.axis))[:count]
+
+
 def find_nearest_origin(point: Spherical) -> Origin:
     """
     Find the nearest origin to a point on the sphere.
@@ -135,22 +145,6 @@ def find_nearest_origin(point: Spherical) -> Origin:
     nearest = origins[0]
     for origin in origins:
         distance = haversine(point, origin.axis)
-        if distance < min_distance:
-            min_distance = distance
-            nearest = origin
-    return nearest
-
-def find_nearest_origin_cartesian(c: Cartesian) -> Origin:
-    """
-    Same as `find_nearest_origin` but takes a Cartesian unit vector. The
-    argmin of `1 - a.b` matches the argmin of haversine, so this returns
-    the same origin without any spherical-trig conversions.
-    """
-    min_distance = float('inf')
-    nearest = origins[0]
-    for origin in origins:
-        ax = origin.axis_cartesian
-        distance = 1 - (c[0] * ax[0] + c[1] * ax[1] + c[2] * ax[2])
         if distance < min_distance:
             min_distance = distance
             nearest = origin

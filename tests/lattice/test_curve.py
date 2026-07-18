@@ -7,7 +7,7 @@ from pathlib import Path
 
 from a5.lattice import (
     Triple,
-    s_to_cell, s_to_triple, triple_to_s, triple_parity, triple_in_bounds, ij_to_s,
+    s_to_cell, s_to_triple, triple_to_s, triple_parity, triple_in_bounds, round_to_triple,
 )
 
 
@@ -44,9 +44,9 @@ class TestCurve:
             s = triple_to_s(triple, f["resolution"], f["orientation"])
             assert s == f["s"]
 
-    def test_ij_to_s(self):
-        for f in load_fixtures()["IJToS"]:
-            s = ij_to_s((f["i"], f["j"]), f["resolution"], f["orientation"])
+    def test_point_to_s(self):
+        for f in load_fixtures()["pointToS"]:
+            s = triple_to_s(round_to_triple((f["i"], f["j"]), f["resolution"]), f["resolution"], f["orientation"])
             assert s == f["s"]
 
     def test_triple_in_bounds(self):
