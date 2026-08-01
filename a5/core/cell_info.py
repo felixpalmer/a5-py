@@ -62,3 +62,30 @@ def cell_area(resolution: int) -> float:
     if resolution < 0:
         return AUTHALIC_AREA
     return AUTHALIC_AREA / get_num_cells(resolution)
+
+
+# Mean cell edge length divided by sqrt(cell_area), measured exhaustively from the
+# cell boundaries. Resolution 0 cells (dodecahedron faces) and resolution 1 cells
+# (triangular quintants) have their own geometry; from resolution 2 the pentagonal
+# tiling refines self-similarly and the ratio converges to ~0.8211, so a constant
+# serves all higher resolutions.
+EDGE_LENGTH_RATIOS = [0.7131, 1.4818, 0.8164, 0.8198, 0.8208, 0.821]
+EDGE_LENGTH_RATIO = 0.8211
+
+
+def cell_edge_length_avg(resolution: int) -> float:
+    """
+    Returns the average edge length of a cell at a given resolution in meters.
+    Individual edge lengths vary from the average by roughly ±10%, depending
+    on the cell's shape and its position on the globe.
+
+    Args:
+        resolution: The resolution level
+
+    Returns:
+        Average edge length of a cell in meters
+    """
+    if resolution < 0:
+        resolution = 0
+    ratio = EDGE_LENGTH_RATIOS[resolution] if resolution < len(EDGE_LENGTH_RATIOS) else EDGE_LENGTH_RATIO
+    return ratio * math.sqrt(cell_area(resolution))
