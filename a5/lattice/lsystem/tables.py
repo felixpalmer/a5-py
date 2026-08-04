@@ -39,7 +39,6 @@ class CurveTables(NamedTuple):
     # leaf tables per (motif, flip): 4 host cells as corner sums, point-in-cell
     # triangle edges, and pentagon flavors
     leaf_sum: List[float]
-    leaf_tri: List[float]
     leaf_flavor: List[int]
     # Branchless child classifier per state k = motif*2+flip: 3 separating lines
     # (class_sep[k*9 ..] = [nx0,ny0,c0, nx1,ny1,c1, nx2,ny2,c2]) evaluated against
@@ -187,7 +186,6 @@ def compile_grammar(rules: Dict[str, str], draws: Dict[str, str]) -> CurveTables
 
     # ---------- leaf tables: per (motif, flip = heading 0|3) the 4 level-1 host cells ----------
     leaf_sum = [0.0] * (motif_count * 2 * 8)
-    leaf_tri = [0.0] * (motif_count * 2 * 48)
     leaf_flavor = [0] * (motif_count * 2 * 4)
     for m in all_motifs:
         draw_str = _to_draws(m, 1, rules, draws)
@@ -205,18 +203,6 @@ def compile_grammar(rules: Dict[str, str], draws: Dict[str, str]) -> CurveTables
                     raise ValueError(f'lsystem: no pentagon flavor for draw symbol {sym}')
                 is_lower = 0 if sym == upper else 1
                 leaf_flavor[base * 4 + d] = _FLAVOR_BASE[upper] ^ is_lower ^ (hh & 1)
-                c = list(host_corners(sym, frm, hh))
-                area = (c[1].a - c[0].a) * (c[2].b - c[0].b) - (c[1].b - c[0].b) * (c[2].a - c[0].a)
-                if area < 0:
-                    c = [c[0], c[2], c[1]]
-                for e in range(3):
-                    c0 = c[e]
-                    c1 = c[(e + 1) % 3]
-                    o = base * 48 + d * 12 + e * 4
-                    leaf_tri[o] = 3.0 * c0.a
-                    leaf_tri[o + 1] = 3.0 * c0.b
-                    leaf_tri[o + 2] = float(c1.a - c0.a)
-                    leaf_tri[o + 3] = float(c1.b - c0.b)
                 counter[0] += 1
 
             walk(draw_str, AB(0, 0), 3 if flip == 1 else 0, on_draw)
@@ -245,7 +231,6 @@ def compile_grammar(rules: Dict[str, str], draws: Dict[str, str]) -> CurveTables
         child_off_b=child_off_b,
         fp_edges=fp_edges,
         leaf_sum=leaf_sum,
-        leaf_tri=leaf_tri,
         leaf_flavor=leaf_flavor,
         class_sep=class_sep,
         class_lut=class_lut,

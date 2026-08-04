@@ -10,7 +10,7 @@ from ..lattice import (
 )
 from ..core.utils import Origin
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from ..core.origin import segment_to_quintant
+from ..core.origin import SEGMENT_TO_ORIENTATION
 
 
 @dataclass
@@ -71,7 +71,7 @@ def _cell_to_quintant_key(cell_id: int, hilbert_res: int, max_row: int, y_stride
     """Convert a cell ID into its quintant context and packed triple key."""
     cell = deserialize(cell_id)
     origin, segment, S = cell['origin'], cell['segment'], cell['S']
-    quintant, orientation = segment_to_quintant(segment, origin)
+    orientation = SEGMENT_TO_ORIENTATION[origin.id * 5 + segment]
     triple = s_to_triple(S, hilbert_res, orientation)
     parity = triple.x + triple.y + triple.z  # 0 or 1
     return (

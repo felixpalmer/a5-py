@@ -49,6 +49,54 @@ def _basis_translation(ref_ij: Tuple[float, float]) -> Tuple[float, float]:
     return (out[0], out[1])
 
 
+# The base PENTAGON under each flavor's orientation ops, flattened to
+# (x0, y0, ..., x4, y4) for the allocation-free containment test below.
+def _flavor_pentagons_flat():
+    out = []
+    for flavor in range(4):
+        p = PENTAGON.clone()
+        if flavor & 1:
+            p.rotate180()
+        if flavor & 2:
+            p.reflect_y()
+        verts = p.get_vertices()
+        out.append(tuple(c for v in verts for c in (v[0], v[1])))
+    return out
+
+
+_FLAVOR_PENTAGONS = _flavor_pentagons_flat()
+_B00, _B01, _B10, _B11 = BASIS[0][0], BASIS[0][1], BASIS[1][0], BASIS[1][1]
+
+
+def cell_margin_scaled(px: float, py: float, x: int, y: int, flavor: int) -> float:
+    """
+    Signed containment margin of a point in the pentagon of (triple, flavor)
+    (> 0 iff strictly inside; the most-violated-edge cross product otherwise),
+    tested in the SCALED quintant-0 frame (face coords rotated into quintant 0
+    and scaled by 2^resolution). In this frame the cell's pentagon is the
+    flavor-oriented base pentagon translated by BASIS @ (x+y, -x+(flavor&1)),
+    so the test needs no curve decode, no re-projection, and -- pentagons being
+    unit-size here -- stays well-conditioned at every resolution.
+    """
+    rx = x + y
+    ry = -x + (flavor & 1)
+    tx = _B00 * rx + _B01 * ry
+    ty = _B10 * rx + _B11 * ry
+    pent = _FLAVOR_PENTAGONS[flavor]
+    margin = math.inf
+    for i in range(5):
+        j = 0 if i == 4 else i + 1
+        v1x = pent[i * 2] + tx
+        v1y = pent[i * 2 + 1] + ty
+        v2x = pent[j * 2] + tx
+        v2y = pent[j * 2 + 1] + ty
+        # (v1 - v2) x (p - v1): < 0 => strictly outside this edge
+        cross = (v1x - v2x) * (py - v1y) - (v1y - v2y) * (px - v1x)
+        if cross < margin:
+            margin = cross
+    return margin
+
+
 def get_pentagon_vertices(resolution: int, quintant: int, triple: Triple, flavor: int) -> PentagonShape:
     """
     Get pentagon vertices for a cell.

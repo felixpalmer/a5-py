@@ -3,11 +3,10 @@
 # Copyright (c) A5 contributors
 
 # Benchmarks for the space-filling curve: cell -> s encode (triple_to_s) and
-# fractional-point location (ij_to_s).
 #
 # CI runs this same file against both the PR and its merge-base with main, so
 # it must import and run on either side of the L-system migration. It uses ONLY
-# the API common to both engines -- `triple_to_s` and `ij_to_s` -- whose
+# the API common to both engines -- `triple_to_s` -- whose
 # signatures and (bit-identical) behavior are unchanged across the swap, so both
 # runs measure the equivalent operation on identical inputs. The decode
 # primitive changed name across the migration (s_to_anchor -> s_to_cell) with no
@@ -16,7 +15,7 @@
 import itertools
 from typing import List
 
-from a5.lattice import ij_to_s, triple_in_bounds, triple_to_s, Triple
+from a5.lattice import triple_in_bounds, triple_to_s, Triple
 
 from .utils import create_random
 
@@ -56,14 +55,6 @@ def sample_triples(resolution: int, n: int, seed: int = 42) -> List[Triple]:
     return out
 
 
-def _centroid_ij(t: Triple):
-    """The cell's centroid in IJ coordinates
-    (parity 0: (x+y+1/3, -x+1/3), parity 1: (x+y-1/3, -x+2/3))."""
-    parity = t.x + t.y + t.z
-    if parity == 0:
-        return (t.x + t.y + 1 / 3, -t.x + 1 / 3)
-    return (t.x + t.y - 1 / 3, -t.x + 2 / 3)
-
 
 def _make_triple_to_s(resolution, orientation):
     triples = sample_triples(resolution, N)
@@ -91,7 +82,3 @@ def bench_triple_to_s_res_15_wu(benchmark):
     benchmark(_make_triple_to_s(15, 'wu'))
 
 
-def bench_ij_to_s_res_15(benchmark):
-    ijs = [_centroid_ij(t) for t in sample_triples(15, N)]
-    counter = itertools.count()
-    benchmark(lambda: ij_to_s(ijs[next(counter) & (N - 1)], 15, 'uv'))
