@@ -3,7 +3,7 @@
 # Copyright (c) A5 contributors
 
 import math
-from typing import Dict, List, Sequence, Set, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Set, Tuple, TypedDict, Union
 
 from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_to_spherical
@@ -229,13 +229,24 @@ def _strip_closing(ring: List[LonLat]) -> List[LonLat]:
     return ring
 
 
+class PolygonToCellsOptions(TypedDict, total=False):
+    """Options for polygon_to_cells.
+
+    containment: Which cells to include relative to the polygon.
+        'center' (default) includes a cell iff its center lies inside the
+        polygon; 'overlapping' additionally includes every cell that overlaps
+        the polygon boundary, giving gap-free coverage (a superset of 'center').
+    """
+    containment: str
+
+
 def polygon_to_cells(
     polygon: Union[Sequence[LonLat], Sequence[Sequence[LonLat]]], resolution: int,
+    options: Optional[PolygonToCellsOptions] = None,
 ) -> List[int]:
     """
-    Find all cells within a polygon using center-point containment: a cell is
-    included iff its center lies inside the polygon. The result is compacted --
-    use `uncompact` to expand to the input resolution.
+    Find all cells within a polygon. The result is compacted -- use `uncompact`
+    to expand to the input resolution.
 
     Args:
         polygon: Either a single ring of [longitude, latitude] vertices, or
@@ -244,10 +255,14 @@ def polygon_to_cells(
             repeated at the end) -- closure is automatic either way. Holes with
             fewer than 3 distinct vertices are ignored.
         resolution: Target resolution (0..30)
+        options: `containment` selects 'center' (default, cell center inside the
+            polygon) or 'overlapping' (any cell touching the polygon, for
+            gap-free coverage).
 
     Returns:
-        Sorted, compacted list of cell IDs whose centers lie inside the polygon
+        Sorted, compacted list of cell IDs
     """
+    containment = (options or {}).get('containment', 'center')
     # Normalize: a flat ring is shorthand for a polygon with no holes.
     is_nested = len(polygon) > 0 and not isinstance(polygon[0][0], (int, float))
     input_rings: List[List[LonLat]] = list(polygon) if is_nested else [list(polygon)]  # type: ignore[arg-type]
@@ -273,24 +288,30 @@ def polygon_to_cells(
 
     boundary_cells, boundary_set, segment_map = _dense_sample_boundary(rings, ring_vecs_list, resolution)
 
-    # Flattened per-segment normals and interior-side signs, indexed like the
-    # segment map. The polygon interior lies on the *outside* of a hole ring,
-    # so hole segments get the opposite sign.
-    seg_normals: List[Cartesian] = []
-    seg_signs: List[int] = []
-    for r in range(len(rings)):
-        sign = (1 if r == 0 else -1) * ring_winding_sign(ring_vecs_list[r])
-        normals = prep.ring_normals[r]
-        for normal in normals:
-            seg_normals.append(normal)
-            seg_signs.append(sign)
-
-    filtered_boundary = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, seg_signs, prep)
+    # The boundary contribution to the output. In 'overlapping' mode every
+    # densely-sampled boundary cell contains a point on the polygon boundary, so
+    # it overlaps the polygon -- keep them all, unfiltered. In 'center' mode we
+    # filter down to those whose center lies inside.
+    if containment == 'overlapping':
+        boundary_out = boundary_cells
+    else:
+        # Flattened per-segment normals and interior-side signs, indexed like the
+        # segment map. The polygon interior lies on the *outside* of a hole ring,
+        # so hole segments get the opposite sign.
+        seg_normals: List[Cartesian] = []
+        seg_signs: List[int] = []
+        for r in range(len(rings)):
+            sign = (1 if r == 0 else -1) * ring_winding_sign(ring_vecs_list[r])
+            normals = prep.ring_normals[r]
+            for normal in normals:
+                seg_normals.append(normal)
+                seg_signs.append(sign)
+        boundary_out = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, seg_signs, prep)
 
     # Dense sampling can leave gaps; the shell catches them, classifying each cell.
     shell_cells = _expand_shell(boundary_cells, boundary_set)
     if len(shell_cells) == 0:
-        return compact(filtered_boundary)
+        return compact(boundary_out)
 
     interior_seeds: List[int] = []
     visited: Set[int] = set(boundary_set)
@@ -300,8 +321,8 @@ def polygon_to_cells(
         else:
             visited.add(cell)  # exterior shell (and hole interiors) join the firewall
     if len(interior_seeds) == 0:
-        return compact(filtered_boundary)
+        return compact(boundary_out)
 
     interior_cells = _flood_interior(interior_seeds, visited, len(boundary_set), resolution)
 
-    return compact(filtered_boundary + interior_cells)
+    return compact(boundary_out + interior_cells)

@@ -29,6 +29,27 @@ class TestPolygonToCells:
             result_hex = [u64_to_hex(c) for c in sorted_cells]
             assert result_hex == f["cells"], f'fixture {f["name"]}'
 
+    def test_overlapping_fixtures(self):
+        fixtures = load_fixtures()
+        for f in fixtures["overlapping"]:
+            rings = to_rings(f["polygon"])
+            result = polygon_to_cells(rings, f["resolution"], {"containment": "overlapping"})
+            expanded = uncompact(result, f["resolution"])
+            sorted_cells = sorted(expanded)
+            result_hex = [u64_to_hex(c) for c in sorted_cells]
+            assert result_hex == f["cells"], f'fixture {f["name"]}'
+
+    def test_overlapping_is_superset_of_center(self):
+        ring = [(-5.0, 54.0), (15.0, 54.0), (15.0, 44.0), (-5.0, 44.0)]
+        center = set(uncompact(polygon_to_cells(ring, 6), 6))
+        overlapping = set(uncompact(polygon_to_cells(ring, 6, {"containment": "overlapping"}), 6))
+        assert center <= overlapping
+        assert len(overlapping) > len(center)
+
+    def test_defaults_to_center_containment(self):
+        ring = [(-5.0, 54.0), (15.0, 54.0), (15.0, 44.0), (-5.0, 44.0)]
+        assert polygon_to_cells(ring, 6) == polygon_to_cells(ring, 6, {"containment": "center"})
+
     def test_returns_empty_for_less_than_3_vertices(self):
         assert polygon_to_cells([], 5) == []
         assert polygon_to_cells([(0.0, 0.0), (1.0, 1.0)], 5) == []
