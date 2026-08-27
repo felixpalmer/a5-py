@@ -251,25 +251,22 @@ def lerp(out: Vec3, a: Vec3, b: Vec3, t: float) -> Vec3:
 
 def angle(a: Vec3, b: Vec3) -> float:
     """
-    Get the angle between two 3D vectors
-    
-    Args:
-        a: The first operand
-        b: The second operand
-        
-    Returns:
-        The angle in radians
+    Angle between two UNIT vectors, computed as 2*atan2(|a-b|, |a+b|).
+
+    Unlike acos(a.b), which loses half the significant digits carried when the
+    vectors are nearly parallel (and all of them below ~1e-8 rad), this formula
+    keeps full working precision over the whole range [0, pi]: the subtraction
+    a-b is exact for nearby vectors, and atan2 has no sensitive endpoints
+    (Kahan, "How Futile are Mindless Assessments of Roundoff...", section 12).
+    Inputs are assumed to be unit length.
     """
-    # Normalize both vectors
-    temp_a = normalize(create(), a)
-    temp_b = normalize(create(), b)
-    
-    cos_angle = dot(temp_a, temp_b)
-    
-    # Clamp to avoid numerical errors
-    cos_angle = max(-1.0, min(1.0, cos_angle))
-    
-    return math.acos(cos_angle)
+    dx = a[0] - b[0]
+    dy = a[1] - b[1]
+    dz = a[2] - b[2]
+    sx = a[0] + b[0]
+    sy = a[1] + b[1]
+    sz = a[2] + b[2]
+    return 2 * math.atan2(math.sqrt(dx * dx + dy * dy + dz * dz), math.sqrt(sx * sx + sy * sy + sz * sz))
 
 def transformQuat(out: Vec3, a: Vec3, q: List[float]) -> Vec3:
     """

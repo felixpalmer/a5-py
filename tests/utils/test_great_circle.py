@@ -18,6 +18,21 @@ def load_fixtures():
         return json.load(f)
 
 
+class TestGreatCircleDistancePrecision:
+    def test_near_degenerate_distances(self):
+        """
+        Near-degenerate cases with analytically-known distances (Kahan section 12):
+        acos(a.b) would fail these -- it returns 0 for separations below ~1e-8 rad
+        and errs by ~0.1 m near the antipode. The stable 2*atan2 form must match
+        the analytic value to within 1e-10 relative (or 1e-9 m absolute near zero).
+        """
+        fixtures = load_fixtures()
+        for f in fixtures["distances"]:
+            d = great_circle_distance(tuple(f["aVec"]), tuple(f["bVec"]))
+            tolerance = max(1e-9, 1e-10 * f["distance"])
+            assert abs(d - f["distance"]) <= tolerance, f'distance for {f["name"]}'
+
+
 class TestSampleGreatCircleArc:
     def test_sample_great_circle_arc_fixtures(self):
         fixtures = load_fixtures()
