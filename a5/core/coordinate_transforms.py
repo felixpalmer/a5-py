@@ -62,8 +62,10 @@ def ij_to_face(ij: IJ) -> Face:
 def to_spherical(xyz: Cartesian) -> Spherical:
     """Convert Cartesian coordinates to spherical coordinates."""
     theta = cast(Radians, math.atan2(xyz[1], xyz[0]))
-    r = vec3.length(xyz)
-    phi = cast(Radians, math.acos(xyz[2] / r))
+    # atan2 keeps full precision near the poles, where acos(z/r) loses half of
+    # the digits carried (its derivative blows up as z/r -> +/-1)
+    rxy = math.sqrt(xyz[0] * xyz[0] + xyz[1] * xyz[1])
+    phi = cast(Radians, math.atan2(rxy, xyz[2]))
     return cast(Spherical, (theta, phi))
 
 def to_cartesian(spherical: Spherical) -> Cartesian:
