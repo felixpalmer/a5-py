@@ -19,6 +19,14 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v0.10.0] - August 28 2026
+
+- Improve precision in vec3.angle function (#59)
+- Feat: polygonToCells overlapping containment (#58)
+- feat: Add cellEdgeLengthAvg function (#57)
+- feat: More efficient equal area projection (#54)
+- feat: Use L-system to layout lattice curve (#53)
+
 #### pya5 [v0.9.0] - June 17 2026
 
 - **BREAKING**: Remove cell_to_spherical
