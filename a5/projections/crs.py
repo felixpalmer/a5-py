@@ -46,11 +46,18 @@ class CRS:
 
     def get_canonical_triangle(self) -> SphericalTriangle:
         """
-        A canonical spherical face triangle (face center, edge midpoint, vertex)
-        of the dodecahedron, taken from origin 0's CRS vertices. All face
+        A canonical spherical face triangle (vertex/corner, face center, edge
+        midpoint) of the dodecahedron, taken from origin 0's CRS vertices. All face
         triangles used by DodecahedronProjection are congruent and consistently
         wound with this one, so it serves as the fixed source of the
         EqualAreaProjection shape constants — independent of projection call order.
+
+        The order is radiating-vertex-first: A5 uses ISEA, radiating the equal-area
+        projection from the dodecahedron corner (the dual icosahedron's face centre)
+        rather than the face centre. The corner leads, then the centre, then the edge
+        midpoint — a cyclic (winding-preserving) ordering of [centre, midpoint,
+        corner]; the winding must be preserved because the closed-form
+        EqualAreaProjection bakes in the signed triple product.
 
         The indices rely on the construction order above: vertices[0] is origin
         0's face center, vertices[12] its first corner (after the 12 centers) and
@@ -58,7 +65,7 @@ class CRS:
         and midpoint are adjacent (π/5 apart), forming a genuine face triangle —
         the constants-agreement test verifies this against every face triangle.
         """
-        return cast(SphericalTriangle, (self._vertices[0], self._vertices[32], self._vertices[12]))
+        return cast(SphericalTriangle, (self._vertices[12], self._vertices[0], self._vertices[32]))
     
     def get_vertex(self, point: Cartesian) -> Cartesian:
         """Find the CRS vertex that matches the given point."""

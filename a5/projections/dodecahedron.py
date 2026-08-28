@@ -170,31 +170,39 @@ class DodecahedronProjection:
         # Sign of gamma determines which triangle we want to use, and thus vertex order
         even = face_triangle_index % 2 == 0
 
-        # Note: center & midpoint compared to DGGAL implementation are swapped
-        # as we are using a dodecahedron, rather than an icosahedron.
-        return [v_center, v_edge_midpoint, v_corner1] if even else [v_center, v_corner2, v_edge_midpoint]
+        # ISEA: the radiating vertex (first) is the dodecahedron corner, not the
+        # centre. This is a cyclic rotation of the DSEA order [centre, mid, corner]
+        # to [corner, centre, mid], preserving winding (see constructor).
+        return [v_corner1, v_center, v_edge_midpoint] if even else [v_corner2, v_edge_midpoint, v_center]
 
     def _get_reflected_face_triangle(self, face_triangle_index: FaceTriangleIndex, squashed: bool = False) -> FaceTriangle:
         """Get the reflected face triangle"""
-        # First obtain ordinary unreflected triangle
+        # First obtain ordinary unreflected triangle: [corner (A), centre, midpoint]
+        # (even) or [corner (A), midpoint, centre] (odd).
         face_triangle = self._get_face_triangle(face_triangle_index)
         A = vec2.clone(face_triangle[0])
         B = vec2.clone(face_triangle[1])
         C = vec2.clone(face_triangle[2])
 
-        # Reflect dodecahedron center (A) across edge (BC)
         even = face_triangle_index % 2 == 0
-        vec2.negate(A, A)
-        midpoint = B if even else C
+        centre = B if even else C
+        midpoint = C if even else B
 
-        # Squashing is important. A squashed triangle when unprojected will yield the correct spherical triangle.
+        # ISEA: the corner (radiating vertex A) and the edge midpoint are shared
+        # with the neighbouring face across the dodecahedron edge, so only the
+        # centre moves. Reflect the centre across that edge (it sits at the origin,
+        # with the midpoint the foot of the perpendicular) and keep the corner
+        # fixed. Squashing yields the correct spherical triangle when unprojected.
         scale_factor = (1 + 1 / math.cos(interhedral_angle)) if squashed else 2
-        # Manual scaleAndAdd: A = A + midpoint * scale_factor
-        A[0] += midpoint[0] * scale_factor
-        A[1] += midpoint[1] * scale_factor
+        vec2.negate(centre, centre)
+        # Manual scaleAndAdd: centre = centre + midpoint * scale_factor
+        centre[0] += midpoint[0] * scale_factor
+        centre[1] += midpoint[1] * scale_factor
 
-        # Swap midpoint and corner to maintain correct vertex order
-        return [cast(Face, (A[0], A[1])), cast(Face, (C[0], C[1])), cast(Face, (B[0], B[1]))]
+        # Restore winding (swap centre and midpoint back into their slots)
+        if even:
+            return [cast(Face, (A[0], A[1])), cast(Face, (midpoint[0], midpoint[1])), cast(Face, (centre[0], centre[1]))]
+        return [cast(Face, (A[0], A[1])), cast(Face, (centre[0], centre[1])), cast(Face, (midpoint[0], midpoint[1]))]
 
     def get_spherical_triangle(self, face_triangle_index: FaceTriangleIndex, origin_id: OriginId, reflected: bool = False) -> SphericalTriangle:
         """
