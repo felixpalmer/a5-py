@@ -1,6 +1,10 @@
 version = 1
 revision = 2
-requires-python = ">=3.9"
+requires-python = ">=3.8"
+resolution-markers = [
+    "python_full_version >= '3.9'",
+    "python_full_version < '3.9'",
+]
 
 [[package]]
 name = "colorama"
@@ -67,8 +71,23 @@ wheels = [
 
 [[package]]
 name = "pluggy"
+version = "1.5.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.9'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/96/2d/02d4312c973c6050a18b314a5ad0b3210edb65a906f868e31c111dede4a6/pluggy-1.5.0.tar.gz", hash = "sha256:2cffa88e94fdc978c4c574f15f9e59b7f4201d439195c3715ca9e2486f1d0cf1", size = 67955, upload-time = "2024-04-20T21:34:42.531Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/5f/e351af9a41f866ac3f1fac4ca0613908d9a41741cfcf2228f4ad853b697d/pluggy-1.5.0-py3-none-any.whl", hash = "sha256:44e1ad92c8ca002de6377e165f3e0f1be63266ab4d554740532335b9d75ea669", size = 20556, upload-time = "2024-04-20T21:34:40.434Z" },
+]
+
+[[package]]
+name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.9'",
+]
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
@@ -90,7 +109,8 @@ source = { editable = "." }
 
 [package.optional-dependencies]
 bench = [
-    { name = "pytest-benchmark" },
+    { name = "pytest-benchmark", version = "4.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pytest-benchmark", version = "5.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
 ]
 test = [
     { name = "pytest" },
@@ -100,7 +120,8 @@ test = [
 dev = [
     { name = "maturin" },
     { name = "pytest" },
-    { name = "pytest-benchmark" },
+    { name = "pytest-benchmark", version = "4.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pytest-benchmark", version = "5.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
 ]
 
 [package.metadata]
@@ -126,7 +147,8 @@ dependencies = [
     { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
     { name = "iniconfig" },
     { name = "packaging" },
-    { name = "pluggy" },
+    { name = "pluggy", version = "1.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pluggy", version = "1.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ae/3c/c9d525a414d506893f0cd8a8d0de7706446213181570cdbd766691164e40/pytest-8.3.5.tar.gz", hash = "sha256:f4efe70cc14e511565ac476b57c279e12a855b11f48f212af1080ef2263d3845", size = 1450891, upload-time = "2025-03-02T12:54:54.503Z" }
@@ -136,11 +158,30 @@ wheels = [
 
 [[package]]
 name = "pytest-benchmark"
+version = "4.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.9'",
+]
+dependencies = [
+    { name = "py-cpuinfo", marker = "python_full_version < '3.9'" },
+    { name = "pytest", marker = "python_full_version < '3.9'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/28/08/e6b0067efa9a1f2a1eb3043ecd8a0c48bfeb60d3255006dcc829d72d5da2/pytest-benchmark-4.0.0.tar.gz", hash = "sha256:fb0785b83efe599a6a956361c0691ae1dbb5318018561af10f3e915caa0048d1", size = 334641, upload-time = "2022-10-25T21:21:55.686Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4d/a1/3b70862b5b3f830f0422844f25a823d0470739d994466be9dbbbb414d85a/pytest_benchmark-4.0.0-py3-none-any.whl", hash = "sha256:fdb7db64e31c8b277dff9850d2a2556d8b60bcb0ea6524e36e28ffd7c87f71d6", size = 43951, upload-time = "2022-10-25T21:21:53.208Z" },
+]
+
+[[package]]
+name = "pytest-benchmark"
 version = "5.2.3"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.9'",
+]
 dependencies = [
-    { name = "py-cpuinfo" },
-    { name = "pytest" },
+    { name = "py-cpuinfo", marker = "python_full_version >= '3.9'" },
+    { name = "pytest", marker = "python_full_version >= '3.9'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/24/34/9f732b76456d64faffbef6232f1f9dbec7a7c4999ff46282fa418bd1af66/pytest_benchmark-5.2.3.tar.gz", hash = "sha256:deb7317998a23c650fd4ff76e1230066a76cb45dcece0aca5607143c619e7779", size = 341340, upload-time = "2025-11-09T18:48:43.215Z" }
 wheels = [

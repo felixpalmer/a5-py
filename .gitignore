@@ -19,3 +19,6 @@ target/
 
 # cibuildwheel output
 wheelhouse/
+
+# Untracked scratch script for ad-hoc verification (see CLAUDE.md)
+debug.sh

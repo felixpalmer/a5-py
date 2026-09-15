@@ -33,15 +33,30 @@ jobs:
         include:
           - name: rust backend
             backend: rust
+            python-version: '3.11'
             remove_extension: false
           - name: pure python (forced)
             backend: python
+            python-version: '3.11'
             remove_extension: false
           # Leaves A5_BACKEND unset and deletes the compiled module, so this
           # covers the shipped default and the automatic fallback together.
           - name: pure python (extension absent)
             backend: ''
+            python-version: '3.11'
             remove_extension: true
+          # Ends of the supported range. wheels.yml exercises every minor version
+          # against a built wheel, but only when the build files change -- these
+          # two keep a Python-only change from silently breaking the floor or the
+          # newest interpreter.
+          - name: rust backend (python 3.8, the floor)
+            backend: rust
+            python-version: '3.8'
+            remove_extension: false
+          - name: rust backend (python 3.13)
+            backend: rust
+            python-version: '3.13'
+            remove_extension: false
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -49,7 +64,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         run: |

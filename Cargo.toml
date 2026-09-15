@@ -34,9 +34,10 @@ path = "src/lib.rs"
 #   a5 = { path = "../a5-rs" }
 a5 = { git = "https://github.com/felixpalmer/a5-rs", rev = "7ad0978388782d94c52525974807cd0391e8e757" }
 
-# abi3-py39: one wheel per platform covers CPython 3.9+ rather than one wheel
-# per interpreter minor version.
-pyo3 = { version = "0.25", features = ["abi3-py39", "extension-module"] }
+# abi3-py38: one wheel per platform covers CPython 3.8+ rather than one wheel per
+# interpreter minor version, and keeps the compiled backend's floor equal to the
+# pure-Python one, so gaining a wheel never costs a platform its support.
+pyo3 = { version = "0.25", features = ["abi3-py38", "extension-module"] }
 
 [profile.release]
 lto = true

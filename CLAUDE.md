@@ -102,7 +102,7 @@ a5 = { path = "../a5-rs" }
 ```
 
 ## Development Guidelines
-- **Python**: Source files in `/a5`, requires Python >=3.9 (the abi3 wheel floor)
+- **Python**: Source files in `/a5`, requires Python >=3.8 (also the abi3 wheel floor)
 - **Tests**: Use pytest, organized by module with fixture-driven tests
 - **Package Manager**: Uses `uv` for dependency management and builds
 - **Package**: Package name is `pya5`, import as `import a5`
@@ -153,6 +153,17 @@ rm a5/_a5*.so && A5_EXPECT_BACKEND=python uv run pytest
 ```
 
 These are the same checks that run in CI (.github/workflows/test.yml). Run these to verify your changes before the user reviews the code.
+
+## Ad-hoc Verification: use debug.sh
+
+Do NOT run multi-step or experimental shell commands directly — each one costs the
+user an approval prompt. Instead write them to `debug.sh` in the repository root
+and run `sh debug.sh`. Overwrite it freely; it is untracked scratch space, not a
+maintained script.
+
+This applies to exploratory work: building variants, probing behaviour across
+interpreters, comparing backends, one-off measurements. Short, obviously-safe
+single commands (`git status`, `grep`, reading a file) are fine inline.
 
 ## Git Usage
 

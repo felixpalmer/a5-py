@@ -32,7 +32,8 @@ Ref: http://keepachangelog.com/en/0.3.0/
   crossing over a whole batch. Available on both backends.
 - Platform wheels (manylinux, musllinux, macOS x86_64/arm64, Windows) bundling
   the compiled backend, built as `abi3` so one wheel per platform serves
-  CPython 3.9 and later.
+  CPython 3.8 and later. The exception is macOS arm64, which starts at 3.9
+  because no official CPython 3.8 exists for that platform.
 - Differential test suite comparing the two backends cell-for-cell, plus a CI
   matrix that runs the entire fixture suite once per backend.
 
@@ -41,10 +42,13 @@ Ref: http://keepachangelog.com/en/0.3.0/
 - The pure-Python implementation remains the default in 0.x and stays the
   reference implementation. The default becomes `auto` (compiled where
   available) in 1.0.
-- Minimum Python is now 3.9, up from 3.8, which reached end of life in October
-  2024. This is the floor for the `abi3` wheels.
 - Building from source now requires a Rust toolchain, as the build backend is
   maturin rather than hatchling. Installing a platform wheel does not.
+
+##### Unchanged
+
+- Minimum Python is still 3.8. The compiled backend is built `abi3-py38` so that
+  gaining a wheel costs no platform its support.
 
 #### pya5 [v0.10.0] - August 28 2026
 

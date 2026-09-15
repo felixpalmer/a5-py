@@ -3,13 +3,19 @@ name = "pya5"
 version = "0.11.0"
 description = "A5 - Global Pentagonal Geospatial Index"
 readme = "README.md"
-# abi3-py39 sets the floor for the compiled backend; 3.8 has been end-of-life
-# since October 2024.
-requires-python = ">=3.9"
+# Unchanged from 0.10. The compiled backend is built abi3-py38, so it covers the
+# same range the pure-Python implementation always has.
+requires-python = ">=3.8"
 license = {file = 'LICENSE'}
 dependencies = []
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
 ]
@@ -60,9 +66,10 @@ dev = [
 ]
 
 [tool.cibuildwheel]
-# abi3-py39 means a single CPython 3.9 build covers every later 3.x, so only
-# cp39 is built. PyPy has no abi3 support and is skipped.
-build = "cp39-*"
+# abi3-py38 means a single CPython 3.8 build covers every later 3.x, so only cp38
+# is built. The one exception is macOS arm64, where the workflow overrides this
+# to cp39 -- see .github/workflows/wheels.yml. PyPy has no abi3 support.
+build = "cp38-*"
 skip = "pp* *-manylinux_i686 *-musllinux_i686 *-win32"
 build-frontend = "build"
 test-requires = ["pytest"]
