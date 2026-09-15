@@ -137,23 +137,22 @@ class TestIndexing:
                 )
 
     def test_hex_round_trip(self):
-        # Raw a5-rs bindings, on well-formed input.
         for resolution in RESOLUTIONS:
             for cell in _cells(resolution, 20):
                 hex_str = py_hex.u64_to_hex(cell)
                 assert native.u64_to_hex(cell) == hex_str
                 assert native.hex_to_u64(hex_str) == py_hex.hex_to_u64(hex_str)
 
-    @pytest.mark.parametrize(
-        'text', ['1f', '0x1f', '1_f', ' 1f ', 'FF', 'ffffffffffffffff', '10000000000000000']
-    )
-    def test_public_hex_accepts_the_same_inputs_on_both_backends(self, text):
-        # a5-rs parses with u64::from_str_radix and rejects everything except a
-        # bare in-range hex string, so the public API serves these from pure
-        # Python. See a5/_native.py.
-        from a5._native import hex_to_u64
-
-        assert hex_to_u64(text) == py_hex.hex_to_u64(text)
+    @pytest.mark.parametrize('text', ['0x1f', '1_f', ' 1f ', '-1'])
+    def test_hex_leniency_divergence(self, text):
+        # a5-py is the odd one out here, not a5-rs: `int(s, 16)` accepts the 0x
+        # prefix, digit separators, surrounding whitespace and a leading minus,
+        # while both a5-rs and the TypeScript reference (BigInt of "0x" + hex)
+        # reject all four. Pinned so that tightening a5-py is a deliberate,
+        # visible change. See RUST_BUGS.md.
+        py_hex.hex_to_u64(text)
+        with pytest.raises(ValueError):
+            native.hex_to_u64(text)
 
 
 class TestHierarchy:
@@ -201,30 +200,16 @@ class TestHierarchy:
                 resolution
             ), resolution
 
-    def test_public_cell_counts_agree_across_backends(self):
-        # `a5.get_num_cells` / `a5.get_num_children` must return the same values
-        # whichever backend is selected, so these are checked against the public
-        # surface rather than the raw bindings. See a5/_native.py.
-        from a5._native import get_num_cells, get_num_children
-
-        for resolution in range(-1, 31):
-            assert get_num_cells(resolution) == py_cell_info.get_num_cells(resolution), resolution
-        for parent in range(-1, 31):
-            for child in range(-1, 31):
-                assert get_num_children(parent, child) == py_cell_info.get_num_children(
-                    parent, child
-                ), (parent, child)
-
     def test_get_num_cells(self):
-        # Raw a5-rs binding. Resolutions 28+ are a known upstream divergence,
-        # see test_known_divergences.
+        # Resolutions 28+ are a known a5-rs bug, pinned by
+        # test_known_divergences and written up in RUST_BUGS.md.
         for resolution in range(-1, 28):
             assert native.get_num_cells(resolution) == py_cell_info.get_num_cells(
                 resolution
             ), resolution
 
     def test_get_num_children(self):
-        # Raw a5-rs binding; see test_get_num_cells.
+        # Inherits the get_num_cells bug; see test_get_num_cells.
         for parent in range(-1, 31):
             for child in range(-1, 31):
                 # get_num_children only consults get_num_cells below the first

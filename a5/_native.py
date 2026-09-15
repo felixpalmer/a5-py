@@ -12,23 +12,17 @@ same argument order, same argument names (so keyword calls work), same defaults
 -- and are re-exported here unwrapped, because a Python-level forwarding
 function would cost more than the call it forwards for the cheap operations.
 
-Two groups need more than a re-export, each marked below:
+Only ``cell_to_boundary`` and ``polygon_to_cells`` need more than a re-export:
+they take an options mapping, which the Rust API models as a typed struct.
 
-* ``cell_to_boundary`` and ``polygon_to_cells`` take an options mapping, which
-  the Rust API models as a typed struct.
-* ``get_num_cells``, ``get_num_children``, ``hex_to_u64`` and ``u64_to_hex``
-  are served from the pure-Python implementation, because a5-rs behaves
-  differently there and the public API must not change with the backend.
+This layer does not paper over a5-rs defects. Where the two backends disagree,
+the divergence is recorded in RUST_BUGS.md and pinned by a test, so it gets
+fixed upstream rather than hidden here.
 """
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from . import _a5
-
-# These four are re-exported unchanged from the pure-Python modules; see the
-# "Pure-Python for correctness" section below for why.
-from .core.cell_info import get_num_cells, get_num_children
-from .core.hex import hex_to_u64, u64_to_hex
 
 __all__ = [
     'cell_to_boundary', 'cell_to_lonlat', 'lonlat_to_cell',
@@ -44,11 +38,15 @@ __all__ = [
 
 cell_to_lonlat = _a5.cell_to_lonlat
 lonlat_to_cell = _a5.lonlat_to_cell
+hex_to_u64 = _a5.hex_to_u64
+u64_to_hex = _a5.u64_to_hex
 
 cell_to_parent = _a5.cell_to_parent
 cell_to_children = _a5.cell_to_children
 get_resolution = _a5.get_resolution
 get_res0_cells = _a5.get_res0_cells
+get_num_cells = _a5.get_num_cells
+get_num_children = _a5.get_num_children
 cell_area = _a5.cell_area
 cell_edge_length_avg = _a5.cell_edge_length_avg
 
@@ -59,29 +57,6 @@ grid_disk = _a5.grid_disk
 grid_disk_vertex = _a5.grid_disk_vertex
 spherical_cap = _a5.spherical_cap
 line_string_to_cells = _a5.line_string_to_cells
-
-
-# -- Pure-Python for correctness -------------------------------------------
-#
-# `get_num_cells` / `get_num_children` (imported above):
-#   a5-rs hard-codes the JavaScript double-rounded values for
-#   get_num_cells(28..30) to match the TypeScript `number` overload, although it
-#   returns u64. Python implements the exact `bigint` overload, which is what the
-#   shared fixture records as `countBigInt`. Binding the Rust version would make
-#   `a5.get_num_cells(28)` depend on which backend is active.
-#
-# `hex_to_u64` / `u64_to_hex` (imported above):
-#   a5-rs parses hex with `u64::from_str_radix`, which rejects the `0x` prefix,
-#   digit separators, surrounding whitespace and a leading `-`, all of which
-#   `int(s, 16)` accepts. Switching backend must not change which inputs a
-#   caller can pass.
-#
-# None of the four has anything to win from crossing into Rust: they are a few
-# integer operations, and `int(s, 16)` / `hex(v)` are already C. The a5-rs
-# bindings stay available as `_a5.get_num_cells`, `_a5.get_num_children`,
-# `_a5.hex_to_u64` and `_a5.u64_to_hex`, where tests/test_differential.py tracks
-# the upstream behaviour. When a5-rs is fixed and the pin bumped, that test
-# fails and the cell-count import can go.
 
 
 # -- Adapted entry points --------------------------------------------------

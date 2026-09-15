@@ -35,6 +35,10 @@ to `'auto'` at 1.0.
 fixture suite once per backend is what makes it a continuous differential test of
 the compiled one rather than a parallel mirror we hope stays in sync.
 
+**The shim does not work around upstream defects.** Where the backends disagree,
+the divergence is written up in `RUST_BUGS.md` and pinned by a test (strict
+xfail, so it fails once fixed), never hidden in `a5/_native.py`.
+
 When adding a public function, it must be added in three places: the pure-Python
 module, the PyO3 binding in `/src/lib.rs`, and both branches of `a5/__init__.py`.
 `tests/test_backend.py::TestSurface` fails if the two branches drift apart.

@@ -10,6 +10,7 @@ from a5 import (
     cell_area,
     cell_edge_length_avg,
     cell_to_boundary,
+    get_backend,
     get_num_cells,
     get_resolution,
     hex_to_u64,
@@ -24,6 +25,11 @@ with open(FIXTURES_DIR / "cell-info.json") as f:
 with open(Path(__file__).parent / "core" / "fixtures" / "serialization.json") as f:
     SERIALIZATION_FIXTURES = json.load(f)
 
+@pytest.mark.xfail(
+    get_backend() == 'rust',
+    strict=True,
+    reason='a5-rs get_num_cells is wrong for resolutions 28-30; see RUST_BUGS.md',
+)
 def test_get_num_cells_returns_correct_count_for_all_resolutions():
     """Test that getNumCells returns correct number of cells for all resolutions."""
     for fixture in CELL_INFO_FIXTURES["numCells"]:
