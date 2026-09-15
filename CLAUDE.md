@@ -81,15 +81,19 @@ uv run pytest -v              # Verbose output
 
 # Benchmarks
 uv run pytest benchmarks --benchmark-only
-python3 scripts/compare_backends.py bench-python.json bench-rust.json  # ratio report
+# Backend speedup report. The CI job that produces these two files is
+# workflow_dispatch-only (bench.yml `backend-ratio`) -- run it by hand when the
+# a5-rs pin moves, not per-PR.
+python3 scripts/compare_backends.py bench-python.json bench-rust.json
 
 # Building & Publishing
-# Wheels are built by .github/workflows/wheels.yml (cibuildwheel) and published
-# to PyPI on a v* tag via trusted publishing. `uv build` produces a wheel for the
-# current platform only.
+# .github/workflows/wheels.yml (cibuildwheel) builds the full platform matrix and
+# uploads the wheels as CI artifacts -- it does NOT publish. Releasing is still
+# manual, and `uv build` produces a wheel for the current platform only.
 rm -rf dist/*
 uv version --bump patch|minor|major   # also bump version in Cargo.toml
 uv build
+uv publish
 ```
 
 ### Working against a local a5-rs

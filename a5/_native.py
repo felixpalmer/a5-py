@@ -12,14 +12,13 @@ same argument order, same argument names (so keyword calls work), same defaults
 -- and are re-exported here unwrapped, because a Python-level forwarding
 function would cost more than the call it forwards for the cheap operations.
 
-Three groups need more than a re-export, each marked below:
+Two groups need more than a re-export, each marked below:
 
 * ``cell_to_boundary`` and ``polygon_to_cells`` take an options mapping, which
   the Rust API models as a typed struct.
 * ``get_num_cells``, ``get_num_children``, ``hex_to_u64`` and ``u64_to_hex``
   are served from the pure-Python implementation, because a5-rs behaves
   differently there and the public API must not change with the backend.
-* ``get_res0_cells`` caches, as the pure-Python implementation does.
 """
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
@@ -49,6 +48,7 @@ lonlat_to_cell = _a5.lonlat_to_cell
 cell_to_parent = _a5.cell_to_parent
 cell_to_children = _a5.cell_to_children
 get_resolution = _a5.get_resolution
+get_res0_cells = _a5.get_res0_cells
 cell_area = _a5.cell_area
 cell_edge_length_avg = _a5.cell_edge_length_avg
 
@@ -85,23 +85,6 @@ line_string_to_cells = _a5.line_string_to_cells
 
 
 # -- Adapted entry points --------------------------------------------------
-
-_res0_cells = None
-
-
-def get_res0_cells() -> List[int]:
-    """Return the 12 resolution-0 cells (dodecahedron faces).
-
-    Cached like the pure-Python implementation, which is otherwise twice as fast
-    here: these 12 cells are a constant, and recomputing them through a boundary
-    crossing on every call is pure loss. A fresh list is returned each time so a
-    caller mutating the result cannot corrupt the cache.
-    """
-    global _res0_cells
-    if _res0_cells is None:
-        _res0_cells = _a5.get_res0_cells()
-    return list(_res0_cells)
-
 
 def cell_to_boundary(
     cell_id: int,

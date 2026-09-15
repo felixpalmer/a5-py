@@ -2,6 +2,7 @@ name: bench
 
 on:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,6 +19,7 @@ jobs:
   # signal in a ~100x step change, and the compiled backend's timings track
   # a5-rs, not this commit.
   benchmark:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-22.04
 
     env:
@@ -74,7 +76,11 @@ jobs:
   # suite twice on one runner. Reports only -- the ratio depends on the machine
   # and on how much of each benchmark is interpreter overhead, so there is no
   # sensible fixed bound to gate on.
+  #
+  # Manual (workflow_dispatch) rather than per-PR: it doubles the benchmark
+  # runtime to produce a number that only moves when the a5-rs pin changes.
   backend-ratio:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
 
     steps:

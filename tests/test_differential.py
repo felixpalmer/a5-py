@@ -192,19 +192,7 @@ class TestHierarchy:
                     )
 
     def test_get_res0_cells(self):
-        from a5._native import get_res0_cells
-
         assert native.get_res0_cells() == py_serialization.get_res0_cells()
-        assert get_res0_cells() == py_serialization.get_res0_cells()
-
-    def test_get_res0_cells_returns_a_fresh_list(self):
-        # The result is cached on both backends; a caller mutating it must not
-        # corrupt the next call.
-        from a5._native import get_res0_cells
-
-        first = get_res0_cells()
-        first.append(0)
-        assert get_res0_cells() == py_serialization.get_res0_cells()
 
     def test_cell_area_and_edge_length(self):
         for resolution in range(-1, 31):

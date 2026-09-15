@@ -1,8 +1,8 @@
 name: wheels
 
 # Wheels are built on every pull request that touches the build, so a broken
-# matrix is caught before release rather than during one, and on tags for
-# publishing.
+# matrix is caught before a release rather than during one. Building only --
+# publishing is not wired up here.
 on:
   pull_request:
     paths:
@@ -11,9 +11,6 @@ on:
       - 'src/**'
       - 'pyproject.toml'
       - '.github/workflows/wheels.yml'
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -95,7 +92,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        # The two ends of the supported range; test.yml covers the middle.
+        python-version: ['3.8', '3.13']
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -122,40 +120,3 @@ jobs:
         # Run from a directory where `a5` cannot resolve to the source tree.
         working-directory: /tmp
         run: python -m pytest "$GITHUB_WORKSPACE/tests" -q
-
-  build-sdist:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Build sdist
-        run: |
-          python -m pip install build
-          python -m build --sdist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sdist
-          path: dist/*.tar.gz
-
-  publish:
-    needs: [build-wheels, abi3-compat, build-sdist]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-22.04
-    environment: pypi
-    permissions:
-      # PyPI trusted publishing -- no API token stored in the repository.
-      id-token: write
-
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - uses: pypa/gh-action-pypi-publish@release/v1

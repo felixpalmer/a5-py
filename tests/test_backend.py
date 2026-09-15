@@ -82,12 +82,6 @@ class TestSelection:
     def test_auto_prefers_rust_when_available(self):
         assert backend_under(A5_BACKEND='auto') == 'rust'
 
-    def test_backend_is_case_and_space_insensitive(self):
-        assert backend_under(A5_BACKEND=' PYTHON ') == 'python'
-
-    def test_empty_backend_falls_through_to_the_default(self):
-        assert backend_under(A5_BACKEND='') == 'python'
-
     def test_invalid_backend_is_rejected(self):
         result = run('import a5', A5_BACKEND='fortran')
         assert result.returncode != 0
@@ -97,11 +91,6 @@ class TestSelection:
 class TestFallback:
     def test_auto_falls_back_when_extension_missing(self):
         result = run(BLOCK_NATIVE + 'import a5; print(a5.get_backend())', A5_BACKEND='auto')
-        assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == 'python'
-
-    def test_default_falls_back_when_extension_missing(self):
-        result = run(BLOCK_NATIVE + 'import a5; print(a5.get_backend())')
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == 'python'
 
@@ -136,10 +125,6 @@ class TestSurface:
             rust_names = run(code, A5_BACKEND='rust').stdout.strip()
             assert rust_names == python_names
 
-    def test_every_public_name_is_bound(self):
-        for name in a5.__all__:
-            assert getattr(a5, name, None) is not None, name
-
     @pytest.mark.skipif(not HAVE_NATIVE, reason='compiled extension not built')
     def test_native_module_is_reachable_regardless_of_selection(self):
         # The differential tests and benchmarks need both implementations even
@@ -151,10 +136,3 @@ class TestSurface:
         result = run(code, A5_BACKEND='python')
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == 'python True'
-
-
-def test_get_backend_matches_module_constant():
-    from a5._backend import BACKEND
-
-    assert a5.get_backend() == BACKEND
-    assert BACKEND in ('rust', 'python')

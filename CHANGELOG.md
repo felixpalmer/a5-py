@@ -27,10 +27,11 @@ Ref: http://keepachangelog.com/en/0.3.0/
   crate, covering the whole public API. Roughly two orders of magnitude faster than
   pure Python. Opt in with `A5_BACKEND=rust`; `a5.get_backend()` reports which
   implementation is live.
-- Platform wheels (manylinux, musllinux, macOS x86_64/arm64, Windows) bundling
-  the compiled backend, built as `abi3` so one wheel per platform serves
-  CPython 3.8 and later. The exception is macOS arm64, which starts at 3.9
-  because no official CPython 3.8 exists for that platform.
+- CI builds a platform wheel matrix (manylinux, musllinux, macOS x86_64/arm64,
+  Windows) bundling the compiled backend, as `abi3` so one wheel per platform
+  serves CPython 3.8 and later. The exception is macOS arm64, which starts at
+  3.9 because no official CPython 3.8 exists for that platform. Wheels are
+  uploaded as CI artifacts; wiring them into releases is left to a follow-up.
 - Differential test suite comparing the two backends cell-for-cell, plus a CI
   matrix that runs the entire fixture suite once per backend.
 
