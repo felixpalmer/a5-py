@@ -27,35 +27,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # `cibw_build` overrides the cp38 default from pyproject.toml. Only
-          # macOS arm64 needs it: the official CPython 3.8 installers are
-          # x86_64-only (arm64 support arrived in 3.9.1), so there is no
-          # interpreter to build cp38 against there. A cp39-abi3 wheel covers
-          # 3.9+ on that platform, and no official 3.8 exists on it to miss out.
-          #
           # Linux builds both manylinux and musllinux per architecture --
           # musllinux matters for Alpine-based containers, which is most of the
           # slim Docker images people deploy geospatial workers in.
           - name: linux-x86_64
             os: ubuntu-22.04
             archs: x86_64
-            cibw_build: cp38-*
           - name: linux-aarch64
             os: ubuntu-22.04-arm
             archs: aarch64
-            cibw_build: cp38-*
           - name: macos-x86_64
             os: macos-13
             archs: x86_64
-            cibw_build: cp38-*
           - name: macos-arm64
             os: macos-14
             archs: arm64
-            cibw_build: cp39-*
           - name: windows-AMD64
             os: windows-2022
             archs: AMD64
-            cibw_build: cp38-*
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -73,7 +62,11 @@ jobs:
         uses: pypa/cibuildwheel@v2.23.3
         env:
           CIBW_ARCHS: ${{ matrix.archs }}
-          CIBW_BUILD: ${{ matrix.cibw_build }}
+          # cp38 everywhere except macOS arm64, whose abi3 floor is 3.9: the
+          # official CPython 3.8 installers are x86_64-only (arm64 arrived in
+          # 3.9.1), so there is no interpreter to build cp38 against there, and
+          # no official 3.8 on that platform to miss out.
+          CIBW_BUILD: ${{ matrix.archs == 'arm64' && 'cp39-*' || 'cp38-*' }}
 
       - name: Report wheel sizes
         shell: bash
