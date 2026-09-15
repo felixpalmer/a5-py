@@ -27,9 +27,6 @@ Ref: http://keepachangelog.com/en/0.3.0/
   crate, covering the whole public API. Roughly two orders of magnitude faster than
   pure Python. Opt in with `A5_BACKEND=rust`; `a5.get_backend()` reports which
   implementation is live.
-- `a5.batch` with sequence-taking variants of `cell_to_parent`, `cell_to_children`,
-  `get_resolution` and `cell_area`, which amortise the Python/Rust boundary
-  crossing over a whole batch. Available on both backends.
 - Platform wheels (manylinux, musllinux, macOS x86_64/arm64, Windows) bundling
   the compiled backend, built as `abi3` so one wheel per platform serves
   CPython 3.8 and later. The exception is macOS arm64, which starts at 3.9

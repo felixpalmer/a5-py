@@ -41,29 +41,12 @@ A5_BACKEND=auto    # use it when available, fall back to pure Python silently
 A5_BACKEND=python  # always pure Python
 ```
 
-`A5_PURE_PYTHON=1` is accepted as an alias for `A5_BACKEND=python`. Check which
-one is live with `a5.get_backend()`.
+Check which one is live with `a5.get_backend()`.
 
 **0.x defaults to `python`** so that upgrading cannot change results or timings
 underneath you; `rust` is opt-in while it gets real-world exposure. In 1.0 the
 default becomes `auto`, making the compiled backend standard wherever a wheel
 provides one.
-
-### Batch operations
-
-`cell_to_parent`, `cell_to_children`, `get_resolution` and `cell_area` each do so
-little work that, called one at a time, the Python/Rust boundary crossing costs
-more than the operation. `a5.batch` takes a sequence and returns a list, paying
-that cost once per batch instead of once per element:
-
-```python
-from a5 import batch
-
-parents = batch.cell_to_parent(cells, 5)
-resolutions = batch.get_resolution(cells)
-```
-
-Both backends implement these, so they work regardless of which one is selected.
 
 ### Building the compiled backend from source
 

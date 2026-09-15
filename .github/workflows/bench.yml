@@ -45,10 +45,10 @@ jobs:
       - name: Install dependencies
         run: uv pip install pytest pytest-benchmark maturin
 
-      # bench_batch.py calls a5.batch, which needs the module present even on
-      # the pure-Python backend; building it also keeps this job's install
-      # identical to the backend-ratio job below.
-      - name: Build extension module
+      # This job never uses the compiled backend, but maturin is the build
+      # backend, so installing the package at all builds it. The step is here to
+      # get `a5` importable, not for its output.
+      - name: Install the package
         run: uv run --no-sync maturin develop --release
 
       - name: Run benchmarks (PR)
@@ -61,9 +61,7 @@ jobs:
           git checkout "$BASE" -- a5
 
       - name: Run benchmarks (baseline)
-        # The baseline commit predates a5/batch.py, so bench_batch.py cannot run
-        # against it. Deselecting it keeps the rest of the comparison intact.
-        run: uv run --no-sync pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-baseline.json --ignore=benchmarks/bench_batch.py
+        run: uv run --no-sync pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-baseline.json
 
       - name: Restore PR library code
         run: git checkout HEAD -- a5

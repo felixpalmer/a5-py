@@ -28,9 +28,6 @@ Selection is controlled by ``A5_BACKEND``:
 ``python``
     Always use the pure-Python implementation.
 
-``A5_PURE_PYTHON=1`` is accepted as an alias for ``A5_BACKEND=python``.
-``A5_BACKEND`` wins if both are set.
-
 The backend is resolved once, at import time. Changing the environment
 afterwards has no effect.
 """
@@ -40,7 +37,7 @@ from typing import Optional
 
 __all__ = ['get_backend', 'native_module']
 
-# The default when neither environment variable is set.
+# The default when A5_BACKEND is unset.
 #
 # 0.x ships pure Python as the default so that upgrading cannot change results
 # or performance characteristics under anyone's feet, with ``A5_BACKEND=rust``
@@ -50,8 +47,6 @@ __all__ = ['get_backend', 'native_module']
 _DEFAULT_BACKEND = 'python'
 
 _VALID_BACKENDS = ('auto', 'rust', 'python')
-
-_TRUTHY = ('1', 'true', 'yes', 'on')
 
 _native = None  # type: Optional[object]
 _native_error = None  # type: Optional[BaseException]
@@ -83,17 +78,15 @@ def native_module():
 def _requested():
     """Resolve the requested backend name from the environment."""
     requested = os.environ.get('A5_BACKEND', '').strip().lower()
-    if requested:
-        if requested not in _VALID_BACKENDS:
-            raise ValueError(
-                'A5_BACKEND must be one of {}, got {!r}'.format(
-                    ', '.join(_VALID_BACKENDS), requested
-                )
+    if not requested:
+        return _DEFAULT_BACKEND
+    if requested not in _VALID_BACKENDS:
+        raise ValueError(
+            'A5_BACKEND must be one of {}, got {!r}'.format(
+                ', '.join(_VALID_BACKENDS), requested
             )
-        return requested
-    if os.environ.get('A5_PURE_PYTHON', '').strip().lower() in _TRUTHY:
-        return 'python'
-    return _DEFAULT_BACKEND
+        )
+    return requested
 
 
 def _resolve():

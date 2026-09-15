@@ -19,8 +19,8 @@ Docs: ../a5/docs/api-reference/README.md
 
 ## Backends
 The public API has two interchangeable implementations. Selection happens once at
-import time via `A5_BACKEND` (`auto` | `rust` | `python`); `A5_PURE_PYTHON=1` is an
-alias for `python`. `a5.get_backend()` reports the active one.
+import time via `A5_BACKEND` (`auto` | `rust` | `python`). `a5.get_backend()`
+reports the active one.
 
 - **python** — the pure-Python implementation in `/a5`. The default in 0.x, and
   always the *reference* implementation: fixtures are written against it, and
@@ -44,7 +44,6 @@ module, the PyO3 binding in `/src/lib.rs`, and both branches of `a5/__init__.py`
 - `/Cargo.toml` - extension crate; pins the `a5` crate to an exact a5-rs commit
 - `/a5` - Python source code organized into modules:
   - `_backend.py` - backend selection; `_native.py` - shim adapting `a5._a5` to the Python API
-  - `batch.py` - sequence variants of the cheap hierarchy/cell-info ops (Python port only)
   - `/core` - Core geospatial functionality (cell, hex, hilbert, serialization, etc.)
   - `/math` - Mathematical primitives (vec2, vec3, quat)
   - `/geometry` - Geometric calculations (pentagon, spherical_triangle, spherical_polygon)

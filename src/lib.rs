@@ -17,8 +17,8 @@
 //!   richer than the Rust one -- the `options` dicts of `cell_to_boundary` and
 //!   `polygon_to_cells`, and `polygon_to_cells` accepting a bare ring -- are
 //!   normalised by the thin shim in `a5/_native.py` before reaching here.
-//! * **Release the GIL** for anything that is not O(1): the batch entry points
-//!   and the traversal/region functions all run without holding it.
+//! * **Release the GIL** for anything that is not O(1): the traversal and region
+//!   functions all run without holding it.
 //! * **No panics.** `panic = "abort"` is set in `[profile.release]`, so a panic
 //!   would take down the interpreter instead of raising. Inputs are validated
 //!   here to the same bounds the pure-Python implementation enforces.
@@ -247,64 +247,6 @@ fn polygon_to_cells(
 }
 
 // ---------------------------------------------------------------------------
-// Batch variants
-//
-// The hierarchy and cell-info operations are individually far cheaper than a
-// Python<->Rust call, so per-call FFI overhead dominates and the scalar
-// bindings show little or no gain over pure Python. These take a sequence and
-// return a list, amortising the crossing over the whole batch, and run with the
-// GIL released.
-// ---------------------------------------------------------------------------
-
-/// Parent of each cell, or one level up when parent_resolution is None.
-#[pyfunction]
-#[pyo3(signature = (cells, parent_resolution=None))]
-fn cell_to_parent_batch(
-    py: Python<'_>,
-    cells: Vec<u64>,
-    parent_resolution: Option<i32>,
-) -> PyResult<Vec<u64>> {
-    py.allow_threads(|| {
-        cells
-            .iter()
-            .map(|&cell| a5::cell_to_parent(cell, parent_resolution))
-            .collect::<Result<Vec<u64>, String>>()
-    })
-    .map_err(to_py)
-}
-
-/// Children of each cell, or one level down when child_resolution is None.
-#[pyfunction]
-#[pyo3(signature = (cells, child_resolution=None))]
-fn cell_to_children_batch(
-    py: Python<'_>,
-    cells: Vec<u64>,
-    child_resolution: Option<i32>,
-) -> PyResult<Vec<Vec<u64>>> {
-    py.allow_threads(|| {
-        cells
-            .iter()
-            .map(|&cell| a5::cell_to_children(cell, child_resolution))
-            .collect::<Result<Vec<Vec<u64>>, String>>()
-    })
-    .map_err(to_py)
-}
-
-/// Resolution of each cell.
-#[pyfunction]
-#[pyo3(signature = (cells))]
-fn get_resolution_batch(py: Python<'_>, cells: Vec<u64>) -> Vec<i32> {
-    py.allow_threads(|| cells.iter().map(|&cell| a5::get_resolution(cell)).collect())
-}
-
-/// Cell area in square metres for each resolution level.
-#[pyfunction]
-#[pyo3(signature = (resolutions))]
-fn cell_area_batch(py: Python<'_>, resolutions: Vec<i32>) -> Vec<f64> {
-    py.allow_threads(|| resolutions.iter().map(|&res| a5::cell_area(res)).collect())
-}
-
-// ---------------------------------------------------------------------------
 
 #[pymodule]
 #[pyo3(name = "_a5")]
@@ -338,12 +280,6 @@ fn a5_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Regions
     m.add_function(wrap_pyfunction!(polygon_to_cells, m)?)?;
-
-    // Batch
-    m.add_function(wrap_pyfunction!(cell_to_parent_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(cell_to_children_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(get_resolution_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(cell_area_batch, m)?)?;
 
     // Constants. `a5/__init__.py` serves these from pure Python on both
     // backends, since they carry no computation; exposing them here lets

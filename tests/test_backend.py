@@ -44,7 +44,7 @@ def run(code, **env_overrides):
     hide its extension module.
     """
     env = dict(os.environ)
-    for key in ('A5_BACKEND', 'A5_PURE_PYTHON', 'A5_EXPECT_BACKEND'):
+    for key in ('A5_BACKEND', 'A5_EXPECT_BACKEND'):
         env.pop(key, None)
     env['PYTHONPATH'] = A5_PARENT_DIR
     env.update({k: v for k, v in env_overrides.items() if v is not None})
@@ -71,14 +71,6 @@ class TestSelection:
         # 'auto', this test has to be updated deliberately.
         assert backend_under() == 'python'
 
-    def test_pure_python_env_var(self):
-        assert backend_under(A5_PURE_PYTHON='1') == 'python'
-
-    @pytest.mark.parametrize('value', ['0', 'false', 'no', '', 'off'])
-    def test_pure_python_falsy_values_are_ignored(self, value):
-        # Falsy values fall through to the default rather than forcing Rust.
-        assert backend_under(A5_PURE_PYTHON=value) == 'python'
-
     def test_explicit_python(self):
         assert backend_under(A5_BACKEND='python') == 'python'
 
@@ -93,10 +85,8 @@ class TestSelection:
     def test_backend_is_case_and_space_insensitive(self):
         assert backend_under(A5_BACKEND=' PYTHON ') == 'python'
 
-    def test_a5_backend_wins_over_a5_pure_python(self):
-        assert backend_under(A5_BACKEND='python', A5_PURE_PYTHON='0') == 'python'
-        if HAVE_NATIVE:
-            assert backend_under(A5_BACKEND='rust', A5_PURE_PYTHON='1') == 'rust'
+    def test_empty_backend_falls_through_to_the_default(self):
+        assert backend_under(A5_BACKEND='') == 'python'
 
     def test_invalid_backend_is_rejected(self):
         result = run('import a5', A5_BACKEND='fortran')
