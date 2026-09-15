@@ -3,7 +3,7 @@ Tests for hex conversion utilities.
 """
 
 import pytest
-from a5.core.hex import hex_to_u64, u64_to_hex
+from a5 import hex_to_u64, u64_to_hex
 
 
 def test_hex_to_u64():

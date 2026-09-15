@@ -8,3 +8,14 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Rust / PyO3 extension module
+target/
+*.so
+*.pyd
+*.dylib
+# Local cargo overrides (e.g. patching the a5 crate to a working copy)
+.cargo/config.toml
+
+# cibuildwheel output
+wheelhouse/

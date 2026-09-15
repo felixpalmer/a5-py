@@ -8,9 +8,10 @@ import os
 # Add the a5-py directory to the path so we can import the a5 module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from a5.core.cell import cell_to_boundary
-from a5.core.hex import u64_to_hex
-from a5.core.serialization import cell_to_children, WORLD_CELL
+# Imported from the `a5` namespace rather than the implementation modules, so
+# this picks up the compiled backend when one is available. See the Backends
+# section of the README.
+from a5 import WORLD_CELL, cell_to_boundary, cell_to_children, u64_to_hex
 
 
 def main():

@@ -4,9 +4,7 @@
 
 import json
 from pathlib import Path
-from a5.traversal.grid_disk import grid_disk, grid_disk_vertex
-from a5.core.serialization import get_resolution
-from a5.core.compact import uncompact
+from a5 import get_resolution, grid_disk, grid_disk_vertex, uncompact
 
 
 def load_fixtures():

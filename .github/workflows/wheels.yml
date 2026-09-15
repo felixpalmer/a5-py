@@ -1,0 +1,156 @@
+name: wheels
+
+# Wheels are built on every pull request that touches the build, so a broken
+# matrix is caught before release rather than during one, and on tags for
+# publishing.
+on:
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+      - 'pyproject.toml'
+      - '.github/workflows/wheels.yml'
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-wheels:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux builds both manylinux and musllinux per architecture --
+          # musllinux matters for Alpine-based containers, which is most of the
+          # slim Docker images people deploy geospatial workers in.
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            archs: x86_64
+          - name: linux-aarch64
+            os: ubuntu-22.04-arm
+            archs: aarch64
+          - name: macos-x86_64
+            os: macos-13
+            archs: x86_64
+          - name: macos-arm64
+            os: macos-14
+            archs: arm64
+          - name: windows-AMD64
+            os: windows-2022
+            archs: AMD64
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # The Linux wheels build inside manylinux/musllinux containers, which get
+      # their own toolchain via `before-all` in pyproject.toml. Every other
+      # platform builds on the runner, which ships Rust already.
+      - name: Set up Rust target
+        if: runner.os == 'macOS'
+        run: rustup target add ${{ matrix.archs == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}
+
+      # 2.23+ recognises native aarch64 Linux runners, so the arm64 wheels build
+      # without QEMU.
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.23.3
+        env:
+          CIBW_ARCHS: ${{ matrix.archs }}
+
+      - name: Report wheel sizes
+        shell: bash
+        run: |
+          {
+            echo "### ${{ matrix.name }}"
+            echo ""
+            echo '| wheel | size |'
+            echo '| --- | ---: |'
+            for w in wheelhouse/*.whl; do
+              printf '| %s | %s |\n' "$(basename "$w")" "$(du -h "$w" | cut -f1)"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.name }}
+          path: wheelhouse/*.whl
+
+  # One abi3 wheel is supposed to serve CPython 3.9 and everything after it.
+  # cibuildwheel only ever tests it on the interpreter that built it, so this
+  # installs that same wheel on each later minor version and runs the suite.
+  abi3-compat:
+    needs: build-wheels
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-linux-x86_64
+          path: wheelhouse
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the manylinux wheel
+        run: |
+          python -m pip install pytest
+          python -m pip install --no-index --find-links wheelhouse pya5
+
+      - name: Run tests against the installed wheel
+        env:
+          A5_BACKEND: rust
+          A5_EXPECT_BACKEND: rust
+        # Run from a directory where `a5` cannot resolve to the source tree.
+        working-directory: /tmp
+        run: python -m pytest "$GITHUB_WORKSPACE/tests" -q
+
+  build-sdist:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build sdist
+        run: |
+          python -m pip install build
+          python -m build --sdist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  publish:
+    needs: [build-wheels, abi3-compat, build-sdist]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    environment: pypi
+    permissions:
+      # PyPI trusted publishing -- no API token stored in the repository.
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

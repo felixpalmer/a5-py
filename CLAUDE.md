@@ -17,8 +17,34 @@ Docs: ../a5/docs/api-reference/README.md
 - Each of the ports has its own `CLAUDE.md` file. Whenever you work with another project, read this file to get the additional context.
 
 
+## Backends
+The public API has two interchangeable implementations. Selection happens once at
+import time via `A5_BACKEND` (`auto` | `rust` | `python`); `A5_PURE_PYTHON=1` is an
+alias for `python`. `a5.get_backend()` reports the active one.
+
+- **python** — the pure-Python implementation in `/a5`. The default in 0.x, and
+  always the *reference* implementation: fixtures are written against it, and
+  where the two disagree, Python is presumed right.
+- **rust** — PyO3 bindings to the a5-rs crate, built from `/src/lib.rs` into the
+  private extension module `a5._a5`. ~100x faster.
+
+The default lives in one constant, `_DEFAULT_BACKEND` in `a5/_backend.py`; it flips
+to `'auto'` at 1.0.
+
+**Never remove or stop testing the pure-Python implementation.** Running the
+fixture suite once per backend is what makes it a continuous differential test of
+the compiled one rather than a parallel mirror we hope stays in sync.
+
+When adding a public function, it must be added in three places: the pure-Python
+module, the PyO3 binding in `/src/lib.rs`, and both branches of `a5/__init__.py`.
+`tests/test_backend.py::TestSurface` fails if the two branches drift apart.
+
 ## Python Project Structure
+- `/src/lib.rs` - PyO3 bindings for the Rust backend (private module `a5._a5`)
+- `/Cargo.toml` - extension crate; pins the `a5` crate to an exact a5-rs commit
 - `/a5` - Python source code organized into modules:
+  - `_backend.py` - backend selection; `_native.py` - shim adapting `a5._a5` to the Python API
+  - `batch.py` - sequence variants of the cheap hierarchy/cell-info ops (Python port only)
   - `/core` - Core geospatial functionality (cell, hex, hilbert, serialization, etc.)
   - `/math` - Mathematical primitives (vec2, vec3, quat)
   - `/geometry` - Geometric calculations (pentagon, spherical_triangle, spherical_polygon)
@@ -39,25 +65,44 @@ Docs: ../a5/docs/api-reference/README.md
 
 ## Commands
 ```bash
-# Setup (requires uv: https://docs.astral.sh/uv/)
-uv pip install -e ".[test]"   # Install with test dependencies
+# Setup (requires uv: https://docs.astral.sh/uv/, and a Rust toolchain)
+uv sync --group dev           # Install dev dependencies (pytest, benchmarks, maturin)
+uv run maturin develop --release  # Build a5/_a5.abi3.so in place
 
-# Testing
-uv run pytest                 # Run all tests
+# Testing -- run BOTH backends before calling a change done
+uv run pytest                 # Run all tests (pure Python, the 0.x default)
+A5_BACKEND=rust A5_EXPECT_BACKEND=rust uv run pytest    # ...and again on Rust
 uv run pytest tests/core/     # Run tests in specific directory
 uv run pytest tests/test_cell.py  # Run specific test file
 uv run pytest -k "test_name"  # Run tests matching pattern
 uv run pytest -v              # Verbose output
 
+# A5_EXPECT_BACKEND fails collection if the backend is not the expected one --
+# always pass it, or a missing a5/_a5*.so silently tests pure Python twice.
+
+# Benchmarks
+uv run pytest benchmarks --benchmark-only
+python3 scripts/compare_backends.py bench-python.json bench-rust.json  # ratio report
+
 # Building & Publishing
+# Wheels are built by .github/workflows/wheels.yml (cibuildwheel) and published
+# to PyPI on a v* tag via trusted publishing. `uv build` produces a wheel for the
+# current platform only.
 rm -rf dist/*
-uv version --bump patch|minor|major
+uv version --bump patch|minor|major   # also bump version in Cargo.toml
 uv build
-uv publish
+```
+
+### Working against a local a5-rs
+`Cargo.toml` pins the `a5` crate to an exact a5-rs commit. To build against the
+working copy next door instead, create an untracked `.cargo/config.toml`:
+```toml
+[patch."https://github.com/felixpalmer/a5-rs"]
+a5 = { path = "../a5-rs" }
 ```
 
 ## Development Guidelines
-- **Python**: Source files in `/a5`, requires Python >=3.8
+- **Python**: Source files in `/a5`, requires Python >=3.9 (the abi3 wheel floor)
 - **Tests**: Use pytest, organized by module with fixture-driven tests
 - **Package Manager**: Uses `uv` for dependency management and builds
 - **Package**: Package name is `pya5`, import as `import a5`
@@ -95,11 +140,16 @@ When porting features to Python:
 
 ## CI Checks (run as a final verification)
 ```bash
-# 1. Install dependencies
-uv pip install -e ".[test]"
+# 1. Install dependencies and build the extension
+uv sync --group dev
+uv run maturin develop --release
 
-# 2. Run tests
-uv run pytest
+# 2. Run the suite on each backend
+A5_BACKEND=rust   A5_EXPECT_BACKEND=rust   uv run pytest
+A5_BACKEND=python A5_EXPECT_BACKEND=python uv run pytest
+
+# 3. Confirm the automatic fallback still works
+rm a5/_a5*.so && A5_EXPECT_BACKEND=python uv run pytest
 ```
 
 These are the same checks that run in CI (.github/workflows/test.yml). Run these to verify your changes before the user reviews the code.

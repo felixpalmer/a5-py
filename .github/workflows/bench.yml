@@ -1,9 +1,5 @@
 name: bench
 
-# Compare benchmark performance of the PR against its merge-base with main.
-# Both runs execute on the same runner minutes apart, so machine variance
-# largely cancels out. The PR's benchmark files drive both runs; only the
-# library code in /a5 is switched to the baseline commit.
 on:
   pull_request:
 
@@ -11,8 +7,22 @@ permissions:
   contents: read
 
 jobs:
+  # Compare benchmark performance of the PR against its merge-base with main.
+  # Both runs execute on the same runner minutes apart, so machine variance
+  # largely cancels out. The PR's benchmark files drive both runs; only the
+  # library code in /a5 is switched to the baseline commit.
+  #
+  # Pinned to the pure-Python backend. This gate is about whether a change to the
+  # Python implementation made it slower, and it is the only backend whose code
+  # lives in this repository -- comparing across a backend switch would drown the
+  # signal in a ~100x step change, and the compiled backend's timings track
+  # a5-rs, not this commit.
   benchmark:
     runs-on: ubuntu-22.04
+
+    env:
+      A5_BACKEND: python
+      A5_EXPECT_BACKEND: python
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -33,10 +43,16 @@ jobs:
         run: uv venv
 
       - name: Install dependencies
-        run: uv pip install -e ".[test,bench]"
+        run: uv pip install pytest pytest-benchmark maturin
+
+      # bench_batch.py calls a5.batch, which needs the module present even on
+      # the pure-Python backend; building it also keeps this job's install
+      # identical to the backend-ratio job below.
+      - name: Build extension module
+        run: uv run --no-sync maturin develop --release
 
       - name: Run benchmarks (PR)
-        run: uv run pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-current.json
+        run: uv run --no-sync pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-current.json
 
       - name: Switch library code to baseline
         run: |
@@ -45,7 +61,9 @@ jobs:
           git checkout "$BASE" -- a5
 
       - name: Run benchmarks (baseline)
-        run: uv run pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-baseline.json
+        # The baseline commit predates a5/batch.py, so bench_batch.py cannot run
+        # against it. Deselecting it keeps the rest of the comparison intact.
+        run: uv run --no-sync pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-baseline.json --ignore=benchmarks/bench_batch.py
 
       - name: Restore PR library code
         run: git checkout HEAD -- a5
@@ -53,3 +71,48 @@ jobs:
       - name: Compare (fail on >15% regression)
         shell: bash
         run: python3 scripts/compare_benchmarks.py bench-baseline.json bench-current.json 15 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Reports how much the compiled backend actually buys, by running the same
+  # suite twice on one runner. Reports only -- the ratio depends on the machine
+  # and on how much of each benchmark is interpreter overhead, so there is no
+  # sensible fixed bound to gate on.
+  backend-ratio:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Create virtual environment
+        run: uv venv
+
+      - name: Install dependencies
+        run: uv pip install pytest pytest-benchmark maturin
+
+      - name: Build extension module
+        run: uv run --no-sync maturin develop --release
+
+      - name: Run benchmarks (pure python)
+        env:
+          A5_BACKEND: python
+          A5_EXPECT_BACKEND: python
+        run: uv run --no-sync pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-python.json
+
+      - name: Run benchmarks (rust)
+        env:
+          A5_BACKEND: rust
+          A5_EXPECT_BACKEND: rust
+        run: uv run --no-sync pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-rust.json
+
+      - name: Report speedup
+        shell: bash
+        run: python3 scripts/compare_backends.py bench-python.json bench-rust.json | tee -a "$GITHUB_STEP_SUMMARY"

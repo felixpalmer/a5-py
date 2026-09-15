@@ -6,8 +6,7 @@ import json
 import os
 import pytest
 
-from a5.core.compact import compact, uncompact
-from a5.core.hex import hex_to_u64
+from a5 import compact, hex_to_u64, uncompact
 from a5.core.serialization import deserialize
 
 # Load fixtures
