@@ -16,47 +16,6 @@ To understand how it works, take a look at the [Examples](https://a5geo.org/exam
 
 A5 is implemented in TypeScript and is available as a [library](https://www.npmjs.com/package/a5-js), with [API documentation here](https://a5geo.org/docs/api-reference/). It is [open source](https://github.com/felixpalmer/a5) and licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0.txt).
 
-## Installation
-
-```bash
-pip install pya5
-```
-
-## Backends
-
-`pya5` ships two interchangeable implementations of the same public API:
-
-| backend | what it is | when it runs |
-| --- | --- | --- |
-| `python` | the pure-Python implementation | the default in 0.x |
-| `rust` | PyO3 bindings to the [a5-rs](https://github.com/felixpalmer/a5-rs) crate, roughly two orders of magnitude faster | opt in with `A5_BACKEND=rust` |
-
-Signatures, return values and exceptions are identical either way, so nothing in
-your code changes when you switch. Select with the `A5_BACKEND` environment
-variable, read once at import time:
-
-```bash
-A5_BACKEND=rust    # require the compiled backend; raises ImportError if absent
-A5_BACKEND=auto    # use it when available, fall back to pure Python silently
-A5_BACKEND=python  # always pure Python
-```
-
-Check which one is live with `a5.get_backend()`.
-
-**0.x defaults to `python`** so that upgrading cannot change results or timings
-underneath you; `rust` is opt-in while it gets real-world exposure. In 1.0 the
-default becomes `auto`, making the compiled backend standard wherever a wheel
-provides one.
-
-### Building the compiled backend from source
-
-Platform wheels bundle it already. To build it in a working copy you need a
-[Rust toolchain](https://rustup.rs):
-
-```bash
-uv run maturin develop --release
-```
-
 ## Benefits over alternative systems
 
 Like other [DGGSs](https://a5geo.org/docs/technical/dggs), A5 can be used for indexing, spatial joins, and other spatial operations. The appropriate choice of DGGS will depend on the use case, the key strengths of A5 over other similar indexing systems are:

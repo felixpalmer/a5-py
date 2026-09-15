@@ -1,24 +1,11 @@
 [project]
 name = "pya5"
-version = "0.11.0"
+version = "0.10.0"
 description = "A5 - Global Pentagonal Geospatial Index"
 readme = "README.md"
-# Unchanged from 0.10. The compiled backend is built abi3-py38, so it covers the
-# same range the pure-Python implementation always has.
 requires-python = ">=3.8"
 license = {file = 'LICENSE'}
 dependencies = []
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Rust",
-]
 
 [build-system]
 requires = ["maturin>=1.7,<2.0"]
@@ -29,23 +16,18 @@ build-backend = "maturin"
 # the compiled extension is grafted in as the private submodule `a5._a5`.
 python-source = "."
 module-name = "a5._a5"
-# Development-only trees and build leftovers. maturin walks the working
-# directory rather than consulting git, so gitignored paths need listing too.
+# Keeps development-only trees out of the sdist (the wheel takes only `a5/`).
+# Gitignored paths -- target/, dist/, .pytest_cache/ and friends -- are dropped
+# by maturin already; these are the ones git tracks, plus `.claude/`, which is
+# untracked but deliberately not ignored.
 exclude = [
+    ".claude/**",
+    ".github/**",
     "benchmarks/**",
     "examples/**",
+    "main.py",
     "scripts/**",
     "tests/**",
-    ".github/**",
-    ".cargo/**",
-    ".benchmarks/**",
-    ".pytest_cache/**",
-    "**/__pycache__/**",
-    "*.egg-info/**",
-    "dist/**",
-    "target/**",
-    "wheelhouse/**",
-    "main.py",
 ]
 
 [project.optional-dependencies]
@@ -70,8 +52,6 @@ dev = [
 # is built. The one exception is macOS arm64, where the workflow overrides this
 # to cp39 -- see .github/workflows/wheels.yml. PyPy has no abi3 support.
 build = "cp38-*"
-skip = "pp* *-manylinux_i686 *-musllinux_i686 *-win32"
-build-frontend = "build"
 test-requires = ["pytest"]
 # Run the fixture suite against the installed wheel, once per backend. The
 # working directory is not the repository root, so `a5` resolves to the wheel
@@ -94,7 +74,3 @@ test-command = [
     "set A5_BACKEND=rust&& set A5_EXPECT_BACKEND=rust&& python -m pytest {project}/tests -q",
     "set A5_BACKEND=python&& set A5_EXPECT_BACKEND=python&& python -m pytest {project}/tests -q",
 ]
-
-# MACOSX_DEPLOYMENT_TARGET is deliberately not set: cibuildwheel already picks a
-# correct floor per architecture, and pinning one value globally would conflict
-# with arm64, which cannot go below 11.0.

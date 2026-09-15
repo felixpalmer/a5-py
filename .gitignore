@@ -9,6 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
+# Test and benchmark caches
+.pytest_cache/
+.benchmarks/
+
 # Rust / PyO3 extension module
 target/
 *.so
