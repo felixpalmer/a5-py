@@ -404,5 +404,7 @@ def test_known_divergences():
             'upstream fix has landed, so drop this test and widen '
             'test_get_num_cells / test_get_num_children.'.format(resolution)
         )
-        # The divergence is pure float rounding, not a different formula.
+        # Not a precision difference: the exact value is representable as an
+        # f64, so both literals denote the same double. a5-rs simply froze
+        # JavaScript's shortest round-trip *printing* of it into a u64.
         assert float(exact) == float(lossy), resolution

@@ -2,14 +2,26 @@
 
 `tests/test_differential.py` runs the pure-Python and compiled backends over the
 same generated corpus and compares them. Everything below is a case where they
-disagree. Each is pinned by a test so it cannot drift further, and each needs
-fixing in its home repository rather than being papered over in `a5/_native.py`.
+disagree. Each needs fixing in its home repository rather than being papered
+over in `a5/_native.py`.
 
-Pinned against a5-rs `7ad0978` (0.10.0), the revision `Cargo.toml` names.
+Observed against a5-rs `7ad0978` (0.10.0), the revision `Cargo.toml` names.
+
+| # | what | where the fix belongs | status | pinned by a test |
+| --- | --- | --- | --- | --- |
+| 1 | `get_num_cells` wrong at resolutions 28-30 | a5-rs | [PR #65](https://github.com/felixpalmer/a5-rs/pull/65) open | yes, strict xfail |
+| 2 | `hex_to_u64` accepts too much | a5-py (+ a decision for a5-js) | open | yes |
+| 3 | `cell_to_parent` unchecked above the cell's resolution | a5-rs, a5-py, a5-js | open | partly |
+| 4 | pole results depend on call history | all ports | open, not characterised | no |
 
 ---
 
 ## 1. a5-rs: `get_num_cells` returns wrong values for resolutions 28-30
+
+**Status: fix proposed — [a5-rs#65](https://github.com/felixpalmer/a5-rs/pull/65),
+open, awaiting review.** Head `12da7f5`, all 15 checks green. Not merged, so the
+`rev` in `Cargo.toml` still points at `7ad0978` and the divergence is still live
+here. See "Landing the fix" at the end of this entry.
 
 **Severity:** wrong results from a public API function.
 
@@ -53,6 +65,10 @@ why its suite is green.
 28-30 with no overflow (max is ~1.7e19, `u64::MAX` is ~1.8e19). Then switch
 `tests/cell_info.rs` to deserialise `countBigInt`.
 
+This is what a5-rs#65 does: it drops the three `if resolution == …` branches and
+reads the fixture's `countBigInt` string, parsing it to `u64`. No fixture
+regeneration is needed — `cell-info.json` has always carried both fields.
+
 **Knock-on effects:**
 
 - `get_num_children(parent, child)` inherits it whenever
@@ -65,8 +81,23 @@ why its suite is green.
 
 **Pinned by:** `tests/test_cell_info.py::test_get_num_cells_returns_correct_count_for_all_resolutions`
 (strict xfail on the rust backend) and `tests/test_differential.py::test_known_divergences`.
-Both fail when upstream is fixed and the pin is bumped, which is the signal to
-delete the markers.
+
+**Landing the fix.** Both pins assert the bug is *present*, so bumping the
+dependency without removing them turns the suite red — deliberately, so the
+cleanup cannot be forgotten. Once a5-rs#65 merges, in one commit:
+
+1. `Cargo.toml` — set `rev` to the merge commit, then `cargo update -p a5`.
+2. `tests/test_cell_info.py` — drop the `@pytest.mark.xfail` and the now-unused
+   `get_backend` import.
+3. `tests/test_differential.py` — delete `test_known_divergences`, widen
+   `test_get_num_cells` to `range(-1, 31)`, and remove the
+   `parent < FIRST_HILBERT_RESOLUTION and child >= 28` skip in
+   `test_get_num_children`.
+4. Delete this entry.
+
+Then run the suite on both backends; `test_get_num_cells` and
+`test_get_num_children` should pass across the full resolution range with no
+exclusions.
 
 ---
 
@@ -118,19 +149,59 @@ cell's actual resolution.
 
 ---
 
-## 4. a5-py: `lonlat_to_cell` divides by zero at the south pole
+## 4. All ports: `lonlat_to_cell` at the exact poles depends on call history
 
-**Severity:** low; exact-pole input only.
+**Severity:** needs investigation. Narrow trigger (exactly `lat == ±90.0`), but
+the underlying property — results depending on previous calls — is serious.
 
-`lonlat_to_cell((lon, -90.0), resolution)` raises `ZeroDivisionError` from
-`a5/projections/equal_area.py`, where `volume_abc` is zero. a5-rs returns a cell
-for the same input. The north pole works in both.
+From a cold interpreter both ports agree and both get the right hemisphere:
 
-Here a5-rs has the better behaviour and a5-py needs the fix. Note also that at
-the exact north pole *both* ports return a result that depends on the
-origin-hint cache — a first call gives a different cell from a warm one. That
-quirk is mirrored faithfully across ports, so it is not a divergence, but it is
-its own latent bug worth a separate look.
+```
+lonlat_to_cell((0, -90), 10)   ->  13258597852734554112   lat -89.957   (both ports)
+lonlat_to_cell((0, +90), 10)   ->   1273017311418122240   lat +89.957   (both ports)
+```
 
-**Not currently pinned:** the differential corpus samples
-`asin(uniform(-1, 1))`, which never lands exactly on a pole.
+But `spherical_to_cell` keeps a `_last_result` origin hint — it re-projects
+against the previous call's face and returns early if the point falls inside
+that pentagon. At a pole, which face you project against decides the answer, so
+**the result depends on what was called before**. Reproduction, each line a
+fresh interpreter:
+
+```sh
+# north pole first, then south:
+A5_BACKEND=rust   python -c "import a5; a5.lonlat_to_cell((0,90),10); \
+    print(a5.cell_to_lonlat(a5.lonlat_to_cell((0,-90),10)))"
+#   -> (-71.61, +89.957)      wrong hemisphere, ~20000 km out, silently
+
+A5_BACKEND=python python -c "import a5; a5.lonlat_to_cell((0,90),10); \
+    a5.lonlat_to_cell((0,-90),10)"
+#   -> ZeroDivisionError
+```
+
+So in that order a5-rs answers confidently and wrongly while a5-py raises —
+a5-py is the better-behaved of the two, though neither is right. Calling
+`south, north, south` in one process gives the *correct* southern cell on the
+third call, so the state dependence is not a simple "previous call wins"; it has
+not been fully characterised.
+
+**Root cause (partial):** `rho = (D / volume_abc) * sqrt(...)` in
+`equal_area.rs` / `equal_area.py`, where `volume_abc` is zero when the point is
+projected against a face it lies on the vertex of. Rust and JavaScript produce
+`inf` and continue; Python raises. The TypeScript source has the same unguarded
+division in `modules/projections/equal-area.ts`, so a5-js is likely to behave
+like a5-rs — worth confirming.
+
+**Fix:** two separable pieces, and the second is the one that matters:
+
+1. Guard the degenerate projection. Needs a decision about what the poles *should*
+   map to — a pole is a vertex shared between faces, so the answer is a
+   convention, not a derivation.
+2. Make `lonlat_to_cell` a pure function of its arguments. The origin hint is a
+   performance cache and must not be able to change results; today it can, in
+   every port.
+
+**Not pinned by a test.** A test would have to control global cache state across
+all three ports to be deterministic, and asserting today's broken-and-not-fully-
+understood behaviour would be worse than no test. The generated corpus samples
+`asin(uniform(-1, 1))` and never lands exactly on a pole, so nothing catches
+this automatically — reproduce with the commands above.
