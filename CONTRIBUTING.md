@@ -17,19 +17,40 @@ uv pip install -e ".[test]"
 uv run pytest
 ```
 
-## Build & publish
+## Publish (for maintainers)
+
+### Git strategy
+
+Prereleases run from `main`, stable from the `*-release` branches.
+Each minor version gets a branch, e.g. `1.2-release` which is cut from `main`:
 
 ```bash
-rm -rf dist/*
-uv version --bump patch|minor|major
-uv build
-uv run pytest
-
-Update CHANGELOG
-git add CHANGELOG.md pyproject.toml uv.lock
-git commit -m "x.y.z release"
-uv publish --token <TOKEN>
-
-git tag vx.y.z
-git push && git push --tags
+git checkout main
+git pull
+git checkout -b 1.2-release
 ```
+
+PRs are merged to `main` and then cherry-picked to the latest release branch (in principle to older releases also, but this is rare).
+
+```bash
+git checkout 1.2-release
+git cherry-pick 1234abcd
+```
+
+### Publishing to PyPI
+
+`./publish.sh` tags `v<version>` and pushes; CI builds, tests, and publishes pya5 to PyPI via
+trusted publishing (OIDC) — no API token and no local `uv publish`.
+
+```bash
+# Bump the version, e.g. uv version --bump patch  (or edit pyproject.toml: 1.0.0b1)
+# Add a "#### pya5 [v<version>] - <date>" entry to CHANGELOG.md
+git add pyproject.toml uv.lock CHANGELOG.md
+git commit -m "x.y.z release"
+
+./publish.sh beta   # prerelease (PEP 440, e.g. 1.0.0b1), from main
+./publish.sh prod   # stable X.Y.Z, from a *-release branch
+```
+
+Unlike npm, PyPI has no dist-tag: pip automatically excludes PEP 440 prerelease versions
+(`1.0.0b1`) from `pip install pya5`, so prereleases stay out of the way with no extra step.
