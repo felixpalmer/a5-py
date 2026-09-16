@@ -52,9 +52,3 @@ git commit -m "x.y.z release"
 ./publish.sh beta   # prerelease (PEP 440, e.g. 1.0.0b1), from main
 ./publish.sh prod   # stable X.Y.Z, from a *-release branch
 ```
-
-`publish.sh` refuses to run if `uv.lock` still records the old version, so a forgotten
-`uv lock` is caught before anything is tagged.
-
-Unlike npm, PyPI has no dist-tag: pip automatically excludes PEP 440 prerelease versions
-(`1.0.0b1`) from `pip install pya5`, so prereleases stay out of the way with no extra step.
