@@ -44,6 +44,7 @@ trusted publishing (OIDC) — no API token and no local `uv publish`.
 
 ```bash
 # Bump the version, e.g. uv version --bump patch  (or edit pyproject.toml: 1.0.0b1)
+uv lock   # refreshes uv.lock with the new version — required, else the lockfile is stale
 # Add a "#### pya5 [v<version>] - <date>" entry to CHANGELOG.md
 git add pyproject.toml uv.lock CHANGELOG.md
 git commit -m "x.y.z release"
@@ -51,6 +52,3 @@ git commit -m "x.y.z release"
 ./publish.sh beta   # prerelease (PEP 440, e.g. 1.0.0b1), from main
 ./publish.sh prod   # stable X.Y.Z, from a *-release branch
 ```
-
-Unlike npm, PyPI has no dist-tag: pip automatically excludes PEP 440 prerelease versions
-(`1.0.0b1`) from `pip install pya5`, so prereleases stay out of the way with no extra step.
