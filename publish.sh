@@ -68,6 +68,15 @@ if ! grep -qF "[${TAG}]" CHANGELOG.md; then
   exit 1
 fi
 
+# Guard: uv.lock must record the same version as pyproject.toml. If you bump pyproject.toml
+# but forget to refresh the lockfile, the committed uv.lock is stale/inconsistent — catch it here.
+LOCK_VERSION="$(awk '/^name = "pya5"$/{getline; print; exit}' uv.lock | cut -d'"' -f2)"
+if [ "$LOCK_VERSION" != "$VERSION" ]; then
+  echo "error: uv.lock has pya5 v${LOCK_VERSION} but pyproject.toml is v${VERSION}" >&2
+  echo "       run 'uv lock' and commit the updated uv.lock" >&2
+  exit 1
+fi
+
 echo "Publishing ${TAG} (${MODE}) from '${BRANCH}' — tagging and pushing to trigger CI..."
 git tag "${TAG}"
 git push origin HEAD --tags
