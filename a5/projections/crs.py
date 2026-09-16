@@ -27,8 +27,7 @@ class CRS:
     
     def __init__(self):
         self._vertices: List[Cartesian] = []
-        self._invocations = 0
-        
+
         self._add_face_centers()  # 12 centers
         self._add_vertices()      # 20 vertices
         self._add_midpoints()     # 30 midpoints
@@ -62,10 +61,6 @@ class CRS:
     
     def get_vertex(self, point: Cartesian) -> Cartesian:
         """Find the CRS vertex that matches the given point."""
-        self._invocations += 1
-        if self._invocations == 10000:
-            print('Too many CRS invocations, results should be cached')
-        
         for vertex in self._vertices:
             # Calculate distance manually
             dx = point[0] - vertex[0]
