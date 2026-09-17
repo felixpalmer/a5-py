@@ -7,11 +7,21 @@ import pytest
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
+# Public API is imported from the `a5` namespace so these fixtures run against
+# whichever backend is selected -- see tests/conftest.py. Internals below stay on
+# their implementation modules; they are pure Python on both backends.
+from a5 import (
+    MAX_RESOLUTION,
+    cell_to_boundary,
+    cell_to_lonlat,
+    hex_to_u64,
+    lonlat_to_cell,
+    u64_to_hex,
+)
 from a5.core.coordinate_systems import Degrees, LonLat
-from a5.core.cell import cell_to_boundary, cell_to_lonlat, lonlat_to_cell, a5cell_contains_point
+from a5.core.cell import a5cell_contains_point
 from a5.core.coordinate_transforms import from_lonlat
-from a5.core.serialization import deserialize, MAX_RESOLUTION
-from a5.core.hex import hex_to_u64, u64_to_hex
+from a5.core.serialization import deserialize
 
 # Load test data
 FIXTURES_PATH = Path(__file__).parent / "fixtures"

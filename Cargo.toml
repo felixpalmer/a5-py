@@ -1,0 +1,46 @@
+[package]
+name = "pya5"
+version = "0.10.0"
+edition = "2021"
+authors = ["Felix Palmer <felixpalmer@gmail.com>"]
+description = "PyO3 bindings for the A5 geospatial index (private extension module for the pya5 package)"
+license = "Apache-2.0"
+repository = "https://github.com/felixpalmer/a5-py"
+publish = false
+
+# The repository root is a Python project: `tests/`, `examples/` and `benchmarks/`
+# hold .py files, not Rust targets. Disable target auto-discovery so cargo never
+# tries to interpret them.
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+
+[lib]
+# Produces `a5/_a5.abi3.so` (see `module-name` in pyproject.toml). The leading
+# underscore marks it private -- the supported surface is the `a5` package.
+name = "_a5"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+# Pinned to an exact a5-rs commit rather than a version range: the Python port
+# is validated against this specific revision by the differential test suite,
+# and a silent minor bump could change cell IDs.
+#
+# For local development against a working copy of a5-rs, add to .cargo/config.toml
+# (untracked):
+#   [patch."https://github.com/felixpalmer/a5-rs"]
+#   a5 = { path = "../a5-rs" }
+a5 = { git = "https://github.com/felixpalmer/a5-rs", rev = "7ad0978388782d94c52525974807cd0391e8e757" }
+
+# abi3-py38: one wheel per platform covers CPython 3.8+ rather than one wheel per
+# interpreter minor version, and keeps the compiled backend's floor equal to the
+# pure-Python one, so gaining a wheel never costs a platform its support.
+pyo3 = { version = "0.25", features = ["abi3-py38", "extension-module"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"

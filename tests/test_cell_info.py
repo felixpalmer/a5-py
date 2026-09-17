@@ -6,10 +6,15 @@ import json
 import math
 import pytest
 from pathlib import Path
-from a5.core.cell_info import get_num_cells, cell_area, cell_edge_length_avg
-from a5.core.cell import cell_to_boundary
-from a5.core.serialization import get_resolution
-from a5.core.hex import hex_to_u64
+from a5 import (
+    cell_area,
+    cell_edge_length_avg,
+    cell_to_boundary,
+    get_backend,
+    get_num_cells,
+    get_resolution,
+    hex_to_u64,
+)
 from a5.core.constants import AUTHALIC_RADIUS_EARTH
 
 # Load test fixtures
@@ -20,6 +25,11 @@ with open(FIXTURES_DIR / "cell-info.json") as f:
 with open(Path(__file__).parent / "core" / "fixtures" / "serialization.json") as f:
     SERIALIZATION_FIXTURES = json.load(f)
 
+@pytest.mark.xfail(
+    get_backend() == 'rust',
+    strict=True,
+    reason='a5-rs get_num_cells is wrong for resolutions 28-30; see RUST_BUGS.md',
+)
 def test_get_num_cells_returns_correct_count_for_all_resolutions():
     """Test that getNumCells returns correct number of cells for all resolutions."""
     for fixture in CELL_INFO_FIXTURES["numCells"]:

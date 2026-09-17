@@ -11,19 +11,60 @@ permissions:
   contents: read
 
 jobs:
+  # The entire fixture suite runs once per backend. Everything the tests import
+  # from the `a5` namespace is served by whichever implementation is selected, so
+  # the pure-Python port acts as a continuous differential test of the compiled
+  # one rather than a parallel mirror we hope stays in sync.
+  #
+  # A5_EXPECT_BACKEND makes tests/conftest.py fail collection if the active
+  # backend is not the one this job means to exercise. Without it a missing or
+  # broken extension module would silently fall back and the "rust" job would
+  # quietly test pure Python twice.
   test-python:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-22.04
     permissions:
       checks: write
       contents: read
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: rust backend
+            backend: rust
+            python-version: '3.11'
+            remove_extension: false
+          - name: pure python (forced)
+            backend: python
+            python-version: '3.11'
+            remove_extension: false
+          # Leaves A5_BACKEND unset and deletes the compiled module, so this
+          # covers the shipped default and the automatic fallback together.
+          - name: pure python (extension absent)
+            backend: ''
+            python-version: '3.11'
+            remove_extension: true
+          # Ends of the supported range. wheels.yml exercises every minor version
+          # against a built wheel, but only when the build files change -- these
+          # two keep a Python-only change from silently breaking the floor or the
+          # newest interpreter.
+          - name: rust backend (python 3.8, the floor)
+            backend: rust
+            python-version: '3.8'
+            remove_extension: false
+          - name: rust backend (python 3.13)
+            backend: rust
+            python-version: '3.13'
+            remove_extension: false
+
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         run: |
@@ -34,7 +75,19 @@ jobs:
         run: uv venv
 
       - name: Install dependencies
-        run: uv pip install -e ".[test]"
+        run: uv pip install pytest maturin
+
+      # Builds a5/_a5.abi3.so in the source tree and installs the package
+      # editable, so `import a5` resolves to the working copy either way.
+      - name: Build extension module
+        run: uv run --no-sync maturin develop --release
+
+      - name: Remove extension module
+        if: matrix.remove_extension
+        run: rm -v a5/_a5*.so
 
       - name: Run tests
-        run: uv run pytest
+        env:
+          A5_BACKEND: ${{ matrix.backend }}
+          A5_EXPECT_BACKEND: ${{ matrix.backend || 'python' }}
+        run: uv run --no-sync pytest

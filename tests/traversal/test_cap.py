@@ -4,9 +4,8 @@
 
 import json
 from pathlib import Path
-from a5.traversal.cap import meters_to_h, estimate_cell_radius, pick_coarse_resolution, spherical_cap
-from a5.core.serialization import get_resolution
-from a5.core.compact import uncompact
+from a5 import get_resolution, spherical_cap, uncompact
+from a5.traversal.cap import meters_to_h, estimate_cell_radius, pick_coarse_resolution
 
 
 def load_fixtures():
