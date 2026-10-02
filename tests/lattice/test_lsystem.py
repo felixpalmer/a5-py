@@ -7,7 +7,7 @@ from pathlib import Path
 
 from a5.lattice import Triple
 from a5.lattice.lsystem import s_to_cell, s_to_triple, triple_to_s_lattice
-from a5.lattice.curve import ij_to_s
+from a5.lattice.curve import round_to_triple
 
 
 def load_fixtures():
@@ -38,7 +38,7 @@ class TestLSystem:
             s = triple_to_s_lattice(triple, f["resolution"], f["orientation"])
             assert s == f["s"]
 
-    def test_ij_to_s(self):
-        for f in load_fixtures()["IJToS"]:
-            s = ij_to_s((f["i"], f["j"]), f["resolution"], f["orientation"])
+    def test_point_to_s(self):
+        for f in load_fixtures()["pointToS"]:
+            s = triple_to_s_lattice(round_to_triple((f["i"], f["j"]), f["resolution"]), f["resolution"], f["orientation"])
             assert s == f["s"]

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from a5.lattice import (
     Triple,
-    s_to_cell, s_to_triple, triple_to_s, triple_parity, triple_in_bounds, ij_to_s,
+    s_to_cell, s_to_triple, triple_to_s, triple_parity, triple_in_bounds, round_to_triple,
 )
 
 
@@ -44,12 +44,22 @@ class TestCurve:
             s = triple_to_s(triple, f["resolution"], f["orientation"])
             assert s == f["s"]
 
-    def test_ij_to_s(self):
-        for f in load_fixtures()["IJToS"]:
-            s = ij_to_s((f["i"], f["j"]), f["resolution"], f["orientation"])
+    def test_point_to_s(self):
+        for f in load_fixtures()["pointToS"]:
+            s = triple_to_s(round_to_triple((f["i"], f["j"]), f["resolution"]), f["resolution"], f["orientation"])
             assert s == f["s"]
 
     def test_triple_in_bounds(self):
         for f in load_fixtures()["tripleInBounds"]:
             triple = Triple(f["x"], f["y"], f["z"])
             assert triple_in_bounds(triple, f["maxRow"]) == f["expected"]
+
+
+def test_triple_flavor_closed_form():
+    """The pentagon flavor depends only on (parity, y mod 2); pin the closed
+    form against the descent over all cells at res 6, two orientations."""
+    from a5.lattice import s_to_cell, triple_flavor
+    for orientation in ['uv', 'wu']:
+        for s in range(1 << 12):
+            cell = s_to_cell(s, 6, orientation)
+            assert triple_flavor(cell.triple) == cell.flavor, (s, orientation)
