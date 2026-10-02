@@ -6,16 +6,10 @@ from typing import List, Set
 from ..lattice import s_to_cell, triple_parity
 from ..core.utils import Origin
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from ..core.origin import segment_to_quintant, quintant_to_segment, origins
+from ..core.origin import segment_to_quintant, origins
 from ..core.face_adjacency import FACE_ADJACENCY
 from .quintant_neighbors import find_quintant_neighbor_s
 from .lattice_boundary import BoundaryContext, get_boundary_neighbors
-
-
-def _serialize_res1(origin: Origin, quintant: int) -> int:
-    """Serialize a res 1 cell from origin and quintant."""
-    segment, _ = quintant_to_segment(quintant, origin)
-    return serialize({'origin': origin, 'segment': segment, 'S': 0, 'resolution': 1})
 
 
 def _get_res0_neighbors(origin: Origin) -> List[int]:
@@ -32,49 +26,6 @@ def _get_res0_neighbors(origin: Origin) -> List[int]:
     return sorted(neighbor_set)
 
 
-def _get_res1_neighbors(origin: Origin, segment: int, edge_only: bool) -> List[int]:
-    """
-    Get neighbors of a resolution 1 cell (quintant).
-    """
-    quintant, _ = segment_to_quintant(segment, origin)
-    neighbor_set: Set[int] = set()
-
-    # Left and right quintant on the same face (A, B)
-    left_q = (quintant - 1 + 5) % 5
-    right_q = (quintant + 1) % 5
-    neighbor_set.add(_serialize_res1(origin, left_q))
-    neighbor_set.add(_serialize_res1(origin, right_q))
-
-    # Adjacent quintant on adjacent face (C)
-    adjacent_face_id, adjacent_quintant = FACE_ADJACENCY[origin.id][quintant]
-    adjacent_origin = origins[adjacent_face_id]
-    neighbor_set.add(_serialize_res1(adjacent_origin, adjacent_quintant))
-
-    if edge_only:
-        return sorted(neighbor_set)
-
-    # Remaining neighbors on face
-    neighbor_set.add(_serialize_res1(origin, (quintant - 2 + 5) % 5))
-    neighbor_set.add(_serialize_res1(origin, (quintant + 2) % 5))
-
-    # Left & right quintant neighbors of C
-    neighbor_set.add(_serialize_res1(adjacent_origin, (adjacent_quintant - 1 + 5) % 5))
-    neighbor_set.add(_serialize_res1(adjacent_origin, (adjacent_quintant + 1) % 5))
-
-    # Two neighbors each from adjacent faces of A & B
-    left_adjacent_face_id, left_adjacent_quintant = FACE_ADJACENCY[origin.id][left_q]
-    left_adjacent_origin = origins[left_adjacent_face_id]
-    neighbor_set.add(_serialize_res1(left_adjacent_origin, left_adjacent_quintant))
-    neighbor_set.add(_serialize_res1(left_adjacent_origin, (left_adjacent_quintant - 1 + 5) % 5))
-
-    right_adjacent_face_id, right_adjacent_quintant = FACE_ADJACENCY[origin.id][right_q]
-    right_adjacent_origin = origins[right_adjacent_face_id]
-    neighbor_set.add(_serialize_res1(right_adjacent_origin, right_adjacent_quintant))
-    neighbor_set.add(_serialize_res1(right_adjacent_origin, (right_adjacent_quintant + 1) % 5))
-
-    return sorted(neighbor_set)
-
-
 def get_global_cell_neighbors(cell_id: int, edge_only: bool = False) -> List[int]:
     """
     Get all neighbors of a cell across quintant and face boundaries.
@@ -88,8 +39,6 @@ def get_global_cell_neighbors(cell_id: int, edge_only: bool = False) -> List[int
     origin, segment, S, resolution = cell['origin'], cell['segment'], cell['S'], cell['resolution']
     if resolution == 0:
         return _get_res0_neighbors(origin)
-    if resolution == 1:
-        return _get_res1_neighbors(origin, segment, edge_only)
 
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     source_quintant, source_orientation = segment_to_quintant(segment, origin)

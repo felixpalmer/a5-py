@@ -18,9 +18,9 @@ from .origin import (
 from ..projections.dodecahedron import DodecahedronProjection
 from .utils import A5Cell, OriginId
 from ..geometry.pentagon import PentagonShape
-from .tiling import cell_margin_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices
+from .tiling import cell_margin_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices, get_quintant_polar
 from .constants import PI_OVER_5
-from ..lattice import s_to_cell, triple_flavor, triple_in_bounds
+from ..lattice import LEVEL0_FLAVOR, s_to_cell, triple_flavor, triple_in_bounds
 from ..lattice.triple import triple_to_s
 from ..lattice.curve import round_to_triple
 from ..lattice.types import Triple
@@ -69,9 +69,8 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
     if resolution == -1:
         return WORLD_CELL
 
-    if resolution < FIRST_HILBERT_RESOLUTION:
-        # For low resolutions there is no Hilbert curve: the cell is determined
-        # by the face (and quintant) alone, so the lookup is exact.
+    if resolution == 0:
+        # The dodecahedron face containing the point is exact
         origin = find_nearest_origin(spherical)
         dodec_point = _dodecahedron.forward(spherical, origin.id)
         quintant = get_quintant_polar(to_polar(dodec_point))
@@ -135,7 +134,9 @@ def _lookup_in_quintant(dodec_point, origin, quintant: int, resolution: int):
 
     base = round_to_triple(ij, hilbert_resolution)
     triple = base
-    flavor = triple_flavor(base)
+    # The closed form gives the corner cell flavor 2 only once its y = max_row is
+    # odd; the single resolution 1 cell is that corner cell too (see LEVEL0_FLAVOR)
+    flavor = LEVEL0_FLAVOR if hilbert_resolution == 0 else triple_flavor(base)
     margin = cell_margin_scaled(px, py, base.x, base.y, flavor)
     if margin <= 0:
         # All deltas are relative to the ROUNDED triple (the containing
@@ -230,10 +231,7 @@ def _get_pentagon(cell: A5Cell) -> PentagonShape:
         PentagonShape object
     """
     quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
-    if cell["resolution"] == (FIRST_HILBERT_RESOLUTION - 1):
-        out = get_quintant_vertices(quintant)
-        return out
-    elif cell["resolution"] == (FIRST_HILBERT_RESOLUTION - 2):
+    if cell["resolution"] == (FIRST_HILBERT_RESOLUTION - 2):
         return get_face_vertices()
 
     hilbert_resolution = cell["resolution"] - FIRST_HILBERT_RESOLUTION + 1
@@ -251,7 +249,7 @@ def cell_to_spherical(cell_id: int) -> Spherical:
         Spherical coordinates (theta, phi)
     """
     cell = deserialize(cell_id)
-    if cell["resolution"] >= FIRST_HILBERT_RESOLUTION:
+    if cell["resolution"] >= FIRST_HILBERT_RESOLUTION - 1:
         # Fast path: the pentagon center is O(1) from (triple, flavor) -- no need
         # to construct the pentagon itself.
         quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])

@@ -180,12 +180,23 @@ _ORIENT = {
 }
 
 
+# The flavor of the single cell at resolution 0. There the leaf is the axiom
+# itself, whose flavor reflects the axiom rather than the cell, so it is fixed
+# instead. The single cell is the quintant's corner cell [-max_row, max_row, 0],
+# which touches a dodecahedron vertex and is flavor 2 at every resolution, so
+# the corner cells keep one orientation all the way down. This orientation is
+# also the one where none of its 4 children lies entirely outside it.
+LEVEL0_FLAVOR = 2
+
+
 def s_to_cell(s: int, resolution: int, orientation: Orientation = 'uv') -> Cell:
     """
     The A5 curve position `s` -> cell (triple coordinate + pentagon flavor), for
     a given resolution and orientation. The triple is bijective with
     `triple_to_s_lattice`.
     """
+    if resolution == 0:
+        return Cell(triple=Triple(0, 0, 0), flavor=LEVEL0_FLAVOR)
     axiom, reverse, is_b = _ORIENT[orientation]
     s_axiom = ((1 << (2 * resolution)) - 1 - s) if reverse else s
     cell = axiom_leaf_cell(A5, s_axiom, resolution, axiom)
