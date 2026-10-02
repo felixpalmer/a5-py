@@ -5,6 +5,7 @@
 import json
 from pathlib import Path
 from a5.traversal.global_neighbors import get_global_cell_neighbors
+from a5.core.serialization import get_resolution
 
 
 def load_fixtures():
@@ -35,3 +36,24 @@ class TestGetGlobalCellNeighbors:
             result = get_global_cell_neighbors(cell_id, edge_only=True)
             assert result == expected, \
                 f'cellId={case["input"]["cellId"]}: got {[hex(c) for c in result]}, expected {[hex(c) for c in expected]}'
+
+    def test_five_edge_neighbors_at_every_resolution(self):
+        # Every cell is a pentagon: the dodecahedron faces at resolution 0, the
+        # pentagonal hexecontahedron at resolution 1, the lattice tiling beyond
+        for case in load_fixtures():
+            assert len(case["output"]["edgeNeighbors"]) == 5, case["input"]["cellId"]
+
+    def test_symmetric_neighbors_at_resolution_1(self):
+        # At resolution 1 the single cell of each quintant is every lattice
+        # boundary case at once (apex, edges, corner), so check the boundary rules
+        # stay self-consistent there: every neighbor relation is mutual, with 5
+        # edge and 2 vertex-only neighbors
+        for case in load_fixtures():
+            cell_id = hex_to_int(case["input"]["cellId"])
+            if get_resolution(cell_id) != 1:
+                continue
+            assert len(case["output"]["neighbors"]) == 7
+            for h in case["output"]["neighbors"]:
+                assert cell_id in get_global_cell_neighbors(hex_to_int(h))
+            for h in case["output"]["edgeNeighbors"]:
+                assert cell_id in get_global_cell_neighbors(hex_to_int(h), edge_only=True)

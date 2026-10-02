@@ -153,22 +153,26 @@ def get_boundary_neighbors(
             segment, orientation = quintant_to_segment(q, origin)
             _push_triple(out, triple, orientation, origin, segment, ctx)
 
-    # Base-left corner [-maxRow, maxRow, 0]: 3 dodecahedron faces meet at this vertex.
-    # The symmetric base-right corner is implicitly covered: its cross-quintant and
+    # Base-left corner [-maxRow, maxRow, 0]: 3 dodecahedron faces meet at each base
+    # vertex of the quintant, and this cell touches one of them. From resolution 2
+    # it is a flavor 2 cell touching the vertex shared with the previous quintant;
+    # the single resolution 1 cell (maxRow 0) is flavor 0 and touches the one shared
+    # with the next. The other vertex is implicitly covered: its cross-quintant and
     # cross-face paths land on the [-maxRow, maxRow, 0] cell of neighboring quintants.
     if not skip_corners and triple.x == -max_row and triple.y == max_row and triple.z == 0:
-        # Vertex neighbor 1: across the previous quintant's base edge
-        prev_quintant = (source_quintant - 1 + 5) % 5
-        prev_adj_face_id, prev_adj_quintant = FACE_ADJACENCY[origin.id][prev_quintant]
-        prev_adj_origin = origins[prev_adj_face_id]
-        prev_adj_segment, prev_adj_orientation = quintant_to_segment(prev_adj_quintant, prev_adj_origin)
-        _push_triple(out, triple, prev_adj_orientation, prev_adj_origin, prev_adj_segment, ctx)
+        side = 1 if max_row == 0 else -1
+        # Vertex neighbor 1: across the side quintant's base edge
+        side_quintant = (source_quintant + side + 5) % 5
+        side_adj_face_id, side_adj_quintant = FACE_ADJACENCY[origin.id][side_quintant]
+        side_adj_origin = origins[side_adj_face_id]
+        side_adj_segment, side_adj_orientation = quintant_to_segment(side_adj_quintant, side_adj_origin)
+        _push_triple(out, triple, side_adj_orientation, side_adj_origin, side_adj_segment, ctx)
 
         # Vertex neighbor 2: adjacent quintant on the primary cross-face
         cross_face_id, cross_quintant = FACE_ADJACENCY[origin.id][source_quintant]
         cross_origin = origins[cross_face_id]
-        next_cross_quintant = (cross_quintant + 1) % 5
-        cross_segment, cross_orientation = quintant_to_segment(next_cross_quintant, cross_origin)
+        cross_side_quintant = (cross_quintant - side + 5) % 5
+        cross_segment, cross_orientation = quintant_to_segment(cross_side_quintant, cross_origin)
         _push_triple(out, triple, cross_orientation, cross_origin, cross_segment, ctx)
 
     return out

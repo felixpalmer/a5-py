@@ -193,7 +193,11 @@ def s_to_cell(s: int, resolution: int, orientation: Orientation = 'uv') -> Cell:
     if not is_b:
         return Cell(triple=base, flavor=cell.flavor)
     p = int(POW2[resolution])
-    return Cell(triple=Triple(base.x - p, base.y + p, base.z), flavor=cell.flavor)
+    triple = Triple(base.x - p, base.y + p, base.z)
+    # At resolution 0 the leaf is the B axiom itself, whose flavor reflects the
+    # axiom rather than the cell. Every quintant holds the same single pentagon
+    # regardless of curve orientation, so its flavor is fixed.
+    return Cell(triple=triple, flavor=0 if resolution == 0 else cell.flavor)
 
 
 def s_to_triple(s: int, resolution: int, orientation: Orientation = 'uv') -> Triple:
