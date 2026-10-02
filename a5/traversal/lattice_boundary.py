@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from ..lattice import Orientation, Triple, triple_to_s, triple_in_bounds
 from ..core.utils import Origin
 from ..core.serialization import serialize
-from ..core.origin import origins, QUINTANT_TO_ORIENTATION, QUINTANT_TO_SEGMENT
+from ..core.origin import quintant_to_segment, origins
 from ..core.face_adjacency import FACE_ADJACENCY
 
 # Neighbor delta: (dx, dy, dz, is_edge_sharing)
@@ -123,18 +123,14 @@ def get_boundary_neighbors(
     # Left edge (z=0): neighbor in previous quintant at swapped [0, y, x]
     if triple.z == 0:
         target_quintant = (source_quintant - 1 + 5) % 5
-        global_quintant = origin.id * 5 + target_quintant
-        segment = QUINTANT_TO_SEGMENT[global_quintant]
-        orientation = QUINTANT_TO_ORIENTATION[global_quintant]
+        segment, orientation = quintant_to_segment(target_quintant, origin)
         _push_deltas(out, Triple(0, triple.y, triple.x), LEFT_EDGE_DELTAS[delta_index], edge_only,
                      orientation, origin, segment, ctx)
 
     # Right edge (x=0): neighbor in next quintant at swapped [z, y, 0]
     if triple.x == 0:
         target_quintant = (source_quintant + 1) % 5
-        global_quintant = origin.id * 5 + target_quintant
-        segment = QUINTANT_TO_SEGMENT[global_quintant]
-        orientation = QUINTANT_TO_ORIENTATION[global_quintant]
+        segment, orientation = quintant_to_segment(target_quintant, origin)
         _push_deltas(out, Triple(triple.z, triple.y, 0), RIGHT_EDGE_DELTAS[delta_index], edge_only,
                      orientation, origin, segment, ctx)
 
@@ -142,9 +138,7 @@ def get_boundary_neighbors(
     if triple.y == max_row:
         adj_face_id, adj_quintant = FACE_ADJACENCY[origin.id][source_quintant]
         adj_origin = origins[adj_face_id]
-        global_quintant = adj_origin.id * 5 + adj_quintant
-        segment = QUINTANT_TO_SEGMENT[global_quintant]
-        orientation = QUINTANT_TO_ORIENTATION[global_quintant]
+        segment, orientation = quintant_to_segment(adj_quintant, adj_origin)
         _push_deltas(out, Triple(triple.z, max_row, triple.x), CROSS_FACE_DELTAS[parity], edge_only,
                      orientation, adj_origin, segment, ctx)
 
@@ -156,9 +150,7 @@ def get_boundary_neighbors(
             distance = min((q - source_quintant + 5) % 5, (source_quintant - q + 5) % 5)
             if edge_only and distance != 1:
                 continue
-            global_quintant = origin.id * 5 + q
-            segment = QUINTANT_TO_SEGMENT[global_quintant]
-            orientation = QUINTANT_TO_ORIENTATION[global_quintant]
+            segment, orientation = quintant_to_segment(q, origin)
             _push_triple(out, triple, orientation, origin, segment, ctx)
 
     # Base-left corner [-maxRow, maxRow, 0]: 3 dodecahedron faces meet at this vertex.
@@ -169,18 +161,14 @@ def get_boundary_neighbors(
         prev_quintant = (source_quintant - 1 + 5) % 5
         prev_adj_face_id, prev_adj_quintant = FACE_ADJACENCY[origin.id][prev_quintant]
         prev_adj_origin = origins[prev_adj_face_id]
-        prev_adj_global_quintant = prev_adj_origin.id * 5 + prev_adj_quintant
-        prev_adj_segment = QUINTANT_TO_SEGMENT[prev_adj_global_quintant]
-        prev_adj_orientation = QUINTANT_TO_ORIENTATION[prev_adj_global_quintant]
+        prev_adj_segment, prev_adj_orientation = quintant_to_segment(prev_adj_quintant, prev_adj_origin)
         _push_triple(out, triple, prev_adj_orientation, prev_adj_origin, prev_adj_segment, ctx)
 
         # Vertex neighbor 2: adjacent quintant on the primary cross-face
         cross_face_id, cross_quintant = FACE_ADJACENCY[origin.id][source_quintant]
         cross_origin = origins[cross_face_id]
         next_cross_quintant = (cross_quintant + 1) % 5
-        cross_global_quintant = cross_origin.id * 5 + next_cross_quintant
-        cross_segment = QUINTANT_TO_SEGMENT[cross_global_quintant]
-        cross_orientation = QUINTANT_TO_ORIENTATION[cross_global_quintant]
+        cross_segment, cross_orientation = quintant_to_segment(next_cross_quintant, cross_origin)
         _push_triple(out, triple, cross_orientation, cross_origin, cross_segment, ctx)
 
     return out
