@@ -14,6 +14,9 @@ from a5.core.cell_info import get_num_cells, get_num_children, cell_area, cell_e
 # Compaction
 from a5.core.compact import compact, uncompact
 
+# Migration
+from a5.core.migrate import migrate
+
 # Traversal
 from a5.traversal import grid_disk, grid_disk_vertex, spherical_cap, line_string_to_cells
 
@@ -33,6 +36,8 @@ __all__ = [
     'get_num_cells', 'get_num_children', 'cell_area', 'cell_edge_length_avg',
     # Compaction
     'compact', 'uncompact',
+    # Migration
+    'migrate',
     # Traversal
     'grid_disk', 'grid_disk_vertex', 'spherical_cap', 'line_string_to_cells',
     # Regions
