@@ -20,7 +20,7 @@ from .utils import A5Cell, OriginId
 from ..geometry.pentagon import PentagonShape
 from .tiling import cell_margin_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices, get_quintant_polar
 from .constants import PI_OVER_5
-from ..lattice import s_to_cell, triple_flavor, triple_in_bounds
+from ..lattice import LEVEL0_FLAVOR, s_to_cell, triple_flavor, triple_in_bounds
 from ..lattice.triple import triple_to_s
 from ..lattice.curve import round_to_triple
 from ..lattice.types import Triple
@@ -134,7 +134,9 @@ def _lookup_in_quintant(dodec_point, origin, quintant: int, resolution: int):
 
     base = round_to_triple(ij, hilbert_resolution)
     triple = base
-    flavor = triple_flavor(base)
+    # The closed form gives the corner cell flavor 2 only once its y = max_row is
+    # odd; the single resolution 1 cell is that corner cell too (see LEVEL0_FLAVOR)
+    flavor = LEVEL0_FLAVOR if hilbert_resolution == 0 else triple_flavor(base)
     margin = cell_margin_scaled(px, py, base.x, base.y, flavor)
     if margin <= 0:
         # All deltas are relative to the ROUNDED triple (the containing
