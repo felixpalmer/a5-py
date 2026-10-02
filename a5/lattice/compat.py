@@ -208,7 +208,7 @@ def compat_triple_to_s(t: Triple, resolution: int, orientation: Orientation = 'u
     if flip_ij:
         raw = Triple(raw.z, raw.y, raw.x)
     ab_a, ab_b = triple_to_ab(raw)
-    s_geo = axiom_target_to_s(ORIGINAL, ab_a, ab_b, resolution, _AXIOM_W, True)[0]
+    s_geo = axiom_target_to_s(ORIGINAL, ab_a, ab_b, resolution, _AXIOM_W)[0]
     digits = _digits_of(s_geo, resolution)
     _inverse_shift(digits, invert_j, flip_ij)
     v = _pack_digits(digits)
