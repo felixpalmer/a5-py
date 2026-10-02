@@ -129,7 +129,7 @@ def _classify(t, state, rel_a, rel_b, scale):
 # Shared descent: the target is the corner sum of a real cell, which is
 # strictly interior at every level, so the branchless classifier is provably
 # the containing child (and the leaf resolves by exact sum match). Fractional
-# point location no longer descends at all -- ij_to_s rounds to a triple first
+# point location no longer descends at all -- spherical_to_cell rounds to a triple
 # (see curve.py round_to_triple). Internal; also used by compat.py.
 def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int):
     """Returns (s, leaf_flavor). Callers that only need `s` take [0]."""
