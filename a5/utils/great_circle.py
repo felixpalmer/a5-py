@@ -8,15 +8,17 @@ from typing import List, cast
 from ..core.coordinate_systems import Cartesian
 from ..core.constants import AUTHALIC_RADIUS_EARTH
 from ..math import vec3
-from ..math.vec3 import precompute_slerp, slerp
+from ..math.vec3 import precompute_slerp, slerp, angle
 
 
 def great_circle_distance(a: Cartesian, b: Cartesian) -> float:
     """
     Great-circle distance in meters between two unit vectors on the authalic sphere.
+    Uses 2*atan2(|a-b|, |a+b|) rather than acos(a.b): the latter returns 0 for
+    any points closer than ~1e-8 rad (~6 cm) and loses half its digits near the
+    antipode, while this form is accurate over the whole range.
     """
-    dot = max(-1.0, min(1.0, vec3.dot(a, b)))
-    return math.acos(dot) * AUTHALIC_RADIUS_EARTH
+    return angle(a, b) * AUTHALIC_RADIUS_EARTH
 
 
 def sample_great_circle_arc(a: Cartesian, b: Cartesian, sample_interval: float) -> List[Cartesian]:

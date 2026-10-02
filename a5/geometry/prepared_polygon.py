@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 from ..core.coordinate_systems import Cartesian
 from .spherical_polygon import point_in_spherical_polygon, ring_segment_normals
+from ..math.vec3 import angle
 
 
 def _point_in_polygon_rings(point: Cartesian, ring_vecs_list: List[List[Cartesian]]) -> bool:
@@ -30,6 +31,9 @@ def _point_in_polygon_rings(point: Cartesian, ring_vecs_list: List[List[Cartesia
 @dataclass
 class BoundingCap:
     center: Cartesian
+    # Cap half-angle in radians; kept alongside min_dot so no lossy
+    # acos(min_dot) round-trip is needed
+    angle: float
     min_dot: float
 
 
@@ -48,12 +52,14 @@ def _bounding_cap(ring_vecs_list: List[List[Cartesian]]) -> BoundingCap:
         cz += v[2]
     length = math.sqrt(cx * cx + cy * cy + cz * cz)
     if length < 1e-12:
-        return BoundingCap(center=(0.0, 0.0, 1.0), min_dot=-1.0)
+        return BoundingCap(center=(0.0, 0.0, 1.0), angle=math.pi, min_dot=-1.0)
     cx /= length
     cy /= length
     cz /= length
     center = (cx, cy, cz)
 
+    # angle (2*atan2 form) keeps full precision for tiny polygons, where
+    # acos(dot) would lose half the digits carried on near-parallel vectors
     max_angle = 0.0
     max_edge = 0.0
     for ring_vecs in ring_vecs_list:
@@ -61,12 +67,10 @@ def _bounding_cap(ring_vecs_list: List[List[Cartesian]]) -> BoundingCap:
         for i in range(n):
             v = ring_vecs[i]
             w = ring_vecs[(i + 1) % n]
-            dot_cv = cx * v[0] + cy * v[1] + cz * v[2]
-            max_angle = max(max_angle, math.acos(min(1.0, max(-1.0, dot_cv))))
-            dot_vw = v[0] * w[0] + v[1] * w[1] + v[2] * w[2]
-            max_edge = max(max_edge, math.acos(min(1.0, max(-1.0, dot_vw))))
+            max_angle = max(max_angle, angle(center, v))
+            max_edge = max(max_edge, angle(v, w))
     cap_angle = min(math.pi, max_angle + max_edge / 2)
-    return BoundingCap(center=center, min_dot=math.cos(cap_angle))
+    return BoundingCap(center=center, angle=cap_angle, min_dot=math.cos(cap_angle))
 
 
 @dataclass
@@ -91,7 +95,7 @@ class PreparedPolygon:
 def prepare_polygon(ring_vecs_list: List[List[Cartesian]]) -> PreparedPolygon:
     cap = _bounding_cap(ring_vecs_list)
     ring_normals = [ring_segment_normals(ring) for ring in ring_vecs_list]
-    cap_angle = math.acos(min(1.0, max(-1.0, cap.min_dot)))
+    cap_angle = cap.angle
     use_fast = cap.min_dot > -1.0 and cap_angle < 1.37
     c = cap.center
 

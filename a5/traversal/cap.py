@@ -53,8 +53,11 @@ def pick_coarse_resolution(radius: float, target_res: int) -> int:
     Pick the coarsest resolution where the cap contains enough cells
     to make hierarchical subdivision worthwhile.
     """
-    cap_area_m2 = 2 * math.pi * AUTHALIC_RADIUS_EARTH * AUTHALIC_RADIUS_EARTH * \
-        (1 - math.cos(radius / AUTHALIC_RADIUS_EARTH))
+    # Spherical cap area in m^2: 2*pi*R^2*(1 - cos(r/R)) computed as
+    # 4*pi*R^2*sin^2(r/2R), which keeps full precision for small radii
+    # where 1 - cos cancels
+    half_angle_sin = math.sin(radius / (2 * AUTHALIC_RADIUS_EARTH))
+    cap_area_m2 = 4 * math.pi * AUTHALIC_RADIUS_EARTH * AUTHALIC_RADIUS_EARTH * half_angle_sin * half_angle_sin
 
     for res in range(FIRST_HILBERT_RESOLUTION, target_res + 1):
         c_area = cell_area(res)
