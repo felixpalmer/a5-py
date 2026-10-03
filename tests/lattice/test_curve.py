@@ -56,10 +56,12 @@ class TestCurve:
 
 
 def test_triple_flavor_closed_form():
-    """The pentagon flavor depends only on (parity, y mod 2); pin the closed
-    form against the descent over all cells at res 6, two orientations."""
+    """Pin the closed form against the descent over all cells at res 0-6
+    (res 0 included: its single corner cell is flavor 2), two orientations."""
     from a5.lattice import s_to_cell, triple_flavor
     for orientation in ['uv', 'wu']:
-        for s in range(1 << 12):
-            cell = s_to_cell(s, 6, orientation)
-            assert triple_flavor(cell.triple) == cell.flavor, (s, orientation)
+        for res in range(7):
+            max_row = (1 << res) - 1
+            for s in range(1 << (2 * res)):
+                cell = s_to_cell(s, res, orientation)
+                assert triple_flavor(cell.triple, max_row) == cell.flavor, (s, res, orientation)

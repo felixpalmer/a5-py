@@ -185,7 +185,8 @@ _ORIENT = {
 # instead. The single cell is the quintant's corner cell [-max_row, max_row, 0],
 # which touches a dodecahedron vertex and is flavor 2 at every resolution, so
 # the corner cells keep one orientation all the way down. This orientation is
-# also the one where none of its 4 children lies entirely outside it.
+# also the one where none of its 4 children lies entirely outside it, and the
+# one triple_flavor gives it (see triple.py).
 LEVEL0_FLAVOR = 2
 
 
