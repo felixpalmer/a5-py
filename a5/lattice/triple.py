@@ -13,17 +13,21 @@ def triple_parity(t: Triple) -> int:
     return t.x + t.y + t.z
 
 
-# The pentagon flavor is a CLOSED FORM of the triple: it depends only on the
-# parity and y mod 2 (the Cairo-like tiling repeats its four orientations with
-# period 2). Verified exhaustively against the descent's flavor over all cells
-# (see tests/lattice/test_curve.py); the descent's leaf flavor agrees because
-# both describe the same fixed tiling.
-_FLAVOR_LUT = (0, 2, 3, 1)  # index = parity << 1 | (y & 1)
+# The pentagon flavor is a CLOSED FORM of the triple. The A5 tiling is gyro
+# applied to the square grid R left when every lattice edge parallel to the
+# quintant's dodecahedron edge is deleted (A5 = g o^r D in Conway notation).
+# Bit 0 is the triangle's parity (which half of its rhombus it is); bit 1 is
+# the colour of its apex in the 2-colouring of R, coloured from a dodecahedron
+# vertex. The apex of either triangle in unit square (m, n) has colour
+# (m + n + max_row + 1) & 1, and x + z = -(m + n). For max_row + 1 even (every
+# resolution but 0) face centres and vertices share a colour, so bit 1 is just
+# (x + z) & 1; at resolution 0 they differ, which gives the corner cell flavor 2.
+# Verified against the descent's flavor over all cells (tests/lattice/test_curve.py).
 
 
-def triple_flavor(t: Triple) -> int:
+def triple_flavor(t: Triple, max_row: int) -> int:
     """The pentagon flavor (0-3) of a triple's cell -- orientation-independent."""
-    return _FLAVOR_LUT[((t.x + t.y + t.z) << 1) | (t.y & 1)]
+    return (t.x + t.y + t.z) | (((max_row + 1 + t.x + t.z) & 1) << 1)
 
 
 def triple_in_bounds(t: Triple, max_row: int) -> bool:

@@ -11,7 +11,7 @@
 from .types import Orientation, Triple
 
 from .curve import round_to_triple
-from .lsystem import Cell, LEVEL0_FLAVOR, s_to_cell, s_to_triple
+from .lsystem import Cell, s_to_cell, s_to_triple
 
 from .triple import triple_parity, triple_in_bounds, triple_flavor, triple_to_s
 
