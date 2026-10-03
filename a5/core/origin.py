@@ -16,29 +16,36 @@ from .dodecahedron_quaternions import quaternions
 UP = (0, 0, 1)
 origins: List[Origin] = []
 
-# Quintant layouts (clockwise & counterclockwise)
-clockwise_fan = ['vu', 'uw', 'vw', 'vw', 'vw']
-clockwise_step = ['wu', 'uw', 'vw', 'vu', 'uw']
-counter_step = ['wu', 'uv', 'wv', 'wu', 'uw']
+# Quintant layouts. Every face threads its quintants with one of two patterns,
+# entering at the vertex shared by its first two quintants and passing through
+# the face center twice. In orientation terms u is the quintant's apex (the
+# face center), v and w its outer vertices, so 'vu' runs from v to the apex.
+# - jump: exits two vertices against the winding from where it entered
+# - step: exits one vertex against the winding
+# Clockwise faces use the mirror image (v <-> w) of the counterclockwise
+# pattern. Every counterclockwise face is threaded with the jump, so the step
+# only occurs clockwise: three layouts in all.
 counter_jump = ['vu', 'uv', 'wv', 'wu', 'uw']
+clockwise_jump = ['wu', 'uw', 'vw', 'vu', 'uv']
+clockwise_step = ['wu', 'uw', 'vw', 'vu', 'uw']
 
 QUINTANT_ORIENTATIONS = [
-    clockwise_fan,   # 0 Arctic
+    clockwise_step,  # 0 Arctic
     counter_jump,    # 1 North America
-    counter_step,    # 2 South America
+    counter_jump,    # 2 South America
     clockwise_step,  # 3 North Atlantic & Western Europe & Africa
-    counter_step,    # 4 South Atlantic & Africa
+    counter_jump,    # 4 South Atlantic & Africa
     counter_jump,    # 5 Europe, Middle East & CentralAfrica
-    counter_step,    # 6 Indian Ocean
-    clockwise_step,  # 7 Asia
+    counter_jump,    # 6 Indian Ocean
+    clockwise_jump,  # 7 Asia
     clockwise_step,  # 8 Australia
-    clockwise_step,  # 9 North Pacific
+    clockwise_jump,  # 9 North Pacific
     counter_jump,    # 10 South Pacific
     counter_jump,    # 11 Antarctic
 ]
 
 # Within each face, these are the indices of the first quintant
-QUINTANT_FIRST = [4, 2, 3, 2, 0, 4, 3, 2, 2, 0, 3, 0]
+QUINTANT_FIRST = [4, 2, 2, 2, 0, 4, 3, 2, 1, 0, 3, 0]
 
 # Placements of dodecahedron faces along the Hilbert curve
 ORIGIN_ORDER = [0, 1, 2, 4, 3, 5, 7, 8, 6, 11, 10, 9]
@@ -95,11 +102,15 @@ for i, origin in enumerate(origins):
         first_quintant=origin.first_quintant
     )
 
+def face_step(origin: Origin) -> int:
+    """Direction of travel around a face: 1 for counterclockwise faces, -1 for clockwise."""
+    return -1 if origin.orientation in (clockwise_jump, clockwise_step) else 1
+
 def quintant_to_segment(quintant: int, origin: Origin) -> Tuple[int, Orientation]:
     """Convert a quintant to a segment number and orientation."""
     # Lookup winding direction of this face
     layout = origin.orientation
-    step = -1 if layout in (clockwise_fan, clockwise_step) else 1
+    step = face_step(origin)
 
     # Find (CCW) delta from first quintant of this face
     delta = (quintant - origin.first_quintant + 5) % 5
@@ -115,7 +126,7 @@ def segment_to_quintant(segment: int, origin: Origin) -> Tuple[int, Orientation]
     """Convert a segment number to a quintant and orientation."""
     # Lookup winding direction of this face
     layout = origin.orientation
-    step = -1 if layout in (clockwise_fan, clockwise_step) else 1
+    step = face_step(origin)
 
     face_relative_quintant = (segment - origin.first_quintant + 5) % 5
     orientation = layout[face_relative_quintant]
