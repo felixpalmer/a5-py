@@ -4,12 +4,11 @@
 
 from typing import List, Set
 
-from ..lattice import s_to_triple
 from ..core.compact import compact
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from ..core.origin import origins, segment_to_quintant
-from ..core.face_adjacency import FACE_ADJACENCY
-from .triple_cells import for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
+from ..core.origin import origins
+from ..core.face_adjacency import walk_faces
+from .triple_cells import cell_ids_to_triples, for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
 
 
 class _Ring:
@@ -39,18 +38,6 @@ def _push_cell_ids(out: List[int], cells: List[int], hilbert_res: int, resolutio
                                      hilbert_res, resolution))
 
 
-def _grid_disk_faces(origin_id: int, k: int) -> List[int]:
-    """Resolution 0: the cells are the 12 dodecahedron faces, adjacent across their edges."""
-    disk = {origin_id}
-    ring = 0
-    while ring < k and len(disk) < 12:
-        for face_id in list(disk):
-            for q in range(5):
-                disk.add(FACE_ADJACENCY[face_id][q][0])
-        ring += 1
-    return compact([serialize({'origin': origins[i], 'segment': 0, 'S': 0, 'resolution': 0}) for i in disk])
-
-
 def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
     """
     BFS grid disk in triple space, with progressive compaction.
@@ -70,17 +57,18 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
     origin = cell['origin']
     resolution = cell['resolution']
     if resolution == 0:
-        return _grid_disk_faces(origin.id, k)
+        # The cells are the 12 dodecahedron faces
+        faces = walk_faces([origin.id], lambda face: True, k)
+        return compact([serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0}) for face in faces])
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     max_row = (1 << hilbert_res) - 1
-    quintant, orientation = segment_to_quintant(cell['segment'], origin)
-    seed = s_to_triple(cell['S'], hilbert_res, orientation)
+    seed = cell_ids_to_triples([cell_id])
 
     # The seed is `cell_id` already, so it goes straight to the output
     interior: List[int] = [cell_id]
     prev_frontier = _Ring()
     frontier = _Ring()
-    _add_cell(frontier, prev_frontier, prev_frontier, origin.id, quintant, seed.x, seed.y, seed.z)
+    _add_cell(frontier, prev_frontier, prev_frontier, *seed)
 
     for ring in range(1, k + 1):
         next_frontier = _Ring()
