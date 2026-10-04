@@ -4,12 +4,21 @@
 
 import math
 from typing import List
-from ..core.serialization import get_resolution, cell_to_parent, cell_to_children, FIRST_HILBERT_RESOLUTION
+from ..core.coordinate_systems import Spherical
+from ..core.serialization import (
+    get_resolution, cell_to_parent, cell_to_children, deserialize, serialize, FIRST_HILBERT_RESOLUTION,
+)
 from ..core.cell import cell_to_spherical
 from ..core.cell_info import cell_area
 from ..core.constants import AUTHALIC_RADIUS_EARTH
-from .global_neighbors import get_global_cell_neighbors
-from ..core.origin import haversine
+from ..core.face_adjacency import FACE_ADJACENCY
+from ..core.tiling import get_pentagon_center
+from ..core.origin import haversine, origins, segment_to_quintant
+from ..lattice import Triple, s_to_triple, triple_flavor
+from ..projections.dodecahedron import DodecahedronProjection
+from .triple_cells import for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
+
+_dodecahedron = DodecahedronProjection()
 
 # Safety factor applied to equal-area circle radius to get conservative circumradius estimate
 CELL_RADIUS_SAFETY_FACTOR = 2.0
@@ -66,6 +75,66 @@ def pick_coarse_resolution(radius: float, target_res: int) -> int:
     return target_res  # No coarsening benefit
 
 
+def _coarse_cap_cells(start_cell: int, center: Spherical, h_expanded: float) -> List[int]:
+    """
+    BFS at the cap's coarse resolution from `start_cell` through every cell whose
+    center lies within `h_expanded` of `center`, returning every cell reached: the
+    cells within, plus the ring just outside (the subdivision classifies them).
+
+    Runs in triple space: neighbors (edge and vertex) come from the per-flavor
+    triple deltas plus the boundary delta tables, and a cell's center straight
+    from its triple, so no cell is decoded and each is encoded once.
+    """
+    cell = deserialize(start_cell)
+    origin = cell['origin']
+    resolution = cell['resolution']
+    if resolution == 0:
+        # The cells are the 12 dodecahedron faces, adjacent across their edges
+        visited_faces = {origin.id}
+        frontier_faces = [origin.id]
+        while frontier_faces:
+            next_faces: List[int] = []
+            for face_id in frontier_faces:
+                for q in range(5):
+                    face = FACE_ADJACENCY[face_id][q][0]
+                    if face in visited_faces:
+                        continue
+                    visited_faces.add(face)
+                    face_cell = serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0})
+                    if haversine(center, cell_to_spherical(face_cell)) <= h_expanded:
+                        next_faces.append(face)
+            frontier_faces = next_faces
+        return [serialize({'origin': origins[i], 'segment': 0, 'S': 0, 'resolution': 0}) for i in visited_faces]
+
+    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
+    max_row = (1 << hilbert_res) - 1
+    quintant, orientation = segment_to_quintant(cell['segment'], origin)
+    seed = s_to_triple(cell['S'], hilbert_res, orientation)
+    visited = {triple_cell_key(origin.id, quintant, seed.x, seed.y, seed.z)}
+    cells: List[int] = [start_cell]
+    frontier: List[int] = [origin.id, quintant, seed.x, seed.y, seed.z]
+
+    while frontier:
+        next_frontier: List[int] = []
+
+        def visit(origin_id: int, q: int, x: int, y: int, z: int) -> None:
+            key = triple_cell_key(origin_id, q, x, y, z)
+            if key in visited:
+                return
+            visited.add(key)
+            cells.append(triple_cell_to_id(origin_id, q, x, y, z, hilbert_res, resolution))
+            triple = Triple(x, y, z)
+            face = get_pentagon_center(hilbert_res, q, triple, triple_flavor(triple, max_row))
+            if haversine(center, _dodecahedron.inverse(face, origin_id)) <= h_expanded:
+                next_frontier.extend((origin_id, q, x, y, z))
+
+        for c in range(0, len(frontier), 5):
+            for_each_triple_neighbor(frontier[c], frontier[c + 1], frontier[c + 2], frontier[c + 3],
+                                     frontier[c + 4], max_row, False, visit)
+        frontier = next_frontier
+    return cells
+
+
 def spherical_cap(cell_id: int, radius: float) -> List[int]:
     """
     Compute all cells within a great-circle radius, returning a naturally
@@ -86,23 +155,11 @@ def spherical_cap(cell_id: int, radius: float) -> List[int]:
     start_cell = cell_to_parent(cell_id, coarse_res) if coarse_res < target_res else cell_id
     coarse_cell_radius = estimate_cell_radius(coarse_res)
     h_expanded = meters_to_h(radius + coarse_cell_radius)
-    coarse_visited = {start_cell}
-    coarse_frontier = {start_cell}
-
-    while len(coarse_frontier) > 0:
-        next_frontier = set()
-        for cid in coarse_frontier:
-            for neighbor in get_global_cell_neighbors(cid):
-                if neighbor in coarse_visited:
-                    continue
-                coarse_visited.add(neighbor)
-                if haversine(center, cell_to_spherical(neighbor)) <= h_expanded:
-                    next_frontier.add(neighbor)
-        coarse_frontier = next_frontier
+    coarse_cells = _coarse_cap_cells(start_cell, center, h_expanded)
 
     # Recursive subdivision from coarseRes to targetRes.
     result: List[int] = []
-    boundary = list(coarse_visited)
+    boundary = coarse_cells
 
     for res in range(coarse_res, target_res):
         cell_radius_val = estimate_cell_radius(res)

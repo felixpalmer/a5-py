@@ -4,14 +4,12 @@
 
 from typing import List, Set
 
-from ..lattice import Triple, s_to_triple, triple_flavor, triple_in_bounds
+from ..lattice import s_to_triple
 from ..core.compact import compact
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
 from ..core.origin import origins, segment_to_quintant
 from ..core.face_adjacency import FACE_ADJACENCY
-from .lattice_boundary import get_boundary_neighbor_triples
-from .neighbors import NEIGHBOR_DELTAS
-from .triple_cells import triple_cell_key, triple_cell_to_id
+from .triple_cells import for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
 
 
 class _Ring:
@@ -83,36 +81,17 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
     prev_frontier = _Ring()
     frontier = _Ring()
     _add_cell(frontier, prev_frontier, prev_frontier, origin.id, quintant, seed.x, seed.y, seed.z)
-    boundary: List[int] = []
 
     for ring in range(1, k + 1):
         next_frontier = _Ring()
+
+        def visit(origin_id: int, q: int, x: int, y: int, z: int) -> None:
+            _add_cell(next_frontier, prev_frontier, frontier, origin_id, q, x, y, z)
+
         cells = frontier.cells
         for c in range(0, len(cells), 5):
-            origin_id = cells[c]
-            q = cells[c + 1]
-            x = cells[c + 2]
-            y = cells[c + 3]
-            z = cells[c + 4]
-            triple = Triple(x, y, z)
-
-            # Within the quintant: the fixed per-flavor deltas
-            flavor = triple_flavor(triple, max_row)
-            deltas = NEIGHBOR_DELTAS[flavor].edge if edge_only else NEIGHBOR_DELTAS[flavor].all
-            for d in deltas:
-                neighbor = Triple(x + d.x, y + d.y, z + d.z)
-                if not triple_in_bounds(neighbor, max_row):
-                    continue
-                _add_cell(next_frontier, prev_frontier, frontier, origin_id, q, neighbor.x, neighbor.y, neighbor.z)
-
-            # Across a quintant edge: the boundary delta tables
-            if x == 0 or z == 0 or y == max_row:
-                boundary.clear()
-                get_boundary_neighbor_triples(triple, x + y + z, q, origins[origin_id], max_row,
-                                              edge_only, False, boundary)
-                for i in range(0, len(boundary), 5):
-                    _add_cell(next_frontier, prev_frontier, frontier, boundary[i], boundary[i + 1],
-                              boundary[i + 2], boundary[i + 3], boundary[i + 4])
+            for_each_triple_neighbor(cells[c], cells[c + 1], cells[c + 2], cells[c + 3], cells[c + 4],
+                                     max_row, edge_only, visit)
 
         # The seed ring is expanded; drop its cell so it isn't encoded again (its key stays)
         if ring == 1:

@@ -11,13 +11,11 @@ from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTIO
 from ..core.origin import origins, segment_to_quintant
 from ..core.face_adjacency import FACE_ADJACENCY
 from ..core.tiling import get_pentagon_vertices
-from ..lattice import Triple, s_to_triple, triple_flavor, triple_in_bounds
+from ..lattice import Triple, s_to_triple, triple_flavor
 from ..projections.dodecahedron import DodecahedronProjection
 from ..utils.great_circle import sample_great_circle_arc
 from .cap import estimate_cell_radius
-from .lattice_boundary import get_boundary_neighbor_triples
-from .neighbors import NEIGHBOR_DELTAS
-from .triple_cells import triple_cell_key, triple_cell_to_id
+from .triple_cells import for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
 
 _dodecahedron = DodecahedronProjection()
 
@@ -92,7 +90,6 @@ def line_string_to_cells(waypoints: List[LonLat], resolution: int) -> List[int]:
         pentagon = get_pentagon_vertices(hilbert_res, quintant, triple, triple_flavor(triple, max_row))
         return pentagon.intersects_segment(face_a[origin_id], face_b[origin_id])
 
-    boundary: List[int] = []
     for i in range(len(waypoints) - 1):
         start = waypoints[i]
         end = waypoints[i + 1]
@@ -158,26 +155,8 @@ def line_string_to_cells(waypoints: List[LonLat], resolution: int) -> List[int]:
                         next_frontier.extend((origin_id, quintant, x, y, z))
 
                 for c in range(0, len(frontier), 5):
-                    origin_id = frontier[c]
-                    q = frontier[c + 1]
-                    x = frontier[c + 2]
-                    y = frontier[c + 3]
-                    z = frontier[c + 4]
-                    triple = Triple(x, y, z)
-
-                    # Within the quintant: the fixed per-flavor deltas (edge and vertex neighbors)
-                    for d in NEIGHBOR_DELTAS[triple_flavor(triple, max_row)].all:
-                        neighbor = Triple(x + d.x, y + d.y, z + d.z)
-                        if triple_in_bounds(neighbor, max_row):
-                            visit(origin_id, q, neighbor.x, neighbor.y, neighbor.z)
-
-                    # Across a quintant edge: the boundary delta tables
-                    if x == 0 or z == 0 or y == max_row:
-                        boundary.clear()
-                        get_boundary_neighbor_triples(triple, x + y + z, q, origins[origin_id], max_row,
-                                                      False, False, boundary)
-                        for k in range(0, len(boundary), 5):
-                            visit(boundary[k], boundary[k + 1], boundary[k + 2], boundary[k + 3], boundary[k + 4])
+                    for_each_triple_neighbor(frontier[c], frontier[c + 1], frontier[c + 2], frontier[c + 3],
+                                             frontier[c + 4], max_row, False, visit)
                 frontier = next_frontier
 
     return result
