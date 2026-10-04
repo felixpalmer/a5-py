@@ -9,7 +9,8 @@ from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_to_spherical
 from ..core.coordinate_transforms import from_lonlat, to_cartesian, to_spherical
 from ..core.serialization import (
-    cell_to_parent, cell_to_children, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
+    cell_to_parent, cell_to_children, deserialize, serialize,
+    FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 )
 from ..core.compact import compact
 from ..geometry.spherical_polygon import ring_winding_sign
@@ -221,6 +222,42 @@ def _flood_interior(
     return interior_cells
 
 
+def _swallowed_quintants(
+    boundary_cells: List[int],
+    shell_cells: List[int],
+    resolution: int,
+    prep: PreparedPolygon,
+) -> List[int]:
+    """
+    Quintants the polygon swallows whole. The flood fill never crosses a
+    quintant edge, so such a quintant gets no seeds from the boundary shell and
+    would be left empty. A quintant holding none of the boundary or shell cells
+    has none of the polygon's edge passing through it: its cells lie wholly
+    inside or wholly outside, and a single probe cell decides which. Inside
+    quintants are emitted as their resolution 1 cell (resolution 0 when that is
+    the target), which `compact` merges with the rest of the output.
+    """
+    # A swallowed quintant lies inside the polygon's bounding cap, so the cap
+    # must have at least a quintant's area (4pi/60: cells are equal-area)
+    if 2 * math.pi * (1 - prep.cap.min_dot) < (4 * math.pi) / 60:
+        return []
+    level = min(resolution, FIRST_HILBERT_RESOLUTION - 1)
+    touched: Set[int] = set()
+    for cells in (boundary_cells, shell_cells):
+        for i in range(len(cells)):
+            touched.add(cells[i] if resolution == level else cell_to_parent(cells[i], level))
+
+    out: List[int] = []
+    for quintant in cell_to_children(WORLD_CELL, level):
+        if quintant in touched:
+            continue
+        # Any cell of the quintant at the target resolution will do
+        probe = quintant if resolution == level else serialize({**deserialize(quintant), 'S': 0, 'resolution': resolution})
+        if point_in_prepared_polygon(to_cartesian(cell_to_spherical(probe)), prep):
+            out.append(quintant)
+    return out
+
+
 def _strip_closing(ring: List[LonLat]) -> List[LonLat]:
     """GeoJSON rings repeat the first vertex at the end -- drop the duplicate."""
     last = len(ring) - 1
@@ -310,8 +347,9 @@ def polygon_to_cells(
 
     # Dense sampling can leave gaps; the shell catches them, classifying each cell.
     shell_cells = _expand_shell(boundary_cells, boundary_set)
+    swallowed = _swallowed_quintants(boundary_cells, shell_cells, resolution, prep)
     if len(shell_cells) == 0:
-        return compact(boundary_out)
+        return compact(boundary_out + swallowed)
 
     interior_seeds: List[int] = []
     visited: Set[int] = set(boundary_set)
@@ -321,8 +359,8 @@ def polygon_to_cells(
         else:
             visited.add(cell)  # exterior shell (and hole interiors) join the firewall
     if len(interior_seeds) == 0:
-        return compact(boundary_out)
+        return compact(boundary_out + swallowed)
 
     interior_cells = _flood_interior(interior_seeds, visited, len(boundary_set), resolution)
 
-    return compact(boundary_out + interior_cells)
+    return compact(boundary_out + interior_cells + swallowed)

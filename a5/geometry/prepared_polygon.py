@@ -8,9 +8,10 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, cast
 from ..core.coordinate_systems import Cartesian
-from .spherical_polygon import point_in_spherical_polygon, ring_segment_normals
+from .spherical_polygon import point_in_spherical_polygon, ring_segment_normals, ring_winding_sign
+from ..math import vec3
 from ..math.vec3 import angle
 
 
@@ -90,6 +91,9 @@ class PreparedPolygon:
     cap: BoundingCap
     ref: Cartesian
     use_fast: bool
+    # Reference points known to be INSIDE the polygon, for polygons whose
+    # bounding cap reaches a hemisphere; empty otherwise (see `_interior_refs`).
+    inside_refs: List[Cartesian]
 
 
 def prepare_polygon(ring_vecs_list: List[List[Cartesian]]) -> PreparedPolygon:
@@ -115,19 +119,60 @@ def prepare_polygon(ring_vecs_list: List[List[Cartesian]]) -> PreparedPolygon:
         c[1] * cos_t + perp[1] * sin_t,
         c[2] * cos_t + perp[2] * sin_t,
     )
+    inside_refs = _interior_refs(ring_vecs_list[0], ring_normals[0]) if cap_angle >= math.pi / 2 else []
     return PreparedPolygon(
         ring_vecs_list=ring_vecs_list,
         ring_normals=ring_normals,
         cap=cap,
         ref=ref,
         use_fast=use_fast,
+        inside_refs=inside_refs,
     )
+
+
+# How far the interior reference points sit from the ring edge, in radians.
+# Far above _CROSSING_EPS so crossing tests against the edge stay well
+# conditioned, far below any cell size so they can't clip another edge.
+_INTERIOR_REF_OFFSET = 1e-7
+_INTERIOR_REF_COUNT = 3
+
+
+def _interior_refs(ring: List[Cartesian], normals: List[Cartesian]) -> List[Cartesian]:
+    """
+    Points just inside the midpoints of the outer ring's longest edges.
+
+    The winding-number test answers "is the point in the region that does not
+    contain the point's own antipode", which is only containment when the
+    polygon lies within a hemisphere. For larger polygons a crossing test is
+    needed, and that needs a reference point whose containment is known. The
+    interior side of each edge follows the ring's winding (`ring_winding_sign`),
+    the same convention the boundary-cell filter uses. Several are kept in case
+    a probe falls near-degenerately against one.
+    """
+    side = ring_winding_sign(ring)
+    n = len(ring)
+    lengths = [angle(ring[i], ring[(i + 1) % n]) for i in range(n)]
+    # Longest first; sorted() is stable, so ties keep ring order
+    edges = sorted(range(n), key=lambda i: -lengths[i])
+    refs: List[Cartesian] = []
+    for k in range(min(_INTERIOR_REF_COUNT, n)):
+        i = edges[k]
+        mid = vec3.create()
+        vec3.add(mid, ring[i], ring[(i + 1) % n])
+        vec3.normalize(mid, mid)
+        # For a counter-clockwise ring, each edge's normal points to its interior side
+        inward = vec3.normalize(vec3.create(), normals[i])
+        ref_point = vec3.create()
+        vec3.scaleAndAdd(ref_point, mid, inward, side * _INTERIOR_REF_OFFSET)
+        vec3.normalize(ref_point, ref_point)
+        refs.append(cast(Cartesian, tuple(ref_point)))
+    return refs
 
 
 _CROSSING_EPS = 1e-14
 
 
-def _crossing_parity(p: Cartesian, prep: PreparedPolygon) -> Optional[bool]:
+def _crossing_parity(p: Cartesian, prep: PreparedPolygon, r: Optional[Cartesian] = None) -> Optional[bool]:
     """
     Crossing-number containment: count proper crossings of the arc probe->ref
     with every ring edge (just sign tests -- no trig); odd parity = inside
@@ -136,7 +181,8 @@ def _crossing_parity(p: Cartesian, prep: PreparedPolygon) -> Optional[bool]:
     an arc plane) -- the caller falls back to the winding test, which also keeps
     on-edge tie-breaking identical to the previous implementation.
     """
-    r = prep.ref
+    if r is None:
+        r = prep.ref
     # normal of the probe->ref arc plane
     abx = p[1] * r[2] - p[2] * r[1]
     aby = p[2] * r[0] - p[0] * r[2]
@@ -178,6 +224,12 @@ def point_in_prepared_polygon(p: Cartesian, prep: PreparedPolygon) -> bool:
     cap = prep.cap
     if p[0] * cap.center[0] + p[1] * cap.center[1] + p[2] * cap.center[2] < cap.min_dot:
         return False
+    # Polygons reaching a hemisphere: crossing parity against a point known to
+    # be inside (even parity = same side = inside)
+    for inside_ref in prep.inside_refs:
+        result = _crossing_parity(p, prep, inside_ref)
+        if result is not None:
+            return not result
     if prep.use_fast:
         result = _crossing_parity(p, prep)
         if result is not None:
