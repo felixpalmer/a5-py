@@ -4,25 +4,14 @@
 
 from typing import List, Set
 
-from ..lattice import Triple, s_to_triple, triple_flavor, triple_in_bounds, triple_to_s
+from ..lattice import Triple, s_to_triple, triple_flavor, triple_in_bounds
 from ..core.compact import compact
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from ..core.origin import origins, quintant_to_segment, segment_to_quintant
+from ..core.origin import origins, segment_to_quintant
 from ..core.face_adjacency import FACE_ADJACENCY
 from .lattice_boundary import get_boundary_neighbor_triples
 from .neighbors import NEIGHBOR_DELTAS
-
-# Cells are deduplicated by one integer key: the quintant (origin.id * 5 +
-# quintant, < 60), parity, and the low _KEY_BITS bits of -x and -z (y follows).
-# Up to Hilbert resolution 21 the coordinates fit whole; above it, two cells of
-# one quintant share a key only if they are 2^22 rows apart, and a disk holding
-# both would need k ~ 2^21 (~10^12 cells) -- far past what fits in memory.
-_KEY_BITS = 22
-_KEY_MASK = (1 << _KEY_BITS) - 1
-_KEY_SIDE = 1 << _KEY_BITS
-
-# Segment and curve orientation of each of the 60 quintants, by origin.id * 5 + quintant
-_QUINTANT_SEGMENTS = [quintant_to_segment(q, origin) for origin in origins for q in range(5)]
+from .triple_cells import triple_cell_key, triple_cell_to_id
 
 
 class _Ring:
@@ -38,8 +27,7 @@ class _Ring:
 def _add_cell(nxt: _Ring, prev: _Ring, current: _Ring,
               origin_id: int, quintant: int, x: int, y: int, z: int) -> None:
     """Add a cell to `nxt` unless it is already in one of the three live rings."""
-    key = ((((-x) & _KEY_MASK) * _KEY_SIDE + ((-z) & _KEY_MASK)) * 2 + x + y + z
-           + (origin_id * 5 + quintant) * 2 * _KEY_SIDE * _KEY_SIDE)
+    key = triple_cell_key(origin_id, quintant, x, y, z)
     if key in prev.keys or key in current.keys or key in nxt.keys:
         return
     nxt.keys.add(key)
@@ -49,9 +37,8 @@ def _add_cell(nxt: _Ring, prev: _Ring, current: _Ring,
 def _push_cell_ids(out: List[int], cells: List[int], hilbert_res: int, resolution: int) -> None:
     """Encode a ring's cells as cell IDs, appending them to `out`."""
     for c in range(0, len(cells), 5):
-        segment, orientation = _QUINTANT_SEGMENTS[cells[c] * 5 + cells[c + 1]]
-        s = triple_to_s(Triple(cells[c + 2], cells[c + 3], cells[c + 4]), hilbert_res, orientation)
-        out.append(serialize({'origin': origins[cells[c]], 'segment': segment, 'S': s, 'resolution': resolution}))
+        out.append(triple_cell_to_id(cells[c], cells[c + 1], cells[c + 2], cells[c + 3], cells[c + 4],
+                                     hilbert_res, resolution))
 
 
 def _grid_disk_faces(origin_id: int, k: int) -> List[int]:
