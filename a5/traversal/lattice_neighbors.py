@@ -64,33 +64,21 @@ def _boundary_context(src: _LatticeSource) -> BoundaryContext:
     )
 
 
-# All 26 non-zero +/-1 moves in 3D -- vertex- and edge-sharing within-quintant candidates.
-SUPERSET_DELTAS: List[Tuple[int, int, int]] = [
-    (dx, dy, dz)
-    for dx in (-1, 0, 1)
-    for dy in (-1, 0, 1)
-    for dz in (-1, 0, 1)
-    if not (dx == 0 and dy == 0 and dz == 0)
-]
-
 # The 3 parity-valid single-axis moves matching `triple_space_flood_fill`'s edge connectivity.
 PARITY_EVEN_DELTAS: List[Tuple[int, int, int]] = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]
 PARITY_ODD_DELTAS: List[Tuple[int, int, int]] = [(-1, 0, 0), (0, -1, 0), (0, 0, -1)]
 
 
-def get_lattice_neighbors(cell_id: int, edge_only: bool) -> List[int]:
+def get_lattice_neighbors(cell_id: int) -> List[int]:
     """
-    Fast lattice-based neighbor finding. Skips is_neighbor() validation for
-    within-quintant candidates; falls back to get_global_cell_neighbors below res 2.
-
-    - edge_only=False: 26-cube +/-1 superset (may include vertex-only touchers).
-      For BFS that re-validates candidates downstream (e.g. line tracing).
-    - edge_only=True: 3 parity-valid moves matching `triple_space_flood_fill` --
-      exact connectivity for shell-buffering the flood-fill firewall.
+    Fast lattice-based neighbor finding over triple-space deltas: the 3
+    parity-valid moves -- strict triple-lattice edge connectivity, the
+    connectivity `triple_space_flood_fill` uses. Falls back to
+    get_global_cell_neighbors below res 2.
     """
     src = _decode_source(cell_id)
     if src is None:
-        return get_global_cell_neighbors(cell_id, edge_only)
+        return get_global_cell_neighbors(cell_id, True)
 
     origin = src.origin
     segment = src.segment
@@ -102,10 +90,7 @@ def get_lattice_neighbors(cell_id: int, edge_only: bool) -> List[int]:
     max_s = src.max_s
     max_row = src.max_row
 
-    if edge_only:
-        deltas = PARITY_EVEN_DELTAS if triple_parity(triple) == 0 else PARITY_ODD_DELTAS
-    else:
-        deltas = SUPERSET_DELTAS
+    deltas = PARITY_EVEN_DELTAS if triple_parity(triple) == 0 else PARITY_ODD_DELTAS
 
     result: List[int] = []
     for dx, dy, dz in deltas:
@@ -119,8 +104,8 @@ def get_lattice_neighbors(cell_id: int, edge_only: bool) -> List[int]:
                 'S': candidate_s, 'resolution': resolution,
             }))
 
-    # Strict lattice connectivity (edge_only) doesn't traverse the [-max_row, max_row, 0]
-    # vertex corner, so we skip it there too -- keeping the firewall topology tight.
-    for c in get_boundary_neighbors(_boundary_context(src), edge_only, edge_only):
+    # Strict lattice connectivity doesn't traverse the [-max_row, max_row, 0] vertex
+    # corner, so we skip it there too -- keeping the firewall topology tight.
+    for c in get_boundary_neighbors(_boundary_context(src), True, True):
         result.append(c)
     return result

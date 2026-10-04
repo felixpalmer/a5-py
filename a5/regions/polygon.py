@@ -127,7 +127,7 @@ def _expand_shell(boundary_cells: List[int], boundary_set: Set[int]) -> List[int
     shell_cells: List[int] = []
     shell_set: Set[int] = set()
     for cell in boundary_cells:
-        for neighbor in get_lattice_neighbors(cell, True):
+        for neighbor in get_lattice_neighbors(cell):
             if neighbor in boundary_set:
                 continue
             if neighbor not in shell_set:

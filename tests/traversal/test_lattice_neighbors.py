@@ -19,12 +19,5 @@ class TestGetLatticeNeighbors:
     def test_lattice_neighbors_fixtures(self):
         fixtures = load_fixtures()
         for f in fixtures["cases"]:
-            cell = hex_to_u64(f["cell"])
-
-            edge = sorted(u64_to_hex(c) for c in get_lattice_neighbors(cell, True))
-            assert edge == f["edgeOnlyNeighbors"], \
-                f'edge_only for cell {f["cell"]} (res {f["resolution"]})'
-
-            superset = sorted(u64_to_hex(c) for c in get_lattice_neighbors(cell, False))
-            assert superset == f["supersetNeighbors"], \
-                f'superset for cell {f["cell"]} (res {f["resolution"]})'
+            neighbors = sorted(u64_to_hex(c) for c in get_lattice_neighbors(hex_to_u64(f["cell"])))
+            assert neighbors == f["neighbors"], f'cell {f["cell"]} (res {f["resolution"]})'
