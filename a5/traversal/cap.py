@@ -11,14 +11,11 @@ from ..core.serialization import (
 from ..core.cell import cell_to_spherical
 from ..core.cell_info import cell_area
 from ..core.constants import AUTHALIC_RADIUS_EARTH
-from ..core.face_adjacency import FACE_ADJACENCY
-from ..core.tiling import get_pentagon_center
-from ..core.origin import haversine, origins, segment_to_quintant
-from ..lattice import Triple, s_to_triple, triple_flavor
-from ..projections.dodecahedron import DodecahedronProjection
-from .triple_cells import for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
-
-_dodecahedron = DodecahedronProjection()
+from ..core.face_adjacency import walk_faces
+from ..core.origin import haversine, origins
+from .triple_cells import (
+    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_center, triple_cell_key, triple_cell_to_id,
+)
 
 # Safety factor applied to equal-area circle radius to get conservative circumradius estimate
 CELL_RADIUS_SAFETY_FACTOR = 2.0
@@ -89,30 +86,18 @@ def _coarse_cap_cells(start_cell: int, center: Spherical, h_expanded: float) -> 
     origin = cell['origin']
     resolution = cell['resolution']
     if resolution == 0:
-        # The cells are the 12 dodecahedron faces, adjacent across their edges
-        visited_faces = {origin.id}
-        frontier_faces = [origin.id]
-        while frontier_faces:
-            next_faces: List[int] = []
-            for face_id in frontier_faces:
-                for q in range(5):
-                    face = FACE_ADJACENCY[face_id][q][0]
-                    if face in visited_faces:
-                        continue
-                    visited_faces.add(face)
-                    face_cell = serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0})
-                    if haversine(center, cell_to_spherical(face_cell)) <= h_expanded:
-                        next_faces.append(face)
-            frontier_faces = next_faces
-        return [serialize({'origin': origins[i], 'segment': 0, 'S': 0, 'resolution': 0}) for i in visited_faces]
+        # The cells are the 12 dodecahedron faces
+        def face_cell(face: int) -> int:
+            return serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0})
+
+        faces = walk_faces([origin.id], lambda face: haversine(center, cell_to_spherical(face_cell(face))) <= h_expanded)
+        return [face_cell(face) for face in faces]
 
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     max_row = (1 << hilbert_res) - 1
-    quintant, orientation = segment_to_quintant(cell['segment'], origin)
-    seed = s_to_triple(cell['S'], hilbert_res, orientation)
-    visited = {triple_cell_key(origin.id, quintant, seed.x, seed.y, seed.z)}
+    frontier = cell_ids_to_triples([start_cell])
+    visited = {triple_cell_key(*frontier)}
     cells: List[int] = [start_cell]
-    frontier: List[int] = [origin.id, quintant, seed.x, seed.y, seed.z]
 
     while frontier:
         next_frontier: List[int] = []
@@ -123,9 +108,7 @@ def _coarse_cap_cells(start_cell: int, center: Spherical, h_expanded: float) -> 
                 return
             visited.add(key)
             cells.append(triple_cell_to_id(origin_id, q, x, y, z, hilbert_res, resolution))
-            triple = Triple(x, y, z)
-            face = get_pentagon_center(hilbert_res, q, triple, triple_flavor(triple, max_row))
-            if haversine(center, _dodecahedron.inverse(face, origin_id)) <= h_expanded:
+            if haversine(center, triple_cell_center(origin_id, q, x, y, z, hilbert_res, max_row)) <= h_expanded:
                 next_frontier.extend((origin_id, q, x, y, z))
 
         for c in range(0, len(frontier), 5):

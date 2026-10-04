@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
+import math
+from typing import Callable, List
+
 # Computed empirically from cell boundary vertex sharing at resolution 4.
 
 # Face adjacency table: FACE_ADJACENCY[originId][quintant] = [adjOriginId, adjQuintant]
@@ -22,3 +25,31 @@ FACE_ADJACENCY = [
     [[2, 4], [1, 4], [11, 4], [7, 4], [9, 3]],    # origin 10
     [[1, 3], [0, 4], [6, 4], [7, 0], [10, 2]],    # origin 11
 ]
+
+
+def walk_faces(seeds: List[int], expand: Callable[[int], bool], max_rings: float = math.inf) -> List[int]:
+    """
+    Breadth-first walk over the 12 dodecahedron faces (the resolution 0 cells),
+    adjacent across their edges. Starts from `seeds`, which are always expanded;
+    every other face is visited once and expanded only if `expand(face)` is true.
+    Stops after `max_rings` rings.
+
+    Returns:
+        Every face reached, seeds first.
+    """
+    reached: List[int] = list(dict.fromkeys(seeds))
+    frontier = list(reached)
+    ring = 0
+    while ring < max_rings and frontier:
+        next_frontier: List[int] = []
+        for face_id in frontier:
+            for q in range(5):
+                face = FACE_ADJACENCY[face_id][q][0]
+                if face in reached:
+                    continue
+                reached.append(face)
+                if expand(face):
+                    next_frontier.append(face)
+        frontier = next_frontier
+        ring += 1
+    return reached

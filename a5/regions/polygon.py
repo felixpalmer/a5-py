@@ -9,7 +9,7 @@ from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_to_spherical
 from ..core.coordinate_transforms import from_lonlat, to_cartesian, to_spherical
 from ..core.serialization import (
-    cell_to_parent, cell_to_children, deserialize, serialize,
+    cell_to_parent, cell_to_children, deserialize, get_resolution, serialize,
     FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 )
 from ..core.compact import compact
@@ -19,8 +19,10 @@ from ..geometry.prepared_polygon import (
 )
 from ..traversal.cap import estimate_cell_radius
 from ..utils.great_circle import sample_great_circle_arc
-from ..traversal.lattice_neighbors import get_lattice_neighbors
 from ..traversal.lattice_flood_fill import triple_space_flood_fill
+from ..traversal.triple_cells import (
+    cell_ids_to_triples, for_each_lattice_neighbor, triple_cell_center, triple_cell_key, triple_cell_to_id,
+)
 
 
 # Maps each boundary cell to the indices of the ring segments that produced it.
@@ -118,38 +120,48 @@ def _filter_boundary_cells(
     return out
 
 
-def _expand_shell(boundary_cells: List[int], boundary_set: Set[int]) -> List[int]:
+def _expand_shell(boundary: List[int], max_row: int) -> List[int]:
     """
-    Buffer the boundary by one cell using 3-edge lattice neighbors. The shell
-    matches the connectivity of `triple_space_flood_fill` so the firewall (boundary
-    + exterior shell) is a tight topological barrier for the subsequent flood.
+    Buffer the boundary by one cell using lattice neighbors, in triple space
+    (cells as flat (origin_id, quintant, x, y, z)). The shell matches the
+    connectivity of `triple_space_flood_fill` so the firewall (boundary + exterior
+    shell) is a tight topological barrier for the subsequent flood.
     """
-    shell_cells: List[int] = []
-    shell_set: Set[int] = set()
-    for cell in boundary_cells:
-        for neighbor in get_lattice_neighbors(cell):
-            if neighbor in boundary_set:
-                continue
-            if neighbor not in shell_set:
-                shell_set.add(neighbor)
-                shell_cells.append(neighbor)
-    return shell_cells
+    seen: Set[int] = set()
+    for c in range(0, len(boundary), 5):
+        seen.add(triple_cell_key(*boundary[c:c + 5]))
+    shell: List[int] = []
+
+    def visit(origin_id: int, quintant: int, x: int, y: int, z: int) -> None:
+        key = triple_cell_key(origin_id, quintant, x, y, z)
+        if key in seen:
+            return
+        seen.add(key)
+        shell.extend((origin_id, quintant, x, y, z))
+
+    for c in range(0, len(boundary), 5):
+        for_each_lattice_neighbor(*boundary[c:c + 5], max_row, visit)
+    return shell
 
 
 def _flood_interior(
-    interior_seeds: List[int], visited: Set[int], boundary_size: int, resolution: int,
+    seeds: List[int], boundary_cells: List[int], boundary: List[int], exterior_shell: List[int], resolution: int,
 ) -> List[int]:
     """
     Hierarchical flood fill from interior seed cells. Runs a few fine BFS layers
     to clear the boundary, then a coarse-resolution BFS through the bulk, then
     resumes fine BFS to fill gaps near the boundary. The coarse phase is skipped
     when the polygon is too small to amortize its setup overhead.
+
+    The seeds, boundary and exterior shell come in triple space (cells as flat
+    (origin_id, quintant, x, y, z)); the boundary also as cell IDs.
     """
-    for cell in interior_seeds:
-        visited.add(cell)
+    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
+    seed_ids = [triple_cell_to_id(*seeds[c:c + 5], hilbert_res, resolution) for c in range(0, len(seeds), 5)]
+    firewall = boundary + exterior_shell
 
     # Isoperimetric bound: B^2 / (4*pi) is the max interior for B boundary cells.
-    max_interior = boundary_size * boundary_size / (4 * math.pi)
+    max_interior = len(boundary_cells) * len(boundary_cells) / (4 * math.pi)
     # res 30 has a different encoding the parent-emit optimization can't use.
     use_coarse_phase = (
         resolution > FIRST_HILBERT_RESOLUTION
@@ -158,16 +170,20 @@ def _flood_interior(
     )
 
     if not use_coarse_phase:
-        result = triple_space_flood_fill(visited, interior_seeds, resolution)
-        return list(interior_seeds) + result['interior_cells']
+        result = triple_space_flood_fill(firewall, seeds, resolution)
+        return seed_ids + result['interior_cells']
 
     parent_res = resolution - 1
     coarse_firewall: Set[int] = set()
-    for cell in visited:
+    for cell in boundary_cells:
+        coarse_firewall.add(cell_to_parent(cell, parent_res))
+    for c in range(0, len(exterior_shell), 5):
+        coarse_firewall.add(cell_to_parent(triple_cell_to_id(*exterior_shell[c:c + 5], hilbert_res, resolution), parent_res))
+    for cell in seed_ids:
         coarse_firewall.add(cell_to_parent(cell, parent_res))
 
     # Phase 1: short fine BFS to move the frontier off the boundary.
-    phase1 = triple_space_flood_fill(visited, interior_seeds, resolution, 3)
+    phase1 = triple_space_flood_fill(firewall, seeds, resolution, 3)
 
     # Phase 2: coarse BFS through the bulk interior.
     coarse_interior_set = None
@@ -184,7 +200,8 @@ def _flood_interior(
             coarse_visited = set(coarse_firewall)
             for seed in coarse_seeds:
                 coarse_visited.add(seed)
-            coarse_result = triple_space_flood_fill(coarse_visited, list(coarse_seeds), parent_res)
+            coarse_result = triple_space_flood_fill(
+                cell_ids_to_triples(coarse_visited), cell_ids_to_triples(coarse_seeds), parent_res)
             coarse_interior = list(coarse_seeds) + coarse_result['interior_cells']
             coarse_interior_set = set(coarse_interior)
             coarse_interior_cells.extend(coarse_interior)
@@ -192,18 +209,15 @@ def _flood_interior(
             # Children become firewall for phase 3; the coarse parent represents
             # them in the output, so we don't emit them individually.
             for coarse_cell in coarse_interior:
-                for child in cell_to_children(coarse_cell, resolution):
-                    if child not in visited:
-                        visited.add(child)
-                        phase3_delta.append(child)
+                cell_ids_to_triples(cell_to_children(coarse_cell, resolution), phase3_delta)
 
     # Emit fine cells only when not already covered by a coarse parent.
     interior_cells: List[int] = []
     if coarse_interior_set is None:
-        interior_cells.extend(interior_seeds)
+        interior_cells.extend(seed_ids)
         interior_cells.extend(phase1['interior_cells'])
     else:
-        for cell in interior_seeds:
+        for cell in seed_ids:
             if cell_to_parent(cell, parent_res) not in coarse_interior_set:
                 interior_cells.append(cell)
         for cell in phase1['interior_cells']:
@@ -211,10 +225,10 @@ def _flood_interior(
                 interior_cells.append(cell)
         interior_cells.extend(coarse_interior_cells)
 
-    # Phase 3: resume fine BFS, reusing phase 1's packed state.
+    # Phase 3: resume fine BFS, reusing phase 1's state.
     phase3 = triple_space_flood_fill(
         {'state': phase1['state'], 'delta': phase3_delta},
-        phase1['frontier_cell_ids'],
+        phase1['frontier'],
         resolution,
     )
     interior_cells.extend(phase3['interior_cells'])
@@ -223,8 +237,8 @@ def _flood_interior(
 
 
 def _swallowed_quintants(
-    boundary_cells: List[int],
-    shell_cells: List[int],
+    boundary: List[int],
+    shell: List[int],
     resolution: int,
     prep: PreparedPolygon,
 ) -> List[int]:
@@ -241,20 +255,22 @@ def _swallowed_quintants(
     # must have at least a quintant's area (4pi/60: cells are equal-area)
     if 2 * math.pi * (1 - prep.cap.min_dot) < (4 * math.pi) / 60:
         return []
-    level = min(resolution, FIRST_HILBERT_RESOLUTION - 1)
+    # Quintants by origin.id * 5 + quintant, as the triples carry them
     touched: Set[int] = set()
-    for cells in (boundary_cells, shell_cells):
-        for i in range(len(cells)):
-            touched.add(cells[i] if resolution == level else cell_to_parent(cells[i], level))
+    for cells in (boundary, shell):
+        for c in range(0, len(cells), 5):
+            touched.add(cells[c] * 5 + cells[c + 1])
 
     out: List[int] = []
-    for quintant in cell_to_children(WORLD_CELL, level):
-        if quintant in touched:
+    quintant_cells = cell_to_children(WORLD_CELL, FIRST_HILBERT_RESOLUTION - 1)
+    quintants = cell_ids_to_triples(quintant_cells)
+    for i, quintant_cell in enumerate(quintant_cells):
+        if quintants[i * 5] * 5 + quintants[i * 5 + 1] in touched:
             continue
         # Any cell of the quintant at the target resolution will do
-        probe = quintant if resolution == level else serialize({**deserialize(quintant), 'S': 0, 'resolution': resolution})
+        probe = serialize({**deserialize(quintant_cell), 'S': 0, 'resolution': resolution})
         if point_in_prepared_polygon(to_cartesian(cell_to_spherical(probe)), prep):
-            out.append(quintant)
+            out.append(quintant_cell)
     return out
 
 
@@ -325,6 +341,12 @@ def polygon_to_cells(
 
     boundary_cells, boundary_set, segment_map = _dense_sample_boundary(rings, ring_vecs_list, resolution)
 
+    # Res 30 covers only quintants 0-41 (elsewhere A5 answers at res 29, see
+    # serialize), so a polygon reaching past them is filled at res 29: mixing the
+    # two lattices would leave the fill without a consistent grid.
+    if resolution == MAX_RESOLUTION and any(get_resolution(cell) != resolution for cell in boundary_cells):
+        return polygon_to_cells(polygon, resolution - 1, options)
+
     # The boundary contribution to the output. In 'overlapping' mode every
     # densely-sampled boundary cell contains a point on the polygon boundary, so
     # it overlaps the polygon -- keep them all, unfiltered. In 'center' mode we
@@ -345,22 +367,36 @@ def polygon_to_cells(
                 seg_signs.append(sign)
         boundary_out = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, seg_signs, prep)
 
+    # Resolutions 0 and 1 have no lattice to flood (a quintant is a single
+    # cell): every cell off the boundary is in or out by its center, and there
+    # are at most 60 of them.
+    if resolution < FIRST_HILBERT_RESOLUTION:
+        out = list(boundary_out)
+        for cell in cell_to_children(WORLD_CELL, resolution):
+            if cell not in boundary_set and point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)), prep):
+                out.append(cell)
+        return compact(out)
+
+    # The rest runs in triple space: cells as flat (origin_id, quintant, x, y, z)
+    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
+    max_row = (1 << hilbert_res) - 1
+    boundary = cell_ids_to_triples(boundary_cells)
+
     # Dense sampling can leave gaps; the shell catches them, classifying each cell.
-    shell_cells = _expand_shell(boundary_cells, boundary_set)
-    swallowed = _swallowed_quintants(boundary_cells, shell_cells, resolution, prep)
-    if len(shell_cells) == 0:
+    shell = _expand_shell(boundary, max_row)
+    swallowed = _swallowed_quintants(boundary, shell, resolution, prep)
+    if len(shell) == 0:
         return compact(boundary_out + swallowed)
 
-    interior_seeds: List[int] = []
-    visited: Set[int] = set(boundary_set)
-    for cell in shell_cells:
-        if point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)), prep):
-            interior_seeds.append(cell)
-        else:
-            visited.add(cell)  # exterior shell (and hole interiors) join the firewall
-    if len(interior_seeds) == 0:
+    seeds: List[int] = []
+    exterior_shell: List[int] = []  # exterior shell (and hole interiors) join the firewall
+    for c in range(0, len(shell), 5):
+        cell = shell[c:c + 5]
+        center = triple_cell_center(*cell, hilbert_res, max_row)
+        (seeds if point_in_prepared_polygon(to_cartesian(center), prep) else exterior_shell).extend(cell)
+    if len(seeds) == 0:
         return compact(boundary_out + swallowed)
 
-    interior_cells = _flood_interior(interior_seeds, visited, len(boundary_set), resolution)
+    interior_cells = _flood_interior(seeds, boundary_cells, boundary, exterior_shell, resolution)
 
     return compact(boundary_out + interior_cells + swallowed)

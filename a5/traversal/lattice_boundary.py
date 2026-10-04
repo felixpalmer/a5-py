@@ -3,12 +3,9 @@
 # Copyright (c) A5 contributors
 
 from typing import List, Tuple
-from dataclasses import dataclass
 
-from ..lattice import Triple, triple_to_s, triple_in_bounds
+from ..lattice import Triple, triple_in_bounds
 from ..core.utils import Origin
-from ..core.serialization import serialize
-from ..core.origin import quintant_to_segment, origins
 from ..core.face_adjacency import FACE_ADJACENCY
 
 # Neighbor delta: (dx, dy, dz, is_edge_sharing)
@@ -48,19 +45,6 @@ CROSS_FACE_DELTAS: List[List[NeighborDelta]] = [
     # parity=1
     [(0, 0, -1, True), (0, 0, 0, False)],
 ]
-
-
-@dataclass
-class BoundaryContext:
-    """Source-cell context shared by all boundary-neighbor cases."""
-    triple: Triple
-    parity: int
-    source_quintant: int
-    origin: Origin
-    hilbert_res: int
-    max_s: int
-    max_row: int
-    resolution: int
 
 
 def _push_triple(
@@ -151,29 +135,3 @@ def get_boundary_neighbor_triples(
         # Vertex neighbor 2: adjacent quintant on the primary cross-face
         cross_face_id, cross_quintant = FACE_ADJACENCY[origin.id][source_quintant]
         _push_triple(out, triple.x, triple.y, triple.z, cross_face_id, (cross_quintant + 1) % 5, max_row)
-
-
-def get_boundary_neighbors(
-    ctx: BoundaryContext,
-    edge_only: bool,
-    skip_corners: bool = False,
-) -> List[int]:
-    """
-    The neighbors outside the source cell's quintant (see
-    `get_boundary_neighbor_triples`), as cell IDs.
-
-    The result may contain duplicates and the order is not stable; callers
-    deduplicate (via set) or accept duplicates if their downstream pipeline tolerates them.
-    """
-    triples: List[int] = []
-    get_boundary_neighbor_triples(ctx.triple, ctx.parity, ctx.source_quintant, ctx.origin, ctx.max_row,
-                                  edge_only, skip_corners, triples)
-    out: List[int] = []
-    for i in range(0, len(triples), 5):
-        origin = origins[triples[i]]
-        segment, orientation = quintant_to_segment(triples[i + 1], origin)
-        s = triple_to_s(Triple(triples[i + 2], triples[i + 3], triples[i + 4]), ctx.hilbert_res, orientation)
-        if s is None or s < 0 or s >= ctx.max_s:
-            continue
-        out.append(serialize({'origin': origin, 'segment': segment, 'S': s, 'resolution': ctx.resolution}))
-    return out

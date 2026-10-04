@@ -3,71 +3,34 @@
 # Copyright (c) A5 contributors
 
 from typing import List, Set
-from ..lattice import s_to_cell, triple_parity
-from ..core.utils import Origin
-from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from ..core.origin import segment_to_quintant, origins
+
+from ..core.serialization import deserialize, get_resolution, serialize, FIRST_HILBERT_RESOLUTION
+from ..core.origin import origins
 from ..core.face_adjacency import FACE_ADJACENCY
-from .quintant_neighbors import find_quintant_neighbor_s
-from .lattice_boundary import BoundaryContext, get_boundary_neighbors
-
-
-def _get_res0_neighbors(origin: Origin) -> List[int]:
-    """
-    Get neighbors of a resolution 0 cell (dodecahedron face).
-    """
-    neighbor_set: Set[int] = set()
-    for q in range(5):
-        adjacent_face_id, _ = FACE_ADJACENCY[origin.id][q]
-        neighbor_set.add(serialize({
-            'origin': origins[adjacent_face_id], 'segment': 0,
-            'S': 0, 'resolution': 0
-        }))
-    return sorted(neighbor_set)
+from .triple_cells import cell_ids_to_triples, for_each_triple_neighbor, triple_cell_to_id
 
 
 def get_global_cell_neighbors(cell_id: int, edge_only: bool = False) -> List[int]:
     """
-    Get all neighbors of a cell across quintant and face boundaries.
+    Get all neighbors of a cell across quintant and face boundaries: within its
+    quintant the fixed per-flavor triple deltas, and across a quintant edge the
+    boundary delta tables (see `for_each_triple_neighbor`).
 
-    Within-quintant neighbors come from the fixed per-flavor triple deltas
-    (via find_quintant_neighbor_s). Cross-quintant, cross-face, apex, and
-    corner neighbors are emitted by the shared get_boundary_neighbors helper
-    using fixed delta tables -- see lattice_boundary.py.
+    Args:
+        edge_only: If True, return only edge-sharing neighbors (5 per cell).
+            Default False returns all neighbors including vertex-only neighbors (6-8 per cell).
     """
-    cell = deserialize(cell_id)
-    origin, segment, S, resolution = cell['origin'], cell['segment'], cell['S'], cell['resolution']
+    resolution = get_resolution(cell_id)
+    neighbors: Set[int] = set()
     if resolution == 0:
-        return _get_res0_neighbors(origin)
+        # The cells are the 12 dodecahedron faces, adjacent across their edges
+        for face, _ in FACE_ADJACENCY[deserialize(cell_id)['origin'].id]:
+            neighbors.add(serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0}))
+    else:
+        hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
 
-    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    source_quintant, source_orientation = segment_to_quintant(segment, origin)
+        def visit(o: int, q: int, x: int, y: int, z: int) -> None:
+            neighbors.add(triple_cell_to_id(o, q, x, y, z, hilbert_res, resolution))
 
-    # Triple coordinates are orientation-independent
-    source_cell = s_to_cell(S, hilbert_res, source_orientation)
-    triple = source_cell.triple
-
-    neighbor_set: Set[int] = set()
-
-    # --- Within-quintant: fixed per-flavor triple deltas ---
-    for neighbor_s in find_quintant_neighbor_s(triple, source_cell.flavor, S, hilbert_res, source_orientation, edge_only):
-        neighbor_set.add(serialize({
-            'origin': origin, 'segment': segment,
-            'S': neighbor_s, 'resolution': resolution
-        }))
-
-    # --- Cross-quintant / cross-face / apex / corner: shared lattice-boundary helper ---
-    ctx = BoundaryContext(
-        triple=triple,
-        parity=triple_parity(triple),
-        source_quintant=source_quintant,
-        origin=origin,
-        hilbert_res=hilbert_res,
-        max_s=4 ** hilbert_res,
-        max_row=(1 << hilbert_res) - 1,
-        resolution=resolution,
-    )
-    for cid in get_boundary_neighbors(ctx, edge_only):
-        neighbor_set.add(cid)
-
-    return sorted(neighbor_set)
+        for_each_triple_neighbor(*cell_ids_to_triples([cell_id]), (1 << hilbert_res) - 1, edge_only, visit)
+    return sorted(neighbors)

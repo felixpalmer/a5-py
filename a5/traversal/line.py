@@ -8,14 +8,14 @@ from ..core.coordinate_systems import LonLat, Face
 from ..core.cell import lonlat_to_cell, cell_intersects_segment
 from ..core.coordinate_transforms import from_lonlat, to_cartesian, to_spherical, to_lonlat
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from ..core.origin import origins, segment_to_quintant
-from ..core.face_adjacency import FACE_ADJACENCY
+from ..core.origin import origins
+from ..core.face_adjacency import walk_faces
 from ..core.tiling import get_pentagon_vertices
-from ..lattice import Triple, s_to_triple, triple_flavor
+from ..lattice import Triple, triple_flavor
 from ..projections.dodecahedron import DodecahedronProjection
 from ..utils.great_circle import sample_great_circle_arc
 from .cap import estimate_cell_radius
-from .triple_cells import for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
+from .triple_cells import cell_ids_to_triples, for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
 
 _dodecahedron = DodecahedronProjection()
 
@@ -25,21 +25,14 @@ def _trace_faces(cell_a: int, cell_b: int, a: LonLat, b: LonLat, add_cell: Calla
     Resolution 0 version of the sub-segment BFS below: the cells are the 12
     dodecahedron faces, adjacent across their edges.
     """
-    frontier = [deserialize(cell_a)['origin'].id, deserialize(cell_b)['origin'].id]
-    visited: Set[int] = set(frontier)
-    while frontier:
-        next_frontier: List[int] = []
-        for face_id in frontier:
-            for q in range(5):
-                face = FACE_ADJACENCY[face_id][q][0]
-                if face in visited:
-                    continue
-                visited.add(face)
-                cell = serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0})
-                if cell_intersects_segment(cell, a, b):
-                    add_cell(cell)
-                    next_frontier.append(face)
-        frontier = next_frontier
+    def expand(face: int) -> bool:
+        cell = serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0})
+        if not cell_intersects_segment(cell, a, b):
+            return False
+        add_cell(cell)
+        return True
+
+    walk_faces([deserialize(cell_a)['origin'].id, deserialize(cell_b)['origin'].id], expand)
 
 
 def line_string_to_cells(waypoints: List[LonLat], resolution: int) -> List[int]:
@@ -107,13 +100,7 @@ def line_string_to_cells(waypoints: List[LonLat], resolution: int) -> List[int]:
             samples[j + 1] = to_lonlat(to_spherical(interior[j]))
         # Each sample's cell, as its ID and in triple space as flat (origin_id, quintant, x, y, z)
         sample_cells = [lonlat_to_cell(s, resolution) for s in samples]
-        sample_triples: List[int] = []
-        if resolution > 0:
-            for cell_id in sample_cells:
-                cell = deserialize(cell_id)
-                quintant, orientation = segment_to_quintant(cell['segment'], cell['origin'])
-                triple = s_to_triple(cell['S'], hilbert_res, orientation)
-                sample_triples.extend((cell['origin'].id, quintant, triple.x, triple.y, triple.z))
+        sample_triples = cell_ids_to_triples(sample_cells) if resolution > 0 else []
 
         # Walk pairwise. Each (P_j, P_{j+1}) sub-segment is short enough that its
         # projection onto any nearby cell's Face is essentially straight, so we
