@@ -12,13 +12,9 @@ from ..core.cell import cell_to_spherical
 from ..core.cell_info import cell_area
 from ..core.constants import AUTHALIC_RADIUS_EARTH
 from ..core.face_adjacency import FACE_ADJACENCY
-from ..core.tiling import get_pentagon_center
 from ..core.origin import haversine, origins, segment_to_quintant
-from ..lattice import Triple, s_to_triple, triple_flavor
-from ..projections.dodecahedron import DodecahedronProjection
-from .triple_cells import for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
-
-_dodecahedron = DodecahedronProjection()
+from ..lattice import s_to_triple
+from .triple_cells import for_each_triple_neighbor, triple_cell_center, triple_cell_key, triple_cell_to_id
 
 # Safety factor applied to equal-area circle radius to get conservative circumradius estimate
 CELL_RADIUS_SAFETY_FACTOR = 2.0
@@ -123,9 +119,7 @@ def _coarse_cap_cells(start_cell: int, center: Spherical, h_expanded: float) -> 
                 return
             visited.add(key)
             cells.append(triple_cell_to_id(origin_id, q, x, y, z, hilbert_res, resolution))
-            triple = Triple(x, y, z)
-            face = get_pentagon_center(hilbert_res, q, triple, triple_flavor(triple, max_row))
-            if haversine(center, _dodecahedron.inverse(face, origin_id)) <= h_expanded:
+            if haversine(center, triple_cell_center(origin_id, q, x, y, z, hilbert_res, max_row)) <= h_expanded:
                 next_frontier.extend((origin_id, q, x, y, z))
 
         for c in range(0, len(frontier), 5):

@@ -6,13 +6,18 @@
 # traversal algorithms that walk many neighboring cells: they key and dedup
 # cells as plain integers and encode a cell to its ID only when it is output.
 
-from typing import Callable, List
+from typing import Callable, Iterable, List, Optional
 
-from ..lattice import Triple, triple_flavor, triple_in_bounds, triple_to_s
-from ..core.serialization import serialize
-from ..core.origin import origins, quintant_to_segment
+from ..core.coordinate_systems import Spherical
+from ..lattice import Triple, s_to_triple, triple_flavor, triple_in_bounds, triple_to_s
+from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
+from ..core.origin import origins, quintant_to_segment, segment_to_quintant
+from ..core.tiling import get_pentagon_center
+from ..projections.dodecahedron import DodecahedronProjection
 from .lattice_boundary import get_boundary_neighbor_triples
 from .neighbors import NEIGHBOR_DELTAS
+
+_dodecahedron = DodecahedronProjection()
 
 # A cell's key packs the quintant (origin.id * 5 + quintant, < 60), parity,
 # and the low _KEY_BITS bits of -x and -z (y follows). Up to Hilbert resolution
@@ -41,6 +46,31 @@ def triple_cell_to_id(origin_id: int, quintant: int, x: int, y: int, z: int,
     return serialize({'origin': origins[origin_id], 'segment': segment, 'S': s, 'resolution': resolution})
 
 
+
+def cell_ids_to_triples(cell_ids: Iterable[int], out: Optional[List[int]] = None) -> List[int]:
+    """
+    Decode cell IDs (each at resolution 1 or above) into triple space, appending
+    them to `out` as flat (origin_id, quintant, x, y, z).
+    """
+    if out is None:
+        out = []
+    for cell_id in cell_ids:
+        cell = deserialize(cell_id)
+        origin = cell['origin']
+        quintant, orientation = segment_to_quintant(cell['segment'], origin)
+        t = s_to_triple(cell['S'], cell['resolution'] - FIRST_HILBERT_RESOLUTION + 1, orientation)
+        out.extend((origin.id, quintant, t.x, t.y, t.z))
+    return out
+
+
+def triple_cell_center(origin_id: int, quintant: int, x: int, y: int, z: int,
+                       hilbert_res: int, max_row: int) -> Spherical:
+    """The center of a cell given in triple space, on the sphere."""
+    triple = Triple(x, y, z)
+    face = get_pentagon_center(hilbert_res, quintant, triple, triple_flavor(triple, max_row))
+    return _dodecahedron.inverse(face, origin_id)
+
+
 # Receives a cell given in triple space: (origin_id, quintant, x, y, z)
 TripleCellVisitor = Callable[[int, int, int, int, int], None]
 
@@ -66,8 +96,38 @@ def for_each_triple_neighbor(origin_id: int, quintant: int, x: int, y: int, z: i
 
     # Across a quintant edge: the boundary delta tables
     if x == 0 or z == 0 or y == max_row:
-        boundary: List[int] = []
-        get_boundary_neighbor_triples(triple, x + y + z, quintant, origins[origin_id], max_row,
-                                      edge_only, False, boundary)
-        for i in range(0, len(boundary), 5):
-            visit(boundary[i], boundary[i + 1], boundary[i + 2], boundary[i + 3], boundary[i + 4])
+        _visit_boundary(origin_id, quintant, triple, max_row, edge_only, False, visit)
+
+
+def for_each_lattice_neighbor(origin_id: int, quintant: int, x: int, y: int, z: int,
+                              max_row: int, visit: TripleCellVisitor) -> None:
+    """
+    Visit every lattice neighbor of a cell given in triple space: the 3
+    parity-valid single-axis moves within its quintant (the connectivity
+    `triple_space_flood_fill` floods by), and, for a cell on a quintant edge, its
+    edge-sharing boundary neighbors -- but not the vertex corner, which the
+    lattice moves don't traverse either. A neighbor may be visited more than
+    once; visitors deduplicate.
+    """
+    # Within the quintant: +1 on one axis from a parity 0 triple, -1 from parity 1
+    step = 1 if x + y + z == 0 else -1
+    if triple_in_bounds(Triple(x + step, y, z), max_row):
+        visit(origin_id, quintant, x + step, y, z)
+    if triple_in_bounds(Triple(x, y + step, z), max_row):
+        visit(origin_id, quintant, x, y + step, z)
+    if triple_in_bounds(Triple(x, y, z + step), max_row):
+        visit(origin_id, quintant, x, y, z + step)
+
+    # Across a quintant edge: the boundary delta tables
+    if x == 0 or z == 0 or y == max_row:
+        _visit_boundary(origin_id, quintant, Triple(x, y, z), max_row, True, True, visit)
+
+
+def _visit_boundary(origin_id: int, quintant: int, triple: Triple, max_row: int,
+                    edge_only: bool, skip_corners: bool, visit: TripleCellVisitor) -> None:
+    """Visit the neighbors of a cell on a quintant edge that lie across it."""
+    boundary: List[int] = []
+    get_boundary_neighbor_triples(triple, triple.x + triple.y + triple.z, quintant, origins[origin_id],
+                                  max_row, edge_only, skip_corners, boundary)
+    for i in range(0, len(boundary), 5):
+        visit(boundary[i], boundary[i + 1], boundary[i + 2], boundary[i + 3], boundary[i + 4])

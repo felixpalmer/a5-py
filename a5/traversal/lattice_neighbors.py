@@ -2,110 +2,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List
 
-from ..lattice import (
-    Orientation, Triple,
-    s_to_triple, triple_to_s, triple_in_bounds, triple_parity,
-)
-from ..core.utils import Origin
-from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
-from ..core.origin import segment_to_quintant
+from ..core.serialization import get_resolution, FIRST_HILBERT_RESOLUTION
 from .global_neighbors import get_global_cell_neighbors
-from .lattice_boundary import BoundaryContext, get_boundary_neighbors
-
-
-@dataclass
-class _LatticeSource:
-    """Decoded source-cell state used by the lattice neighbor finder."""
-    origin: Origin
-    segment: int
-    S: int
-    resolution: int
-    hilbert_res: int
-    quintant: int
-    orientation: Orientation
-    triple: Triple
-    max_s: int
-    max_row: int
-
-
-def _decode_source(cell_id: int) -> Optional[_LatticeSource]:
-    """Deserialize and unpack into a _LatticeSource. Returns None below FIRST_HILBERT_RESOLUTION."""
-    cell = deserialize(cell_id)
-    origin, segment, S, resolution = cell['origin'], cell['segment'], cell['S'], cell['resolution']
-    if resolution < FIRST_HILBERT_RESOLUTION:
-        return None
-
-    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    quintant, orientation = segment_to_quintant(segment, origin)
-    triple = s_to_triple(S, hilbert_res, orientation)
-
-    return _LatticeSource(
-        origin=origin, segment=segment, S=S, resolution=resolution,
-        hilbert_res=hilbert_res, quintant=quintant, orientation=orientation, triple=triple,
-        max_s=4 ** hilbert_res,
-        max_row=(1 << hilbert_res) - 1,
-    )
-
-
-def _boundary_context(src: _LatticeSource) -> BoundaryContext:
-    """Build the BoundaryContext used by lattice-boundary helpers."""
-    return BoundaryContext(
-        triple=src.triple,
-        parity=triple_parity(src.triple),
-        source_quintant=src.quintant,
-        origin=src.origin,
-        hilbert_res=src.hilbert_res,
-        max_s=src.max_s,
-        max_row=src.max_row,
-        resolution=src.resolution,
-    )
-
-
-# The 3 parity-valid single-axis moves matching `triple_space_flood_fill`'s edge connectivity.
-PARITY_EVEN_DELTAS: List[Tuple[int, int, int]] = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]
-PARITY_ODD_DELTAS: List[Tuple[int, int, int]] = [(-1, 0, 0), (0, -1, 0), (0, 0, -1)]
+from .triple_cells import cell_ids_to_triples, for_each_lattice_neighbor, triple_cell_to_id
 
 
 def get_lattice_neighbors(cell_id: int) -> List[int]:
     """
     Fast lattice-based neighbor finding over triple-space deltas: the 3
     parity-valid moves -- strict triple-lattice edge connectivity, the
-    connectivity `triple_space_flood_fill` uses. Falls back to
-    get_global_cell_neighbors below res 2.
+    connectivity `triple_space_flood_fill` uses -- plus the edge-sharing
+    neighbors across a quintant edge (see `for_each_lattice_neighbor`). Falls
+    back to get_global_cell_neighbors below res 2.
     """
-    src = _decode_source(cell_id)
-    if src is None:
+    resolution = get_resolution(cell_id)
+    if resolution < FIRST_HILBERT_RESOLUTION:
         return get_global_cell_neighbors(cell_id, True)
 
-    origin = src.origin
-    segment = src.segment
-    S = src.S
-    resolution = src.resolution
-    hilbert_res = src.hilbert_res
-    orientation = src.orientation
-    triple = src.triple
-    max_s = src.max_s
-    max_row = src.max_row
-
-    deltas = PARITY_EVEN_DELTAS if triple_parity(triple) == 0 else PARITY_ODD_DELTAS
-
+    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
+    origin_id, quintant, x, y, z = cell_ids_to_triples([cell_id])
     result: List[int] = []
-    for dx, dy, dz in deltas:
-        candidate = Triple(triple.x + dx, triple.y + dy, triple.z + dz)
-        if not triple_in_bounds(candidate, max_row):
-            continue
-        candidate_s = triple_to_s(candidate, hilbert_res, orientation)
-        if (candidate_s is not None and 0 <= candidate_s < max_s and candidate_s != S):
-            result.append(serialize({
-                'origin': origin, 'segment': segment,
-                'S': candidate_s, 'resolution': resolution,
-            }))
 
-    # Strict lattice connectivity doesn't traverse the [-max_row, max_row, 0] vertex
-    # corner, so we skip it there too -- keeping the firewall topology tight.
-    for c in get_boundary_neighbors(_boundary_context(src), True, True):
-        result.append(c)
+    def visit(o: int, q: int, nx: int, ny: int, nz: int) -> None:
+        result.append(triple_cell_to_id(o, q, nx, ny, nz, hilbert_res, resolution))
+
+    for_each_lattice_neighbor(origin_id, quintant, x, y, z, (1 << hilbert_res) - 1, visit)
     return result
