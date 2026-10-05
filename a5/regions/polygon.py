@@ -13,7 +13,8 @@ from ..core.serialization import (
     FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 )
 from ..core.compact import compact
-from ..geometry.spherical_polygon import ring_winding_sign
+from ..core.cell_info import get_num_cells
+from ..geometry.spherical_polygon import ring_winding_sign, spherical_triangle_area
 from ..geometry.prepared_polygon import (
     PreparedPolygon, prepare_polygon, point_in_prepared_polygon,
 )
@@ -22,8 +23,10 @@ from ..utils.great_circle import sample_great_circle_arc
 from ..core.origin import origins, quintant_to_segment, segment_to_quintant
 from ..lattice import Triple, s_to_triple, triple_flavor, triple_to_s
 from ..traversal.neighbors import NEIGHBOR_DELTAS
+from ..traversal.lattice_flood_fill import triple_space_flood_fill
 from ..traversal.triple_cells import (
-    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_center, triple_cell_key,
+    cell_ids_to_triples, for_each_lattice_neighbor, for_each_triple_neighbor, triple_cell_center, triple_cell_key,
+    triple_cell_to_id,
 )
 
 
@@ -278,6 +281,23 @@ def _grow_ring(boundary: List[int], max_row: int) -> Tuple[List[int], List[int]]
     return ring, parents
 
 
+def _polygon_area(ring_vecs_list: List[List[Cartesian]]) -> float:
+    """Area of the polygon (outer ring minus holes) on the unit sphere, in steradians."""
+    total = 0.0
+    for r, ring in enumerate(ring_vecs_list):
+        # Signed fan from the first vertex: concave rings come out right too
+        area = 0.0
+        for i in range(1, len(ring) - 1):
+            area += spherical_triangle_area(ring[0], ring[i], ring[i + 1])
+        total += abs(area) if r == 0 else -abs(area)
+    return total
+
+
+# Below this many estimated interior cells per boundary cell, flooding the
+# interior beats splitting the curve into runs (measured crossover: ~3.3).
+_FLOOD_INTERIOR_PER_BOUNDARY = 3
+
+
 def _compact_sorted(cells: List[int]) -> List[int]:
     """
     Compact cells that are already sorted and disjoint, in one pass: a stack
@@ -427,6 +447,47 @@ def polygon_to_cells(
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     max_row = (1 << hilbert_res) - 1
     boundary = cell_ids_to_triples(boundary_cells)
+
+    # A quintant without band cells is wholly inside or outside; it can only be
+    # inside when the polygon's bounding cap holds a quintant's area (4pi/60)
+    cap_holds_quintant = 2 * math.pi * (1 - prep.cap.min_dot) >= (4 * math.pi) / 60
+
+    # A small interior is cheaper to flood than to split into curve runs: the
+    # flood costs about boundary + interior cells, the runs a sorted band of
+    # boundary plus ring keys. The flood can't reach a quintant the polygon
+    # swallows whole, which a polygon smaller than its bounding cap never does.
+    if not cap_holds_quintant and (_polygon_area(ring_vecs_list) / (4 * math.pi) * get_num_cells(resolution)
+                                   < _FLOOD_INTERIOR_PER_BOUNDARY * len(boundary_cells)):
+        out = [cell for c, cell in enumerate(boundary_cells) if overlapping or boundary_inside[c]]
+        # The shell: the flood's own moves out of the boundary, each cell classified
+        # from the boundary cell it was found from (they share an edge)
+        seen: Set[int] = set()
+        for c in range(0, len(boundary), 5):
+            seen.add(triple_cell_key(*boundary[c:c + 5]))
+        seeds: List[int] = []
+        firewall: List[int] = list(boundary)
+        parent = 0
+
+        def visit(origin_id: int, quintant: int, x: int, y: int, z: int) -> None:
+            key = triple_cell_key(origin_id, quintant, x, y, z)
+            if key in seen:
+                return
+            seen.add(key)
+            center = to_cartesian(triple_cell_center(origin_id, quintant, x, y, z, hilbert_res, max_row))
+            segments = segment_map[boundary_cells[parent]]
+            odd = _arc_crossing_parity(center, boundary_centers[parent], segments, seg_starts, seg_ends, seg_normals)
+            inside = point_in_prepared_polygon(center, prep) if odd is None else boundary_inside[parent] != odd
+            (seeds if inside else firewall).extend((origin_id, quintant, x, y, z))
+
+        for c in range(0, len(boundary), 5):
+            parent = c // 5
+            for_each_lattice_neighbor(*boundary[c:c + 5], max_row, visit)
+        if seeds:
+            for c in range(0, len(seeds), 5):
+                out.append(triple_cell_to_id(*seeds[c:c + 5], hilbert_res, resolution))
+            out.extend(triple_space_flood_fill(firewall, seeds, resolution)['interior_cells'])
+        return compact(out)
+
     ring_cells, parents = _grow_ring(boundary, max_row)
 
     unit_shift = 58 - 2 * hilbert_res
@@ -461,9 +522,6 @@ def polygon_to_cells(
     keys.sort()
     n_band = len(keys)
 
-    # A quintant without band cells is wholly inside or outside; it can only be
-    # inside when the polygon's bounding cap holds a quintant's area (4pi/60)
-    cap_holds_quintant = 2 * math.pi * (1 - prep.cap.min_dot) >= (4 * math.pi) / 60
 
     def class_from_ring(key: int, ring_key: int) -> Optional[bool]:
         """
