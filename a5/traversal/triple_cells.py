@@ -159,6 +159,9 @@ def triple_parent(origin_id: int, quintant: int, x: int, y: int, z: int,
     child - 2*parent, but for two classes, where the two candidate parents
     differ in flavor -- and so, sharing x and z, in apex colour (see
     triple_flavor).
+
+    Not used by the library: kept for completeness, as the inverse of
+    `triple_children`, for traversals that coarsen in triple space.
     """
     dx = -(x & 1)
     dz = -(z & 1)
