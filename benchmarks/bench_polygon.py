@@ -43,3 +43,32 @@ def bench_polygon_united_states_res_5(benchmark):
 def bench_polygon_fiji_res_8(benchmark):
     poly = _polygons['Fiji']
     benchmark(lambda: polygon_to_cells(poly, 8))
+
+
+# The same polygons with containment='overlapping', which traces the boundary exactly
+_OVERLAPPING = {'containment': 'overlapping'}
+
+
+def bench_polygon_overlapping_united_kingdom_res_7(benchmark):
+    poly = _polygons['United Kingdom']
+    benchmark(lambda: polygon_to_cells(poly, 7, _OVERLAPPING))
+
+
+def bench_polygon_overlapping_france_res_7(benchmark):
+    poly = _polygons['France']
+    benchmark(lambda: polygon_to_cells(poly, 7, _OVERLAPPING))
+
+
+def bench_polygon_overlapping_brazil_res_6(benchmark):
+    poly = _polygons['Brazil']
+    benchmark(lambda: polygon_to_cells(poly, 6, _OVERLAPPING))
+
+
+def bench_polygon_overlapping_united_states_res_5(benchmark):
+    poly = _polygons['United States of America']
+    benchmark(lambda: polygon_to_cells(poly, 5, _OVERLAPPING))
+
+
+def bench_polygon_overlapping_fiji_res_8(benchmark):
+    poly = _polygons['Fiji']
+    benchmark(lambda: polygon_to_cells(poly, 8, _OVERLAPPING))

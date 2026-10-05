@@ -9,13 +9,12 @@
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from ..core.coordinate_systems import LonLat, Cartesian
-from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_to_spherical
-from ..core.coordinate_transforms import to_cartesian, to_spherical
+from ..core.cell import cell_to_spherical
+from ..core.coordinate_transforms import to_cartesian
 from ..geometry.spherical_polygon import ring_winding_sign, spherical_triangle_area
 from ..geometry.prepared_polygon import PreparedPolygon, point_in_prepared_polygon
-from ..traversal.cap import estimate_cell_radius
+from ..traversal.line import trace_path
 from ..traversal.triple_cells import TripleCellVisitor, triple_cell_key
-from ..utils.great_circle import sample_great_circle_arc
 
 # Maps each boundary cell to the indices of the ring segments that produced it.
 # Segment indices are global across rings (outer ring first, then holes).
@@ -52,19 +51,21 @@ class Boundary:
 
 
 def sample_boundary(
-    rings: List[List[LonLat]], ring_vecs_list: List[List[Cartesian]], resolution: int,
+    rings: List[List[LonLat]], resolution: int, exact: bool,
 ) -> Tuple[List[int], Set[int], SegmentMap]:
     """
-    Dense-sample boundary cells along every closed ring (outer + holes) at
-    cell_radius * 0.4 spacing, calling spherical_to_cell per sample.
+    The boundary cells, each recorded with the ring segments (outer ring and
+    holes) that reached it: with `exact`, every cell a segment touches; without,
+    the cells holding samples along the segments at half-cell-radius spacing,
+    which can miss a cell whose corner a segment clips between samples.
     """
     cells: List[int] = []
     cell_set: Set[int] = set()
     segment_map: SegmentMap = {}
-    cell_radius = estimate_cell_radius(resolution)
-    sample_interval = cell_radius * 0.4
+    seg_offset = 0
 
-    def record_cell(cell: int, seg_idx: int) -> None:
+    def record_cell(cell: int, arc: int) -> None:
+        seg_idx = seg_offset + arc
         if cell not in cell_set:
             cell_set.add(cell)
             cells.append(cell)
@@ -75,26 +76,9 @@ def sample_boundary(
         else:
             segment_map[cell] = [seg_idx]
 
-    seg_offset = 0
-    for r in range(len(rings)):
-        ring = rings[r]
-        ring_vecs = ring_vecs_list[r]
-
-        n = len(ring)
-        vertex_cells: List[int] = [0] * n
-        for i in range(n):
-            vertex_cells[i] = lonlat_to_cell(ring[i], resolution)
-
-        for i in range(n):
-            next_i = (i + 1) % n
-            record_cell(vertex_cells[i], seg_offset + i)
-
-            # Skip the lonLat round-trip: samples are authalic-Cartesian already.
-            samples = sample_great_circle_arc(ring_vecs[i], ring_vecs[next_i], sample_interval)
-            for s in samples:
-                record_cell(spherical_to_cell(to_spherical(s), resolution), seg_offset + i)
-            record_cell(vertex_cells[next_i], seg_offset + i)
-        seg_offset += n
+    for ring in rings:
+        trace_path(ring, True, resolution, record_cell, exact)
+        seg_offset += len(ring)
 
     return cells, cell_set, segment_map
 

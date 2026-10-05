@@ -14,8 +14,7 @@ from ..core.constants import AUTHALIC_RADIUS_EARTH
 from ..core.face_adjacency import walk_faces
 from ..core.origin import haversine, origins
 from .triple_cells import (
-    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_center, triple_cell_key, triple_cell_to_id,
-    triple_children,
+    cell_ids_to_triples, triple_cell_center, triple_cell_to_id, triple_children, walk_triple_cells,
 )
 
 # Safety factor applied to equal-area circle radius to get conservative circumradius estimate
@@ -87,25 +86,12 @@ def _coarse_cap_cells(start_cell: int, center: Spherical, h_expanded: float) -> 
     hilbert_res = get_resolution(start_cell) - FIRST_HILBERT_RESOLUTION + 1
     max_row = (1 << hilbert_res) - 1
     cells = cell_ids_to_triples([start_cell])
-    visited = {triple_cell_key(*cells)}
-    frontier = list(cells)
 
-    while frontier:
-        next_frontier: List[int] = []
+    def expand(origin_id: int, q: int, x: int, y: int, z: int) -> bool:
+        cells.extend((origin_id, q, x, y, z))
+        return haversine(center, triple_cell_center(origin_id, q, x, y, z, hilbert_res, max_row)) <= h_expanded
 
-        def visit(origin_id: int, q: int, x: int, y: int, z: int) -> None:
-            key = triple_cell_key(origin_id, q, x, y, z)
-            if key in visited:
-                return
-            visited.add(key)
-            cells.extend((origin_id, q, x, y, z))
-            if haversine(center, triple_cell_center(origin_id, q, x, y, z, hilbert_res, max_row)) <= h_expanded:
-                next_frontier.extend((origin_id, q, x, y, z))
-
-        for c in range(0, len(frontier), 5):
-            for_each_triple_neighbor(frontier[c], frontier[c + 1], frontier[c + 2], frontier[c + 3],
-                                     frontier[c + 4], max_row, False, visit)
-        frontier = next_frontier
+    walk_triple_cells(list(cells), max_row, expand)
     return cells
 
 

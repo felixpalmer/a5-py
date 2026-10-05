@@ -81,7 +81,11 @@ def polygon_to_cells(
         ring_vecs_list.append([to_cartesian(from_lonlat(ring[i])) for i in range(len(ring))])
 
     prep = prepare_polygon(ring_vecs_list)
-    sampled = sample_boundary(rings, ring_vecs_list, resolution)
+    # 'overlapping' output is the boundary itself, so it needs every cell the
+    # boundary touches; 'center' only needs a boundary the fill can't step past
+    # (the curve runs' ring covers any cell the sampling skips).
+    overlapping = containment == 'overlapping'
+    sampled = sample_boundary(rings, resolution, overlapping)
 
     # Res 30 covers only quintants 0-41 (elsewhere A5 answers at res 29, see
     # serialize), so a polygon reaching past them is filled at res 29: mixing the
@@ -90,7 +94,6 @@ def polygon_to_cells(
         return polygon_to_cells(polygon, resolution - 1, options)
 
     boundary = classify_boundary(sampled, ring_vecs_list, prep)
-    overlapping = containment == 'overlapping'
 
     # Resolutions 0 and 1 have no lattice (a quintant is a single cell): every
     # cell off the boundary is in or out by its center, and there are at most 60
