@@ -9,7 +9,7 @@ from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_to_spherical
 from ..core.coordinate_transforms import from_lonlat, to_cartesian, to_spherical
 from ..core.serialization import (
-    cell_to_parent, cell_to_children, deserialize, get_resolution, serialize,
+    cell_to_parent, cell_to_children, deserialize, get_resolution, get_stride, is_first_child, serialize,
     FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 )
 from ..core.compact import compact
@@ -19,14 +19,18 @@ from ..geometry.prepared_polygon import (
 )
 from ..traversal.cap import estimate_cell_radius
 from ..utils.great_circle import sample_great_circle_arc
-from ..traversal.lattice_flood_fill import triple_space_flood_fill
+from ..core.origin import origins, quintant_to_segment, segment_to_quintant
+from ..lattice import Triple, s_to_triple, triple_flavor, triple_to_s
+from ..traversal.neighbors import NEIGHBOR_DELTAS
 from ..traversal.triple_cells import (
-    cell_ids_to_triples, for_each_lattice_neighbor, triple_cell_center, triple_cell_key, triple_cell_to_id,
+    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_center, triple_cell_key,
 )
 
 
 # Maps each boundary cell to the indices of the ring segments that produced it.
 # Segment indices are global across rings (outer ring first, then holes).
+# Used by `_classify_boundary_cells` to short-circuit PIP via segment-side dot
+# products, and to classify ring cells locally.
 SegmentMap = Dict[int, List[int]]
 
 
@@ -78,26 +82,41 @@ def _dense_sample_boundary(
     return boundary_cells, boundary_set, segment_map
 
 
-def _filter_boundary_cells(
+def _projects_onto_segment(p: Cartesian, a: Cartesian, b: Cartesian, n: Cartesian) -> bool:
+    """
+    Whether `p` lies in the lune of the segment a->b (normal `n` = a x b): its
+    projection onto the great circle falls between a and b.
+    """
+    # n x a points along the arc from a towards b, b x n from b back towards a
+    from_a = (p[0] * (n[1] * a[2] - n[2] * a[1]) + p[1] * (n[2] * a[0] - n[0] * a[2])
+              + p[2] * (n[0] * a[1] - n[1] * a[0]))
+    from_b = (p[0] * (b[1] * n[2] - b[2] * n[1]) + p[1] * (b[2] * n[0] - b[0] * n[2])
+              + p[2] * (b[0] * n[1] - b[1] * n[0]))
+    return from_a > 0 and from_b > 0
+
+
+def _classify_boundary_cells(
     boundary_cells: List[int], segment_map: SegmentMap,
+    seg_starts: List[Cartesian], seg_ends: List[Cartesian],
     seg_normals: List[Cartesian], seg_signs: List[int],
     prep: PreparedPolygon,
-) -> List[int]:
+) -> Tuple[List[bool], List[Cartesian]]:
     """
-    Filter boundary cells to those whose center is inside the polygon.
+    Classify boundary cells by whether their center is inside the polygon.
 
     For each cell we know which ring segment(s) sampled it. When all of those
-    segments place the cell on the interior side (cheap signed-dot test), we
-    accept immediately. When they disagree (vertex / concave corner) or the
-    cell wasn't recorded, fall back to full PIP.
+    segments place the cell on the same side (cheap signed-dot test), that
+    decides it. When they disagree (vertex / concave corner) or the cell wasn't
+    recorded, fall back to full PIP. Returns the centers too, for reuse.
     """
-    out: List[int] = []
+    inside: List[bool] = []
+    centers: List[Cartesian] = []
     for cell in boundary_cells:
         cv = to_cartesian(cell_to_spherical(cell))
+        centers.append(cv)
         segments = segment_map.get(cell)
         if segments is None:
-            if point_in_prepared_polygon(cv, prep):
-                out.append(cell)
+            inside.append(point_in_prepared_polygon(cv, prep))
             continue
         all_inside = True
         any_inside = False
@@ -108,170 +127,187 @@ def _filter_boundary_cells(
             if abs(dot) < 1e-14:
                 ambiguous = True
                 break
+            # The side of the segment's great circle only decides when the center
+            # projects onto the segment itself, not beyond one of its endpoints
+            if not _projects_onto_segment(cv, seg_starts[seg_idx], seg_ends[seg_idx], n):
+                ambiguous = True
+                break
             if dot * seg_signs[seg_idx] > 0:
                 any_inside = True
             else:
                 all_inside = False
         if ambiguous or (any_inside and not all_inside):
-            if point_in_prepared_polygon(cv, prep):
-                out.append(cell)
-        elif all_inside:
-            out.append(cell)
-    return out
+            inside.append(point_in_prepared_polygon(cv, prep))
+        else:
+            inside.append(all_inside)
+    return inside, centers
 
 
-def _expand_shell(boundary: List[int], max_row: int) -> List[int]:
+_CROSSING_EPS = 1e-14
+
+
+def _arc_crossing_parity(
+    p: Cartesian, q: Cartesian, segments: List[int],
+    seg_starts: List[Cartesian], seg_ends: List[Cartesian], seg_normals: List[Cartesian],
+) -> Optional[bool]:
     """
-    Buffer the boundary by one cell using lattice neighbors, in triple space
-    (cells as flat (origin_id, quintant, x, y, z)). The shell matches the
-    connectivity of `triple_space_flood_fill` so the firewall (boundary + exterior
-    shell) is a tight topological barrier for the subsequent flood.
+    Parity of the crossings of the short arc p->q with the given ring segments
+    (proper crossings, by the signs of four triple products), or None on a
+    near-degenerate sign.
+    """
+    abx = p[1] * q[2] - p[2] * q[1]
+    aby = p[2] * q[0] - p[0] * q[2]
+    abz = p[0] * q[1] - p[1] * q[0]
+    odd = False
+    for seg in segments:
+        c = seg_starts[seg]
+        d = seg_ends[seg]
+        acb = -(abx * c[0] + aby * c[1] + abz * c[2])
+        bda = abx * d[0] + aby * d[1] + abz * d[2]
+        if abs(acb) < _CROSSING_EPS or abs(bda) < _CROSSING_EPS:
+            return None
+        if acb * bda < 0:
+            continue
+        cd = seg_normals[seg]
+        cbd = -(cd[0] * q[0] + cd[1] * q[1] + cd[2] * q[2])
+        dac = cd[0] * p[0] + cd[1] * p[1] + cd[2] * p[2]
+        if abs(cbd) < _CROSSING_EPS or abs(dac) < _CROSSING_EPS:
+            return None
+        if acb * cbd > 0 and acb * dac > 0:
+            odd = not odd
+    return odd
+
+
+# Cells are ordered on the curve by a 64-bit key: the 6-bit quintant (as in
+# the ID's top bits) then S, left-aligned below it. Below resolution 30 that is
+# the cell ID without its resolution marker; at resolution 30 S fills all 58
+# bits. A cell at resolution r < 30 is its aligned key plus the marker.
+_QUINTANT_SHIFT = 58
+_S_MASK = (1 << _QUINTANT_SHIFT) - 1
+
+# Curve orientation of each quintant by its 6-bit key prefix, and the key
+# prefix and orientation by triple quintant (origin.id * 5 + quintant).
+_PREFIX_ORIENTATION = [
+    segment_to_quintant((q + origins[q // 5].first_quintant) % 5, origins[q // 5])[1] for q in range(60)
+]
+_TRIPLE_PREFIX: List[int] = []
+_TRIPLE_ORIENTATION = []
+for _origin in origins:
+    for _quintant in range(5):
+        _segment, _orientation = quintant_to_segment(_quintant, _origin)
+        _q = 5 * _origin.id + (_segment - _origin.first_quintant + 5) % 5
+        _TRIPLE_PREFIX.append(_q << _QUINTANT_SHIFT)
+        _TRIPLE_ORIENTATION.append(_orientation)
+
+
+def _triple_key(origin_id: int, quintant: int, x: int, y: int, z: int, hilbert_res: int, unit_shift: int) -> int:
+    """The key of a cell given in triple space."""
+    i = origin_id * 5 + quintant
+    return _TRIPLE_PREFIX[i] | (triple_to_s(Triple(x, y, z), hilbert_res, _TRIPLE_ORIENTATION[i]) << unit_shift)
+
+
+def _marker_bit(resolution: int) -> int:
+    return 1 << 56 if resolution == 1 else 1 << (59 - 2 * resolution)
+
+
+def _cell_to_key(cell: int, resolution: int) -> int:
+    if resolution < MAX_RESOLUTION:
+        return cell - _marker_bit(resolution)
+    c = deserialize(cell)
+    origin = c['origin']
+    q = 5 * origin.id + (c['segment'] - origin.first_quintant + 5) % 5
+    return (q << _QUINTANT_SHIFT) | c['S']
+
+
+def _key_to_cell(key: int, resolution: int) -> int:
+    if resolution < MAX_RESOLUTION:
+        return key + _marker_bit(resolution)
+    q = key >> _QUINTANT_SHIFT
+    origin = origins[q // 5]
+    return serialize({'origin': origin, 'segment': (q + origin.first_quintant) % 5, 'S': key & _S_MASK,
+                      'resolution': resolution})
+
+
+def _emit_range(lo: int, hi: int, resolution: int, out: List[int]) -> None:
+    """
+    Append the cells covering the key range [lo, hi) at `resolution`, as the
+    coarsest aligned blocks (a block of 4^k cells is their resolution - k parent).
+    """
+    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
+    unit_shift = 58 - 2 * hilbert_res
+    while lo < hi:
+        k = 0
+        while k < hilbert_res:
+            size = 1 << (unit_shift + 2 * (k + 1))
+            if (lo & (size - 1)) != 0 or lo + size > hi:
+                break
+            k += 1
+        out.append(_key_to_cell(lo, resolution - k))
+        lo += 1 << (unit_shift + 2 * k)
+
+
+def _grow_ring(boundary: List[int], max_row: int) -> Tuple[List[int], List[int]]:
+    """
+    The ring of neighbors (edge and vertex, across quintant edges too) around
+    the boundary cells (flat triples). Each ring cell records a boundary cell
+    next to it (`parents`, an index into the boundary): one it shares an edge
+    with when there is one, as edge neighbors are visited first. The arc between
+    their centers then crosses no other cell holding boundary samples: a ring
+    cell found by a vertex has no boundary cell across any of its edges, which
+    covers every other cell around that vertex.
     """
     seen: Set[int] = set()
     for c in range(0, len(boundary), 5):
         seen.add(triple_cell_key(*boundary[c:c + 5]))
-    shell: List[int] = []
+    ring: List[int] = []
+    parents: List[int] = []
+    parent = 0
 
     def visit(origin_id: int, quintant: int, x: int, y: int, z: int) -> None:
         key = triple_cell_key(origin_id, quintant, x, y, z)
         if key in seen:
             return
         seen.add(key)
-        shell.extend((origin_id, quintant, x, y, z))
+        ring.extend((origin_id, quintant, x, y, z))
+        parents.append(parent)
 
-    for c in range(0, len(boundary), 5):
-        for_each_lattice_neighbor(*boundary[c:c + 5], max_row, visit)
-    return shell
+    for edge_only in (True, False):
+        for c in range(0, len(boundary), 5):
+            parent = c // 5
+            for_each_triple_neighbor(*boundary[c:c + 5], max_row, edge_only, visit)
+    return ring, parents
 
 
-def _flood_interior(
-    seeds: List[int], boundary_cells: List[int], boundary: List[int], exterior_shell: List[int], resolution: int,
-) -> List[int]:
+def _compact_sorted(cells: List[int]) -> List[int]:
     """
-    Hierarchical flood fill from interior seed cells. Runs a few fine BFS layers
-    to clear the boundary, then a coarse-resolution BFS through the bulk, then
-    resumes fine BFS to fill gaps near the boundary. The coarse phase is skipped
-    when the polygon is too small to amortize its setup overhead.
-
-    The seeds, boundary and exterior shell come in triple space (cells as flat
-    (origin_id, quintant, x, y, z)); the boundary also as cell IDs.
+    Compact cells that are already sorted and disjoint, in one pass: a stack
+    whose top is merged into its parent whenever it ends in a full sibling group.
     """
-    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    seed_ids = [triple_cell_to_id(*seeds[c:c + 5], hilbert_res, resolution) for c in range(0, len(seeds), 5)]
-    firewall = boundary + exterior_shell
-
-    # Isoperimetric bound: B^2 / (4*pi) is the max interior for B boundary cells.
-    max_interior = len(boundary_cells) * len(boundary_cells) / (4 * math.pi)
-    # res 30 has a different encoding the parent-emit optimization can't use.
-    use_coarse_phase = (
-        resolution > FIRST_HILBERT_RESOLUTION
-        and resolution < MAX_RESOLUTION
-        and max_interior > 1000
-    )
-
-    if not use_coarse_phase:
-        result = triple_space_flood_fill(firewall, seeds, resolution)
-        return seed_ids + result['interior_cells']
-
-    parent_res = resolution - 1
-    coarse_firewall: Set[int] = set()
-    for cell in boundary_cells:
-        coarse_firewall.add(cell_to_parent(cell, parent_res))
-    for c in range(0, len(exterior_shell), 5):
-        coarse_firewall.add(cell_to_parent(triple_cell_to_id(*exterior_shell[c:c + 5], hilbert_res, resolution), parent_res))
-    for cell in seed_ids:
-        coarse_firewall.add(cell_to_parent(cell, parent_res))
-
-    # Phase 1: short fine BFS to move the frontier off the boundary.
-    phase1 = triple_space_flood_fill(firewall, seeds, resolution, 3)
-
-    # Phase 2: coarse BFS through the bulk interior.
-    coarse_interior_set = None
-    phase3_delta: List[int] = []
-    coarse_interior_cells: List[int] = []
-    if len(phase1['frontier_cell_ids']) > 0:
-        coarse_seeds: Set[int] = set()
-        for cell in phase1['frontier_cell_ids']:
-            parent = cell_to_parent(cell, parent_res)
-            if parent not in coarse_firewall:
-                coarse_seeds.add(parent)
-
-        if len(coarse_seeds) > 0:
-            coarse_visited = set(coarse_firewall)
-            for seed in coarse_seeds:
-                coarse_visited.add(seed)
-            coarse_result = triple_space_flood_fill(
-                cell_ids_to_triples(coarse_visited), cell_ids_to_triples(coarse_seeds), parent_res)
-            coarse_interior = list(coarse_seeds) + coarse_result['interior_cells']
-            coarse_interior_set = set(coarse_interior)
-            coarse_interior_cells.extend(coarse_interior)
-
-            # Children become firewall for phase 3; the coarse parent represents
-            # them in the output, so we don't emit them individually.
-            for coarse_cell in coarse_interior:
-                cell_ids_to_triples(cell_to_children(coarse_cell, resolution), phase3_delta)
-
-    # Emit fine cells only when not already covered by a coarse parent.
-    interior_cells: List[int] = []
-    if coarse_interior_set is None:
-        interior_cells.extend(seed_ids)
-        interior_cells.extend(phase1['interior_cells'])
-    else:
-        for cell in seed_ids:
-            if cell_to_parent(cell, parent_res) not in coarse_interior_set:
-                interior_cells.append(cell)
-        for cell in phase1['interior_cells']:
-            if cell_to_parent(cell, parent_res) not in coarse_interior_set:
-                interior_cells.append(cell)
-        interior_cells.extend(coarse_interior_cells)
-
-    # Phase 3: resume fine BFS, reusing phase 1's state.
-    phase3 = triple_space_flood_fill(
-        {'state': phase1['state'], 'delta': phase3_delta},
-        phase1['frontier'],
-        resolution,
-    )
-    interior_cells.extend(phase3['interior_cells'])
-
-    return interior_cells
-
-
-def _swallowed_quintants(
-    boundary: List[int],
-    shell: List[int],
-    resolution: int,
-    prep: PreparedPolygon,
-) -> List[int]:
-    """
-    Quintants the polygon swallows whole. The flood fill never crosses a
-    quintant edge, so such a quintant gets no seeds from the boundary shell and
-    would be left empty. A quintant holding none of the boundary or shell cells
-    has none of the polygon's edge passing through it: its cells lie wholly
-    inside or wholly outside, and a single probe cell decides which. Inside
-    quintants are emitted as their resolution 1 cell (resolution 0 when that is
-    the target), which `compact` merges with the rest of the output.
-    """
-    # A swallowed quintant lies inside the polygon's bounding cap, so the cap
-    # must have at least a quintant's area (4pi/60: cells are equal-area)
-    if 2 * math.pi * (1 - prep.cap.min_dot) < (4 * math.pi) / 60:
-        return []
-    # Quintants by origin.id * 5 + quintant, as the triples carry them
-    touched: Set[int] = set()
-    for cells in (boundary, shell):
-        for c in range(0, len(cells), 5):
-            touched.add(cells[c] * 5 + cells[c + 1])
-
-    out: List[int] = []
-    quintant_cells = cell_to_children(WORLD_CELL, FIRST_HILBERT_RESOLUTION - 1)
-    quintants = cell_ids_to_triples(quintant_cells)
-    for i, quintant_cell in enumerate(quintant_cells):
-        if quintants[i * 5] * 5 + quintants[i * 5 + 1] in touched:
-            continue
-        # Any cell of the quintant at the target resolution will do
-        probe = serialize({**deserialize(quintant_cell), 'S': 0, 'resolution': resolution})
-        if point_in_prepared_polygon(to_cartesian(cell_to_spherical(probe)), prep):
-            out.append(quintant_cell)
-    return out
+    stack: List[int] = []
+    for cell in cells:
+        stack.append(cell)
+        while True:
+            top = len(stack) - 1
+            resolution = get_resolution(stack[top])
+            if resolution < 0:
+                break
+            n = 4 if resolution >= FIRST_HILBERT_RESOLUTION else (12 if resolution == 0 else 5)
+            if len(stack) < n:
+                break
+            first = stack[top - n + 1]
+            if not is_first_child(first, resolution):
+                break
+            stride = get_stride(resolution)
+            complete = True
+            for j in range(1, n):
+                if stack[top - n + 1 + j] != first + j * stride:
+                    complete = False
+                    break
+            if not complete:
+                break
+            del stack[top - n + 1:]
+            stack.append(cell_to_parent(first))
+    return stack
 
 
 def _strip_closing(ring: List[LonLat]) -> List[LonLat]:
@@ -347,56 +383,148 @@ def polygon_to_cells(
     if resolution == MAX_RESOLUTION and any(get_resolution(cell) != resolution for cell in boundary_cells):
         return polygon_to_cells(polygon, resolution - 1, options)
 
-    # The boundary contribution to the output. In 'overlapping' mode every
-    # densely-sampled boundary cell contains a point on the polygon boundary, so
-    # it overlaps the polygon -- keep them all, unfiltered. In 'center' mode we
-    # filter down to those whose center lies inside.
-    if containment == 'overlapping':
-        boundary_out = boundary_cells
-    else:
-        # Flattened per-segment normals and interior-side signs, indexed like the
-        # segment map. The polygon interior lies on the *outside* of a hole ring,
-        # so hole segments get the opposite sign.
-        seg_normals: List[Cartesian] = []
-        seg_signs: List[int] = []
-        for r in range(len(rings)):
-            sign = (1 if r == 0 else -1) * ring_winding_sign(ring_vecs_list[r])
-            normals = prep.ring_normals[r]
-            for normal in normals:
-                seg_normals.append(normal)
-                seg_signs.append(sign)
-        boundary_out = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, seg_signs, prep)
+    # Flattened per-segment endpoints, normals and interior-side signs, indexed
+    # like the segment map. The polygon interior lies on the *outside* of a hole
+    # ring, so hole segments get the opposite sign.
+    seg_starts: List[Cartesian] = []
+    seg_ends: List[Cartesian] = []
+    seg_normals: List[Cartesian] = []
+    seg_signs: List[int] = []
+    for r in range(len(rings)):
+        sign = (1 if r == 0 else -1) * ring_winding_sign(ring_vecs_list[r])
+        vecs = ring_vecs_list[r]
+        normals = prep.ring_normals[r]
+        for i in range(len(normals)):
+            seg_starts.append(vecs[i])
+            seg_ends.append(vecs[(i + 1) % len(vecs)])
+            seg_normals.append(normals[i])
+            seg_signs.append(sign)
+    boundary_inside, boundary_centers = _classify_boundary_cells(
+        boundary_cells, segment_map, seg_starts, seg_ends, seg_normals, seg_signs, prep)
 
-    # Resolutions 0 and 1 have no lattice to flood (a quintant is a single
-    # cell): every cell off the boundary is in or out by its center, and there
-    # are at most 60 of them.
+    # In 'overlapping' mode every densely-sampled boundary cell contains a point
+    # on the polygon boundary, so it overlaps the polygon -- keep them all. In
+    # 'center' mode keep those whose center lies inside.
+    overlapping = containment == 'overlapping'
+
+    # Resolutions 0 and 1 have no lattice (a quintant is a single cell): every
+    # cell off the boundary is in or out by its center, and there are at most 60
+    # of them.
     if resolution < FIRST_HILBERT_RESOLUTION:
-        out = list(boundary_out)
+        out = [cell for c, cell in enumerate(boundary_cells) if overlapping or boundary_inside[c]]
         for cell in cell_to_children(WORLD_CELL, resolution):
             if cell not in boundary_set and point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)), prep):
                 out.append(cell)
         return compact(out)
 
-    # The rest runs in triple space: cells as flat (origin_id, quintant, x, y, z)
+    # The rest relies on the curve. Within a quintant consecutive cells are
+    # neighbors, or at most a step over one or two cells. So the band of boundary
+    # cells plus one ring of their neighbors splits each quintant's stretch of the
+    # curve (a range of keys) into runs that lie wholly inside or wholly outside
+    # the polygon: a step over the boundary would have to land in the band. One
+    # probe classifies a run, and an inside run is emitted directly as the
+    # coarsest cells covering it, so the interior costs O(boundary), not O(area).
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     max_row = (1 << hilbert_res) - 1
     boundary = cell_ids_to_triples(boundary_cells)
+    ring_cells, parents = _grow_ring(boundary, max_row)
 
-    # Dense sampling can leave gaps; the shell catches them, classifying each cell.
-    shell = _expand_shell(boundary, max_row)
-    swallowed = _swallowed_quintants(boundary, shell, resolution, prep)
-    if len(shell) == 0:
-        return compact(boundary_out + swallowed)
+    unit_shift = 58 - 2 * hilbert_res
+    unit = 1 << unit_shift
 
-    seeds: List[int] = []
-    exterior_shell: List[int] = []  # exterior shell (and hole interiors) join the firewall
-    for c in range(0, len(shell), 5):
-        cell = shell[c:c + 5]
-        center = triple_cell_center(*cell, hilbert_res, max_row)
-        (seeds if point_in_prepared_polygon(to_cartesian(center), prep) else exterior_shell).extend(cell)
-    if len(seeds) == 0:
-        return compact(boundary_out + swallowed)
+    # Band keys carry two flags below the key: EMIT (the cell is in the output)
+    # and RING. (Python ints are unbounded, so `key << 2` always has room.)
+    EMIT = 1
+    RING = 2
 
-    interior_cells = _flood_interior(seeds, boundary_cells, boundary, exterior_shell, resolution)
+    n_boundary = len(boundary_cells)
+    keys: List[int] = []
+    for i in range(n_boundary):
+        emit = overlapping or boundary_inside[i]
+        keys.append((_cell_to_key(boundary_cells[i], resolution) << 2) | (EMIT if emit else 0))
+    # Ring cells by flagged key (as their offset into ring_cells), with their class
+    ring_by_key: Dict[int, int] = {}
+    ring_inside: List[bool] = []
+    for c in range(0, len(ring_cells), 5):
+        cell = ring_cells[c:c + 5]
+        center = to_cartesian(triple_cell_center(*cell, hilbert_res, max_row))
+        # Locally: the parent's class, flipped by each ring segment crossed on the
+        # way (full PIP only on a near-degenerate crossing)
+        parent = parents[c // 5]
+        segments = segment_map[boundary_cells[parent]]
+        odd = _arc_crossing_parity(center, boundary_centers[parent], segments, seg_starts, seg_ends, seg_normals)
+        inside = point_in_prepared_polygon(center, prep) if odd is None else boundary_inside[parent] != odd
+        ring_inside.append(inside)
+        key = (_triple_key(*cell, hilbert_res, unit_shift) << 2) | (EMIT | RING if inside else RING)
+        keys.append(key)
+        ring_by_key[key] = c
+    keys.sort()
+    n_band = len(keys)
 
-    return compact(boundary_out + interior_cells + swallowed)
+    # A quintant without band cells is wholly inside or outside; it can only be
+    # inside when the polygon's bounding cap holds a quintant's area (4pi/60)
+    cap_holds_quintant = 2 * math.pi * (1 - prep.cap.min_dot) >= (4 * math.pi) / 60
+
+    def class_from_ring(key: int, ring_key: int) -> Optional[bool]:
+        """
+        The class of a run cell from a ring cell next to it on the curve, when the
+        two are lattice neighbors: any boundary cell near the run cell would have
+        put it in the ring, so nothing between them can cross the boundary.
+        """
+        if (ring_key & RING) == 0:
+            return None
+        c = ring_by_key[ring_key]
+        q = key >> _QUINTANT_SHIFT
+        t = s_to_triple((key & _S_MASK) >> unit_shift, hilbert_res, _PREFIX_ORIENTATION[q])
+        rx, ry, rz = ring_cells[c + 2], ring_cells[c + 3], ring_cells[c + 4]
+        dx, dy, dz = t.x - rx, t.y - ry, t.z - rz
+        for d in NEIGHBOR_DELTAS[triple_flavor(Triple(rx, ry, rz), max_row)].all:
+            if d.x == dx and d.y == dy and d.z == dz:
+                return ring_inside[c // 5]
+        return None
+
+    # Walk each quintant's keys in curve order, emitting the inside band cells and
+    # runs as they come, so the output is sorted.
+    out: List[int] = []
+
+    def probe_run(lo: int, hi: int, prev: int, next_: int) -> None:
+        inside = class_from_ring(lo, prev) if prev >= 0 else None
+        if inside is None and next_ >= 0:
+            inside = class_from_ring(hi - unit, next_)
+        if inside is None:
+            inside = point_in_prepared_polygon(to_cartesian(cell_to_spherical(_key_to_cell(lo, resolution))), prep)
+        if inside:
+            _emit_range(lo, hi, resolution, out)
+
+    i = 0
+    q = 0
+    while q < 60:
+        # Skip straight to the next quintant holding band cells, unless whole ones may be inside
+        if not cap_holds_quintant:
+            if i >= n_band:
+                break
+            q = keys[i] >> (_QUINTANT_SHIFT + 2)
+        q_end = (q + 1) << _QUINTANT_SHIFT
+        cursor = q << _QUINTANT_SHIFT
+        if i >= n_band or (keys[i] >> 2) >= q_end:
+            if cap_holds_quintant:
+                probe_run(cursor, q_end, -1, -1)
+            q += 1
+            continue
+        prev = -1
+        while i < n_band and (keys[i] >> 2) < q_end:
+            flagged = keys[i]
+            key = flagged >> 2
+            if key > cursor:
+                probe_run(cursor, key, prev, flagged)
+            if flagged & EMIT:
+                out.append(_key_to_cell(key, resolution))
+            prev = flagged
+            cursor = key + unit
+            i += 1
+        if cursor < q_end:
+            probe_run(cursor, q_end, prev, -1)
+        q += 1
+
+    # Resolution 30 IDs don't sort like their keys (the quintant field varies in width)
+    return compact(out) if resolution == MAX_RESOLUTION else _compact_sorted(out)
