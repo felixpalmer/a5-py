@@ -131,3 +131,46 @@ def _visit_boundary(origin_id: int, quintant: int, triple: Triple, max_row: int,
                                   max_row, edge_only, skip_corners, boundary)
     for i in range(0, len(boundary), 5):
         visit(boundary[i], boundary[i + 1], boundary[i + 2], boundary[i + 3], boundary[i + 4])
+
+
+# The cell hierarchy in triple space. A cell's 4 children are 2*triple + the
+# offsets for its flavor (each level of A5 refines the square grid R of
+# g o^r D into 4); only their curve order depends on the orientation.
+_CHILD_OFFSETS = [
+    [(0, 0, 0), (0, 1, -1), (0, 1, 0), (0, 2, -1)],  # flavor 0
+    [(-1, -1, 0), (-1, 0, -1), (-1, 0, 0), (-1, 1, -1)],  # flavor 1
+    [(-1, 1, 0), (0, 0, 0), (0, 1, -1), (0, 1, 0)],  # flavor 2
+    [(-1, 0, -1), (-1, 0, 0), (-1, 1, -1), (0, 0, -1)],  # flavor 3
+]
+
+
+def triple_children(origin_id: int, quintant: int, x: int, y: int, z: int,
+                    max_row: int, out: List[int]) -> None:
+    """The 4 children of a cell given in triple space (`max_row` is its own), appended to `out`."""
+    for dx, dy, dz in _CHILD_OFFSETS[triple_flavor(Triple(x, y, z), max_row)]:
+        out.extend((origin_id, quintant, 2 * x + dx, 2 * y + dy, 2 * z + dz))
+
+
+def triple_parent(origin_id: int, quintant: int, x: int, y: int, z: int,
+                  parent_max_row: int, out: List[int]) -> None:
+    """
+    The parent of a cell given in triple space (`parent_max_row` is the
+    parent's), appended to `out`. The child's coordinates mod 2 fix
+    child - 2*parent, but for two classes, where the two candidate parents
+    differ in flavor -- and so, sharing x and z, in apex colour (see
+    triple_flavor).
+
+    Not used by the library: kept for completeness, as the inverse of
+    `triple_children`, for traversals that coarsen in triple space.
+    """
+    dx = -(x & 1)
+    dz = -(z & 1)
+    dy = y & 1
+    px = (x - dx) >> 1
+    pz = (z - dz) >> 1
+    colour = (parent_max_row + 1 + px + pz) & 1
+    if dx == 0 and dy == 0 and dz == -1:
+        dy = 2 if colour == 0 else 0  # flavor 0 or 3 parent
+    if dx == -1 and dy == 1 and dz == 0:
+        dy = 1 if colour == 1 else -1  # flavor 2 or 1 parent
+    out.extend((origin_id, quintant, px, (y - dy) >> 1, pz))
