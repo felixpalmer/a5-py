@@ -148,8 +148,12 @@ def serialize(cell: A5Cell) -> int:
 
     return index
 
+# The segments of an origin in ID (quintant) order, by its first_quintant
+_QUINTANT_SEGMENTS = [[(n + first) % 5 for n in range(5)] for first in range(5)]
+
+
 def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List[int]:
-    """Get the children of a cell at a specific resolution."""
+    """Get the children of a cell at a specific resolution, in ascending ID order."""
     cell = deserialize(index)
     origin, segment, S, current_resolution = cell["origin"], cell["segment"], cell["S"], cell["resolution"]
     new_resolution = child_resolution if child_resolution is not None else current_resolution + 1
@@ -164,11 +168,9 @@ def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List
         return [index]
 
     new_origins = [origin]
-    new_segments = [segment]
     if current_resolution == -1:
         new_origins = origins
-    if (current_resolution == -1 and new_resolution > 0) or current_resolution == 0:
-        new_segments = list(range(5))
+    all_segments = (current_resolution == -1 and new_resolution > 0) or current_resolution == 0
 
     resolution_diff = new_resolution - max(current_resolution, FIRST_HILBERT_RESOLUTION - 1)
     children_count = 4 ** max(0, resolution_diff)
@@ -176,6 +178,8 @@ def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List
 
     children = []
     for new_origin in new_origins:
+        # An origin's quintants in ID order: the n-th is segment (n + first_quintant) % 5
+        new_segments = _QUINTANT_SEGMENTS[new_origin.first_quintant] if all_segments else [segment]
         for new_segment in new_segments:
             for i in range(children_count):
                 new_S = shifted_S + i
