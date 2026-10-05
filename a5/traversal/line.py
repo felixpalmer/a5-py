@@ -79,7 +79,8 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
     point_faces: List[Optional[Face]] = []
     for p in point_spherical:
         cell = spherical_to_cell(p, resolution)
-        shape = last_cell_shape(cell)
+        # Only the exact trace uses the shapes
+        shape = last_cell_shape(cell) if exact else None
         point_cells.append(cell)
         point_shapes.append(shape)
         point_faces.append(None if shape is None else last_projection(p, shape['origin_id']))
@@ -197,7 +198,7 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
             else:
                 b = to_spherical(interior[j - 1])
                 cell_b = spherical_to_cell(b, resolution)
-                shape_b = last_cell_shape(cell_b)
+                shape_b = last_cell_shape(cell_b) if exact else None
                 face_of_b = None if shape_b is None else last_projection(b, shape_b['origin_id'])
             state['b'] = b
             state['shape_b'] = shape_b
