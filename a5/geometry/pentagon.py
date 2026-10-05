@@ -10,22 +10,35 @@ from ..math import vec2
 Pentagon = List[Face]
 
 
+# How close (as a fraction of its length) to either end of the p3->p4 segment
+# a crossing counts as touching only that endpoint
+_VERTEX_MARGIN = 1e-9
+
+
 def _segments2d_intersect(p1: Tuple[float, float], p2: Tuple[float, float],
                           p3: Tuple[float, float], p4: Tuple[float, float]) -> bool:
     """
     2D segment-vs-segment intersection test.
-    Returns True iff the closed segments p1->p2 and p3->p4 share at least one point.
+    Returns True iff the closed segment p1->p2 crosses p3->p4 away from p3 and p4.
     """
     d1x, d1y = p2[0] - p1[0], p2[1] - p1[1]
     d2x, d2y = p4[0] - p3[0], p4[1] - p3[1]
     denom = d1x * d2y - d1y * d2x
-    if abs(denom) < 1e-12:
+    # Parallel (or degenerate) when the sine of the angle between them is ~0.
+    # Relative to the segment lengths: an absolute threshold swallows every
+    # crossing once cells are small (res 20+, where |d1|*|d2| < 1e-12).
+    if denom * denom <= 1e-24 * (d1x * d1x + d1y * d1y) * (d2x * d2x + d2y * d2y):
         return False
 
     dx, dy = p3[0] - p1[0], p3[1] - p1[1]
     t = (dx * d2y - dy * d2x) / denom
     u = (dx * d1y - dy * d1x) / denom
-    return 0 <= t <= 1 and 0 <= u <= 1
+    # A crossing within float noise of p3 or p4 (a pentagon vertex, as
+    # `intersects_segment` passes them) only grazes the corner: no shared area,
+    # and which side of the vertex it falls on is a last-bit decision that
+    # differs between languages. A segment that truly enters through a corner
+    # also crosses another edge or ends inside, so it is still found.
+    return 0 <= t <= 1 and _VERTEX_MARGIN < u < 1 - _VERTEX_MARGIN
 
 
 class PentagonShape:

@@ -37,6 +37,32 @@ _dodecahedron = DodecahedronProjection()
 # + one pentagon containment check.
 _last_result: Optional[Dict] = None
 
+# The most recent point spherical_to_cell projected onto a face, and where it landed
+_last_point: Optional[Spherical] = None
+_last_point_origin = -1
+_last_point_face = None
+
+
+def last_projection(spherical: Spherical, origin_id: int):
+    """
+    Where `spherical` lands on `origin_id`'s face, when the most recent
+    `spherical_to_cell` call already projected it there, else None.
+    """
+    if spherical is _last_point and origin_id == _last_point_origin:
+        return _last_point_face
+    return None
+
+
+def last_cell_shape(cell_id: int) -> Optional[Dict]:
+    """
+    The pentagon and origin of `cell_id` (keys 'pentagon', 'origin_id') when it
+    is the cell the most recent `spherical_to_cell` call returned, else None:
+    lets dense-sample loops reuse the geometry that lookup already built.
+    """
+    if _last_result is not None and _last_result['cell_id'] == cell_id:
+        return _last_result
+    return None
+
 
 class CellToBoundaryOptions(TypedDict, total=False):
     """Options for cell_to_boundary function."""
@@ -79,9 +105,10 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
 
     # Try the cached pentagon first -- skips the full lookup when consecutive
     # calls land in the same cell (common in dense-sample loops).
-    global _last_result
+    global _last_result, _last_point, _last_point_origin, _last_point_face
     if _last_result is not None and _last_result['resolution'] == resolution:
         projected = _dodecahedron.forward(spherical, _last_result['origin_id'])
+        _last_point, _last_point_origin, _last_point_face = spherical, _last_result['origin_id'], projected
         if _last_result['pentagon'].contains_point(projected) > 0:
             return _last_result['cell_id']
 
@@ -93,6 +120,7 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
     # one 7-candidate walk resolves it -- then a single curve encode.
     origin = find_nearest_origin(spherical)
     dodec_point = _dodecahedron.forward(spherical, origin.id)
+    _last_point, _last_point_origin, _last_point_face = spherical, origin.id, dodec_point
     quintant = get_quintant_polar(to_polar(dodec_point))
     best = _lookup_in_quintant(dodec_point, origin, quintant, resolution)
     if best is not None and best[0] > 0:
