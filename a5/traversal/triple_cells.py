@@ -47,17 +47,6 @@ def triple_cell_to_id(origin_id: int, quintant: int, x: int, y: int, z: int,
 
 
 
-def triple_cells_to_ids(cells: List[int], hilbert_res: int, resolution: int,
-                        out: Optional[List[int]] = None) -> List[int]:
-    """Encode cells given in triple space (all at one resolution), appending their IDs to `out`."""
-    if out is None:
-        out = []
-    for c in range(0, len(cells), 5):
-        out.append(triple_cell_to_id(cells[c], cells[c + 1], cells[c + 2], cells[c + 3], cells[c + 4],
-                                     hilbert_res, resolution))
-    return out
-
-
 def cell_ids_to_triples(cell_ids: Iterable[int], out: Optional[List[int]] = None) -> List[int]:
     """
     Decode cell IDs (each at resolution 1 or above) into triple space, appending
