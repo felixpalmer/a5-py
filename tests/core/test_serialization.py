@@ -173,6 +173,17 @@ def test_round_trip_between_cell_to_parent_and_cell_to_children(id):
     assert all(p == cell for p in parents), "Not all children map to the same parent"
 
 
+def test_cell_to_children_ascending_id_order():
+    """cell_to_children returns children in ascending ID order."""
+    def ascending(cells):
+        return all(a < b for a, b in zip(cells, cells[1:]))
+    for res in (0, 1, 2):
+        assert ascending(cell_to_children(WORLD_CELL, res))
+    for cell in get_res0_cells():
+        for res in (1, 2, 3):
+            assert ascending(cell_to_children(cell, res))
+
+
 def test_non_hilbert_to_non_hilbert_hierarchy():
     """Test non-Hilbert to non-Hilbert transition."""
     # Test resolution 0 to 1 (both non-Hilbert)
