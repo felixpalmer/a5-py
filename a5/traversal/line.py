@@ -16,7 +16,7 @@ from ..lattice import Triple, triple_flavor
 from ..projections.dodecahedron import DodecahedronProjection
 from ..utils.great_circle import sample_great_circle_arc
 from .cap import estimate_cell_radius
-from .triple_cells import cell_ids_to_triples, for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
+from .triple_cells import cell_ids_to_triples, triple_cell_to_id, walk_triple_cells
 
 _dodecahedron = DodecahedronProjection()
 
@@ -43,48 +43,6 @@ _SHARED_EDGE_EPS = 1e-9
 _SHARED_EDGE_MARGIN = 1e-6
 
 
-def _clip_to_pentagon(pentagon, a: Face, b: Face) -> Optional[Tuple[float, float, float]]:
-    """
-    The part of the segment a->b inside a convex pentagon, as parameters
-    (start, end) along it, start <= end, with where along the edge it leaves
-    through (0..1, from the edge's first vertex); None when it misses the pentagon.
-    """
-    vertices = pentagon.get_vertices()
-    sx = b[0] - a[0]
-    sy = b[1] - a[1]
-    start = -math.inf
-    end = math.inf
-    exit_edge = -1
-    for i in range(5):
-        v1 = vertices[i]
-        v2 = vertices[(i + 1) % 5]
-        # Inside an edge where (v1 - v2) x (p - v1) >= 0 (as contains_point)
-        ex = v1[0] - v2[0]
-        ey = v1[1] - v2[1]
-        f = ex * (a[1] - v1[1]) - ey * (a[0] - v1[0])
-        g = ex * sy - ey * sx
-        if g == 0:
-            if f < 0:
-                return None
-        elif g > 0:
-            start = max(start, -f / g)
-        else:
-            t = -f / g
-            if t < end:
-                end = t
-                exit_edge = i
-    if start > end or exit_edge < 0:
-        return None
-    # Where the exit point falls along the exit edge, from its first vertex
-    v1 = vertices[exit_edge]
-    v2 = vertices[(exit_edge + 1) % 5]
-    px = a[0] + end * sx - v1[0]
-    py = a[1] + end * sy - v1[1]
-    ex = v2[0] - v1[0]
-    ey = v2[1] - v1[1]
-    return start, end, (px * ex + py * ey) / (ex * ex + ey * ey)
-
-
 def trace_path(points: List[LonLat], closed: bool, resolution: int,
                visit: Callable[[int, int], None], exact: bool = True) -> None:
     """
@@ -99,10 +57,10 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
     sub-segment between them is short enough to be straight (projected onto the
     cell's Face). Between two cells, clipping the sub-segment to their pentagons
     usually shows it crossing straight from one into the other, or clipping one
-    cell between them; otherwise a strict local BFS finds every cell whose
+    cell between them; otherwise a strict local search finds every cell whose
     pentagon it touches.
 
-    The BFS runs in triple space: a cell's neighbors come from its flavor's
+    The search runs in triple space: a cell's neighbors come from its flavor's
     triple deltas plus the boundary delta tables, and its pentagon straight from
     its triple, so a candidate is never decoded and only touched cells are
     encoded.
@@ -146,26 +104,21 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
         pentagon = get_pentagon_vertices(hilbert_res, quintant, triple, triple_flavor(triple, max_row))
         return pentagon.intersects_segment(face_a[origin_id], face_b[origin_id])
 
-    def covers_exactly(shapes: List[dict]) -> bool:
+    def hands_over(parts: List[Optional[Tuple[float, float, float]]]) -> bool:
         """
-        Whether the sub-segment runs through the cells of `shapes` in turn, all on
-        one origin, and through nothing else: from a (in the first) to b (in the
-        last), the part inside each cell ends where the next one's begins, at a
-        point well inside an edge, so no third cell meets it there.
+        Whether the sub-segment, clipped to each cell it passes through in turn,
+        hands over cleanly: from a (in the first part) to b (in the last), each
+        part ends where the next begins, at a point well inside an edge, so no
+        other cell meets the sub-segment there.
         """
-        origin_id = shapes[0]['origin_id']
-        project(origin_id)
         prev_end = 0.0
-        for i, shape in enumerate(shapes):
-            if shape['origin_id'] != origin_id:
-                return False
-            part = _clip_to_pentagon(shape['pentagon'], face_a[origin_id], face_b[origin_id])
+        for i, part in enumerate(parts):
             if part is None:
                 return False
             start, end, exit_edge_t = part
             if (start > _SHARED_EDGE_EPS) if i == 0 else (abs(start - prev_end) > _SHARED_EDGE_EPS):
                 return False
-            if i == len(shapes) - 1:
+            if i == len(parts) - 1:
                 return end >= 1 - _SHARED_EDGE_EPS
             if exit_edge_t <= _SHARED_EDGE_MARGIN or exit_edge_t >= 1 - _SHARED_EDGE_MARGIN:
                 return False
@@ -174,18 +127,20 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
 
     def settle(cell_a: int, shape_a: dict, cell_b: int, shape_b: dict, arc: int) -> bool:
         """
-        Settle the sub-segment from cell A to cell B without the full search. It
-        usually runs straight from A into B; failing that, it usually clips one
-        cell C between them, found at the middle of the gap and then visited.
-        False sends the sub-segment to the full search.
+        Settle the sub-segment from cell A to cell B (on one origin) without the
+        full search. It usually runs straight from A into B; failing that, it
+        usually clips one cell C between them, found at the middle of the gap and
+        then visited. False sends the sub-segment to the full search.
         """
-        if shape_a['origin_id'] != shape_b['origin_id']:
-            return False
-        if covers_exactly([shape_a, shape_b]):
-            return True
         origin_id = shape_a['origin_id']
-        in_a = _clip_to_pentagon(shape_a['pentagon'], face_a[origin_id], face_b[origin_id])
-        in_b = _clip_to_pentagon(shape_b['pentagon'], face_a[origin_id], face_b[origin_id])
+        if shape_b['origin_id'] != origin_id:
+            return False
+        project(origin_id)
+        fa, fb = face_a[origin_id], face_b[origin_id]
+        in_a = shape_a['pentagon'].clip_segment(fa, fb)
+        in_b = shape_b['pentagon'].clip_segment(fa, fb)
+        if hands_over([in_a, in_b]):
+            return True
         if in_a is None or in_b is None or in_b[0] <= in_a[1]:
             return False
         t = (in_a[1] + in_b[0]) / 2
@@ -195,37 +150,27 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
         length = math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2])
         cell_c = spherical_to_cell(to_spherical((m[0] / length, m[1] / length, m[2] / length)), resolution)
         shape_c = last_cell_shape(cell_c)
-        if shape_c is None or cell_c == cell_a or cell_c == cell_b or not covers_exactly([shape_a, shape_c, shape_b]):
+        if shape_c is None or shape_c['origin_id'] != origin_id or cell_c == cell_a or cell_c == cell_b:
+            return False
+        if not hands_over([in_a, shape_c['pentagon'].clip_segment(fa, fb), in_b]):
             return False
         visit(cell_c, arc)
         return True
 
     def search_subsegment(cell_a: int, cell_b: int, arc: int) -> None:
         """
-        Strict local BFS: expand neighbors of every cell known to touch the
-        sub-segment, keeping anything whose pentagon the sub-segment crosses.
-        Terminates as soon as no new touching cells are found -- typically 1-2
-        hops, since a sub-segment <= cellRadius/2 reaches at most a couple of
-        cells beyond its endpoint cells.
+        Strict local search: walk out from A and B, keeping every cell whose
+        pentagon the sub-segment crosses. Terminates as soon as no new touching
+        cells are found -- typically 1-2 hops, since a sub-segment <= cellRadius/2
+        reaches at most a couple of cells beyond its endpoint cells.
         """
-        frontier = cell_ids_to_triples([cell_a, cell_b])
-        visited: Set[int] = {triple_cell_key(*frontier[0:5]), triple_cell_key(*frontier[5:10])}
-        while frontier:
-            next_frontier: List[int] = []
+        def expand(origin_id: int, quintant: int, x: int, y: int, z: int) -> bool:
+            if not touches(origin_id, quintant, Triple(x, y, z)):
+                return False
+            visit(triple_cell_to_id(origin_id, quintant, x, y, z, hilbert_res, resolution), arc)
+            return True
 
-            def visit_neighbor(origin_id: int, quintant: int, x: int, y: int, z: int) -> None:
-                key = triple_cell_key(origin_id, quintant, x, y, z)
-                if key in visited:
-                    return
-                visited.add(key)
-                if touches(origin_id, quintant, Triple(x, y, z)):
-                    visit(triple_cell_to_id(origin_id, quintant, x, y, z, hilbert_res, resolution), arc)
-                    next_frontier.extend((origin_id, quintant, x, y, z))
-
-            for c in range(0, len(frontier), 5):
-                for_each_triple_neighbor(frontier[c], frontier[c + 1], frontier[c + 2], frontier[c + 3],
-                                         frontier[c + 4], max_row, False, visit_neighbor)
-            frontier = next_frontier
+        walk_triple_cells(cell_ids_to_triples([cell_a, cell_b]), max_row, expand)
 
     arcs = n if closed else n - 1
     for arc in range(arcs):

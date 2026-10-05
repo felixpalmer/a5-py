@@ -99,6 +99,32 @@ def for_each_triple_neighbor(origin_id: int, quintant: int, x: int, y: int, z: i
         _visit_boundary(origin_id, quintant, triple, max_row, edge_only, False, visit)
 
 
+def walk_triple_cells(seeds: List[int], max_row: int, expand: Callable[[int, int, int, int, int], bool]) -> None:
+    """
+    Breadth-first walk from `seeds` (flat triples) through neighbors (edge and
+    vertex, across quintant edges too): each cell reached is passed to `expand`
+    once, and the walk continues from those it returns True for. The seeds count
+    as reached but are not passed to `expand`.
+    """
+    visited = {triple_cell_key(*seeds[c:c + 5]) for c in range(0, len(seeds), 5)}
+    frontier = seeds
+    while frontier:
+        next_frontier: List[int] = []
+
+        def visit(origin_id: int, quintant: int, x: int, y: int, z: int) -> None:
+            key = triple_cell_key(origin_id, quintant, x, y, z)
+            if key in visited:
+                return
+            visited.add(key)
+            if expand(origin_id, quintant, x, y, z):
+                next_frontier.extend((origin_id, quintant, x, y, z))
+
+        for c in range(0, len(frontier), 5):
+            for_each_triple_neighbor(frontier[c], frontier[c + 1], frontier[c + 2], frontier[c + 3],
+                                     frontier[c + 4], max_row, False, visit)
+        frontier = next_frontier
+
+
 def for_each_lattice_neighbor(origin_id: int, quintant: int, x: int, y: int, z: int,
                               max_row: int, visit: TripleCellVisitor) -> None:
     """
