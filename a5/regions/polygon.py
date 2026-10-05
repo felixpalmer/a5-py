@@ -9,7 +9,7 @@ from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_to_spherical
 from ..core.coordinate_transforms import from_lonlat, to_cartesian, to_spherical
 from ..core.serialization import (
-    cell_to_parent, cell_to_children, deserialize, get_resolution, serialize,
+    cell_to_children, deserialize, get_resolution, serialize,
     FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 )
 from ..core.compact import compact
@@ -21,7 +21,8 @@ from ..traversal.cap import estimate_cell_radius
 from ..utils.great_circle import sample_great_circle_arc
 from ..traversal.lattice_flood_fill import triple_space_flood_fill
 from ..traversal.triple_cells import (
-    cell_ids_to_triples, for_each_lattice_neighbor, triple_cell_center, triple_cell_key, triple_cell_to_id,
+    cell_ids_to_triples, for_each_lattice_neighbor, triple_cell_center, triple_cell_key, triple_cells_to_ids,
+    triple_children, triple_parent,
 )
 
 
@@ -144,24 +145,23 @@ def _expand_shell(boundary: List[int], max_row: int) -> List[int]:
     return shell
 
 
-def _flood_interior(
-    seeds: List[int], boundary_cells: List[int], boundary: List[int], exterior_shell: List[int], resolution: int,
-) -> List[int]:
+def _flood_interior(seeds: List[int], boundary: List[int], exterior_shell: List[int], resolution: int) -> List[int]:
     """
     Hierarchical flood fill from interior seed cells. Runs a few fine BFS layers
     to clear the boundary, then a coarse-resolution BFS through the bulk, then
     resumes fine BFS to fill gaps near the boundary. The coarse phase is skipped
     when the polygon is too small to amortize its setup overhead.
 
-    The seeds, boundary and exterior shell come in triple space (cells as flat
-    (origin_id, quintant, x, y, z)); the boundary also as cell IDs.
+    All in triple space (cells as flat (origin_id, quintant, x, y, z)), moving
+    between resolutions with `triple_parent` / `triple_children`; only the cells
+    emitted are encoded.
     """
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    seed_ids = [triple_cell_to_id(*seeds[c:c + 5], hilbert_res, resolution) for c in range(0, len(seeds), 5)]
     firewall = boundary + exterior_shell
 
     # Isoperimetric bound: B^2 / (4*pi) is the max interior for B boundary cells.
-    max_interior = len(boundary_cells) * len(boundary_cells) / (4 * math.pi)
+    boundary_size = len(boundary) // 5
+    max_interior = boundary_size * boundary_size / (4 * math.pi)
     # res 30 has a different encoding the parent-emit optimization can't use.
     use_coarse_phase = (
         resolution > FIRST_HILBERT_RESOLUTION
@@ -171,59 +171,42 @@ def _flood_interior(
 
     if not use_coarse_phase:
         result = triple_space_flood_fill(firewall, seeds, resolution)
-        return seed_ids + result['interior_cells']
+        return triple_cells_to_ids(seeds + result['interior'], hilbert_res, resolution)
 
-    parent_res = resolution - 1
-    coarse_firewall: Set[int] = set()
-    for cell in boundary_cells:
-        coarse_firewall.add(cell_to_parent(cell, parent_res))
-    for c in range(0, len(exterior_shell), 5):
-        coarse_firewall.add(cell_to_parent(triple_cell_to_id(*exterior_shell[c:c + 5], hilbert_res, resolution), parent_res))
-    for cell in seed_ids:
-        coarse_firewall.add(cell_to_parent(cell, parent_res))
+    parent_max_row = (1 << (hilbert_res - 1)) - 1
+
+    def parents(cells: List[int]) -> List[int]:
+        out: List[int] = []
+        for c in range(0, len(cells), 5):
+            triple_parent(*cells[c:c + 5], parent_max_row, out)
+        return out
+
+    def key(cells: List[int], c: int) -> int:
+        return triple_cell_key(*cells[c:c + 5])
+
+    coarse_firewall = parents(firewall + seeds)
 
     # Phase 1: short fine BFS to move the frontier off the boundary.
     phase1 = triple_space_flood_fill(firewall, seeds, resolution, 3)
 
-    # Phase 2: coarse BFS through the bulk interior.
-    coarse_interior_set = None
+    # Phase 2: coarse BFS through the bulk interior, seeded by the parents of the
+    # phase 1 frontier that aren't firewall parents.
+    seen = {key(coarse_firewall, c) for c in range(0, len(coarse_firewall), 5)}
+    frontier_parents = parents(phase1['frontier'])
+    coarse_seeds: List[int] = []
+    for c in range(0, len(frontier_parents), 5):
+        k = key(frontier_parents, c)
+        if k not in seen:
+            seen.add(k)
+            coarse_seeds.extend(frontier_parents[c:c + 5])
+    coarse_interior: List[int] = []
     phase3_delta: List[int] = []
-    coarse_interior_cells: List[int] = []
-    if len(phase1['frontier_cell_ids']) > 0:
-        coarse_seeds: Set[int] = set()
-        for cell in phase1['frontier_cell_ids']:
-            parent = cell_to_parent(cell, parent_res)
-            if parent not in coarse_firewall:
-                coarse_seeds.add(parent)
-
-        if len(coarse_seeds) > 0:
-            coarse_visited = set(coarse_firewall)
-            for seed in coarse_seeds:
-                coarse_visited.add(seed)
-            coarse_result = triple_space_flood_fill(
-                cell_ids_to_triples(coarse_visited), cell_ids_to_triples(coarse_seeds), parent_res)
-            coarse_interior = list(coarse_seeds) + coarse_result['interior_cells']
-            coarse_interior_set = set(coarse_interior)
-            coarse_interior_cells.extend(coarse_interior)
-
-            # Children become firewall for phase 3; the coarse parent represents
-            # them in the output, so we don't emit them individually.
-            for coarse_cell in coarse_interior:
-                cell_ids_to_triples(cell_to_children(coarse_cell, resolution), phase3_delta)
-
-    # Emit fine cells only when not already covered by a coarse parent.
-    interior_cells: List[int] = []
-    if coarse_interior_set is None:
-        interior_cells.extend(seed_ids)
-        interior_cells.extend(phase1['interior_cells'])
-    else:
-        for cell in seed_ids:
-            if cell_to_parent(cell, parent_res) not in coarse_interior_set:
-                interior_cells.append(cell)
-        for cell in phase1['interior_cells']:
-            if cell_to_parent(cell, parent_res) not in coarse_interior_set:
-                interior_cells.append(cell)
-        interior_cells.extend(coarse_interior_cells)
+    if coarse_seeds:
+        coarse_interior = coarse_seeds + triple_space_flood_fill(coarse_firewall, coarse_seeds, resolution - 1)['interior']
+        # Children become firewall for phase 3; the coarse parent represents
+        # them in the output, so we don't emit them individually.
+        for c in range(0, len(coarse_interior), 5):
+            triple_children(*coarse_interior[c:c + 5], parent_max_row, phase3_delta)
 
     # Phase 3: resume fine BFS, reusing phase 1's state.
     phase3 = triple_space_flood_fill(
@@ -231,9 +214,17 @@ def _flood_interior(
         phase1['frontier'],
         resolution,
     )
-    interior_cells.extend(phase3['interior_cells'])
 
-    return interior_cells
+    # Emit fine cells only when not already covered by a coarse parent.
+    covered = {key(coarse_interior, c) for c in range(0, len(coarse_interior), 5)}
+    fine = seeds + phase1['interior']
+    fine_parents = parents(fine)
+    emitted: List[int] = []
+    for c in range(0, len(fine), 5):
+        if key(fine_parents, c) not in covered:
+            emitted.extend(fine[c:c + 5])
+    out = triple_cells_to_ids(emitted + phase3['interior'], hilbert_res, resolution)
+    return triple_cells_to_ids(coarse_interior, hilbert_res - 1, resolution - 1, out)
 
 
 def _swallowed_quintants(
@@ -397,6 +388,6 @@ def polygon_to_cells(
     if len(seeds) == 0:
         return compact(boundary_out + swallowed)
 
-    interior_cells = _flood_interior(seeds, boundary_cells, boundary, exterior_shell, resolution)
+    interior_cells = _flood_interior(seeds, boundary, exterior_shell, resolution)
 
     return compact(boundary_out + interior_cells + swallowed)
