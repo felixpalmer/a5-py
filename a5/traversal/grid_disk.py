@@ -4,7 +4,7 @@
 
 from typing import List, Set
 
-from ..core.compact import compact
+from ..collections.slot_runs import compact_cells, to_collection
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
 from ..core.origin import origins
 from ..core.face_adjacency import walk_faces
@@ -51,15 +51,17 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
     behind the frontier can never be re-discovered). Evicted interior cells are
     periodically compacted to reduce memory pressure.
     """
-    if k == 0:
-        return [cell_id]
     cell = deserialize(cell_id)
     origin = cell['origin']
     resolution = cell['resolution']
+    if k == 0:
+        return to_collection([cell_id], resolution)
     if resolution == 0:
         # The cells are the 12 dodecahedron faces
         faces = walk_faces([origin.id], lambda face: True, k)
-        return compact([serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0}) for face in faces])
+        return to_collection(
+            [serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0}) for face in faces], 0
+        )
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     max_row = (1 << hilbert_res) - 1
     seed = cell_ids_to_triples([cell_id])
@@ -91,7 +93,7 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
 
         # Progressively compact interior to reduce memory pressure
         if len(interior) > 100:
-            interior = list(compact(interior))
+            interior = compact_cells(interior)
 
         prev_frontier = frontier
         frontier = next_frontier
@@ -100,13 +102,14 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
     _push_cell_ids(interior, prev_frontier.cells, hilbert_res, resolution)
     _push_cell_ids(interior, frontier.cells, hilbert_res, resolution)
 
-    return compact(interior)
+    return to_collection(interior, resolution)
 
 
 def grid_disk(cell_id: int, k: int) -> List[int]:
     """
     Compute the grid disk of edge-sharing neighbors within k hops.
-    Returns a sorted, compacted list of cell IDs including the center cell.
+    Returns compacted cell IDs including the center cell, sorted in curve
+    order, then a compaction marker recording the resolution.
 
     This matches H3's gridDisk semantics -- only edge-sharing neighbors are
     followed. For A5 pentagons, each cell has exactly 5 edge neighbors.
@@ -117,7 +120,8 @@ def grid_disk(cell_id: int, k: int) -> List[int]:
 def grid_disk_vertex(cell_id: int, k: int) -> List[int]:
     """
     Compute the grid disk of all neighbors (edge + vertex sharing) within k hops.
-    Returns a sorted, compacted list of cell IDs including the center cell.
+    Returns compacted cell IDs including the center cell, sorted in curve
+    order, then a compaction marker recording the resolution.
 
     This is an A5 extension -- pentagons have both edge-sharing (5) and
     vertex-only-sharing neighbors (1-3), giving 6-8 total neighbors per cell.

@@ -5,7 +5,7 @@
 import json
 from pathlib import Path
 
-from a5 import polygon_to_cells, uncompact, u64_to_hex
+from a5 import polygon_to_cells, uncompact, u64_to_hex, count, get_compaction_resolution
 
 
 def load_fixtures():
@@ -24,7 +24,7 @@ class TestPolygonToCells:
         for f in fixtures["polygon"]:
             rings = to_rings(f["polygon"])
             result = polygon_to_cells(rings, f["resolution"])
-            expanded = uncompact(result, f["resolution"])
+            expanded = uncompact(result)
             sorted_cells = sorted(expanded)
             result_hex = [u64_to_hex(c) for c in sorted_cells]
             assert result_hex == f["cells"], f'fixture {f["name"]}'
@@ -34,15 +34,15 @@ class TestPolygonToCells:
         for f in fixtures["overlapping"]:
             rings = to_rings(f["polygon"])
             result = polygon_to_cells(rings, f["resolution"], {"containment": "overlapping"})
-            expanded = uncompact(result, f["resolution"])
+            expanded = uncompact(result)
             sorted_cells = sorted(expanded)
             result_hex = [u64_to_hex(c) for c in sorted_cells]
             assert result_hex == f["cells"], f'fixture {f["name"]}'
 
     def test_overlapping_is_superset_of_center(self):
         ring = [(-5.0, 54.0), (15.0, 54.0), (15.0, 44.0), (-5.0, 44.0)]
-        center = set(uncompact(polygon_to_cells(ring, 6), 6))
-        overlapping = set(uncompact(polygon_to_cells(ring, 6, {"containment": "overlapping"}), 6))
+        center = set(uncompact(polygon_to_cells(ring, 6)))
+        overlapping = set(uncompact(polygon_to_cells(ring, 6, {"containment": "overlapping"})))
         assert center <= overlapping
         assert len(overlapping) > len(center)
 
@@ -50,13 +50,20 @@ class TestPolygonToCells:
         ring = [(-5.0, 54.0), (15.0, 54.0), (15.0, 44.0), (-5.0, 44.0)]
         assert polygon_to_cells(ring, 6) == polygon_to_cells(ring, 6, {"containment": "center"})
 
-    def test_returns_empty_for_less_than_3_vertices(self):
-        assert polygon_to_cells([], 5) == []
-        assert polygon_to_cells([(0.0, 0.0), (1.0, 1.0)], 5) == []
-        # Nested form with a degenerate outer ring
-        assert polygon_to_cells([[(0.0, 0.0), (1.0, 1.0)]], 5) == []
-        # Closed ring with only 2 distinct vertices
-        assert polygon_to_cells([(0.0, 0.0), (1.0, 1.0), (0.0, 0.0)], 5) == []
+    def test_returns_empty_collection_for_less_than_3_vertices(self):
+        degenerate = [
+            [],
+            [(0.0, 0.0), (1.0, 1.0)],
+            # Nested form with a degenerate outer ring
+            [[(0.0, 0.0), (1.0, 1.0)]],
+            # Closed ring with only 2 distinct vertices
+            [(0.0, 0.0), (1.0, 1.0), (0.0, 0.0)],
+        ]
+        for polygon in degenerate:
+            cells = polygon_to_cells(polygon, 5)
+            assert count(cells) == 0
+            # The empty collection still records its resolution
+            assert get_compaction_resolution(cells) == 5
 
     def test_accepts_geojson_style_closed_rings(self):
         ring = [(-5.0, 54.0), (15.0, 54.0), (15.0, 44.0), (-5.0, 44.0)]
@@ -82,6 +89,6 @@ class TestPolygonToCells:
         for f in country_cases:
             rings = to_rings(f["polygon"])
             result = polygon_to_cells(rings, f["resolution"])
-            expanded = uncompact(result, f["resolution"])
+            expanded = uncompact(result)
             unique = set(expanded)
             assert len(unique) == f["cellCount"], f'fixture {f["name"]}'

@@ -4,7 +4,7 @@
 
 # Polygon fill by flooding the interior: cheaper than curve runs when the
 # interior is small, as the flood costs about boundary + interior cells while
-# the runs sort a band of boundary plus ring keys.
+# the runs sort a band of boundary plus ring slots.
 
 import math
 from typing import List
@@ -12,7 +12,6 @@ from typing import List
 from ..core.coordinate_systems import Cartesian
 from ..core.coordinate_transforms import to_cartesian
 from ..core.serialization import FIRST_HILBERT_RESOLUTION
-from ..core.compact import compact
 from ..core.cell_info import get_num_cells
 from ..traversal.lattice_flood_fill import triple_space_flood_fill
 from ..traversal.triple_cells import for_each_lattice_neighbor, triple_cell_center, triple_cell_to_id
@@ -38,7 +37,8 @@ def prefers_flood(
 def fill_by_flood(boundary: Boundary, triples: List[int], resolution: int, overlapping: bool) -> List[int]:
     """
     Fill a polygon by flooding its interior, given its classified boundary and
-    the boundary cells as flat triples.
+    the boundary cells as flat triples. Returns the cells inside, uncompacted and
+    unsorted.
     """
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
     max_row = (1 << hilbert_res) - 1
@@ -59,4 +59,4 @@ def fill_by_flood(boundary: Boundary, triples: List[int], resolution: int, overl
         for c in range(0, len(seeds), 5):
             out.append(triple_cell_to_id(*seeds[c:c + 5], hilbert_res, resolution))
         out.extend(triple_space_flood_fill(firewall, seeds, resolution)['interior_cells'])
-    return compact(out)
+    return out

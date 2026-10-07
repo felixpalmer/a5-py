@@ -7,36 +7,191 @@ from .origin import origins
 
 FIRST_HILBERT_RESOLUTION = 2
 MAX_RESOLUTION = 30
-HILBERT_START_BIT = 58  # 64 - 6 bits for origin & segment
+# IDs below res 30 start with a 6-bit origin (res 0) or quintant, above S
+QUINTANT_SHIFT = 58
+S_MASK = (1 << QUINTANT_SHIFT) - 1
 
 # Abstract cell that contains the whole world, has resolution -1 and 12 children,
 # which are the res0 cells.
 WORLD_CELL = 0
 
+# Resolution 30 IDs have no room for a 6-bit quintant: its field is 5, 3 or 1
+# bits wide, marked by the tag (lowest bits) ...1, ...100 or ...10000:
+#   ...1     -> 5-bit quintant (0-31),  58-bit S
+#   ...100   -> 3-bit quintant (32-39), 58-bit S
+#   ...10000 -> 1-bit quintant (40-41), 58-bit S
+# Quintants 42-59 have no res-30 IDs.
+
+
+def _res30_to_slot(index: int) -> int:
+    """The leaf slot of a res-30 ID: its quintant, then its 58-bit S (see Leaf slots below)."""
+    if index & 1:
+        return ((index >> 59) << QUINTANT_SHIFT) | ((index >> 1) & S_MASK)
+    if index & 0b100:
+        return (((index >> 61) + 32) << QUINTANT_SHIFT) | ((index >> 3) & S_MASK)
+    return (((index >> 63) + 40) << QUINTANT_SHIFT) | ((index >> 5) & S_MASK)
+
+
+def _slot_to_res30(slot: int) -> int:
+    """The res-30 ID of a leaf slot in quintants 0-41."""
+    q = slot >> QUINTANT_SHIFT
+    s = slot & S_MASK
+    if q < 32:
+        return (q << 59) | (s << 1) | 1
+    if q < 40:
+        return ((q - 32) << 61) | (s << 3) | 0b100
+    return ((q - 40) << 63) | (s << 5) | 0b10000
+
+
+# Leaf slots. The A5 curve, at resolution 30, passes through every leaf
+# (res-30) cell of the globe once: picture it as a line of slots, one per leaf
+# cell, numbered in curve order from 0 to 60 * 4^29 - 1. A leaf slot is the
+# 6-bit quintant (0-59) then the leaf's S, left-aligned below it.
+#
+# A cell at resolution r occupies 4^(30-r) consecutive slots, an aligned block
+# starting at its first slot, and the cells of a resolution step along the
+# slots in strides of that size, as the Hilbert curve does. Unlike cell IDs,
+# whose layout differs at resolutions 0, 1 and 30, slots put every cell on one
+# integer line in curve order, including all 60 quintants at resolution 30.
+# A leaf slot is not a cell ID.
+
+QUINTANT_SLOTS = 1 << QUINTANT_SHIFT
+ORIGIN_SLOTS = 5 * QUINTANT_SLOTS
+WORLD_SLOTS = 60 * QUINTANT_SLOTS
+
+# By resolution 0..30: the resolution tag (lowest set bit) of a cell below
+# res 30, and the number of slots a cell occupies.
+RESOLUTION_TAGS: List[int] = [
+    1 << 57 if r == 0 else 1 << 56 if r == 1 else 1 << max(59 - 2 * r, 0) for r in range(MAX_RESOLUTION + 1)
+]
+SLOT_COUNTS: List[int] = [
+    ORIGIN_SLOTS if r == 0 else QUINTANT_SLOTS if r == 1 else 1 << (60 - 2 * r) for r in range(MAX_RESOLUTION + 1)
+]
+
+# Res-30 IDs end in ...1, ...100 or ...10000: their tag has one of these bits
+RES30_TAG_BITS = 0b10101
+
+
+# The tags of resolutions 2-29: the odd bits 55 down to 1
+_HILBERT_TAG_BITS = 0
+for _tag in RESOLUTION_TAGS[FIRST_HILBERT_RESOLUTION:MAX_RESOLUTION]:
+    _HILBERT_TAG_BITS |= _tag
+
+
+def cell_first_slot(cell: int) -> int:
+    """
+    The first slot a cell occupies. Raises ValueError if the value is not an A5
+    cell ID: its tag (lowest set bit) must be a resolution tag, and its origin
+    (res 0) or quintant (res 1-29) must exist. Every res-30 pattern decodes to an
+    existing quintant (0-41).
+    """
+    # The resolution tag: the lowest set bit (0 for the world cell)
+    tag = cell & -cell
+    if tag < RESOLUTION_TAGS[1]:
+        if tag & RES30_TAG_BITS:
+            return _res30_to_slot(cell)
+        # Resolutions 2-29, in quintants 0-59: the first slot is the ID without its tag
+        if (tag & _HILBERT_TAG_BITS) and cell < WORLD_SLOTS:
+            return cell - tag
+        if tag == 0:
+            return 0
+    else:
+        # Resolution 0 (tag bit 57) starts its origin's 5 quintants, 1 (bit 56) its quintant
+        top = cell >> QUINTANT_SHIFT
+        if tag == RESOLUTION_TAGS[0] and top < 12:
+            return (5 * top) << QUINTANT_SHIFT
+        if tag == RESOLUTION_TAGS[1] and top < 60:
+            return top << QUINTANT_SHIFT
+    raise _invalid_cell(cell)
+
+
+def cell_first_slot_unchecked(cell: int) -> int:
+    """
+    The first slot of a cell, without checking that the value is an A5 cell ID:
+    for searches, which check the cell they land on. A value that is not a cell
+    gives a meaningless slot.
+    """
+    tag = cell & -cell
+    if tag == 0:
+        return 0
+    if tag >= RESOLUTION_TAGS[1]:
+        top = cell >> QUINTANT_SHIFT
+        return (5 * top if tag == RESOLUTION_TAGS[0] else top) << QUINTANT_SHIFT
+    if tag & RES30_TAG_BITS:
+        return _res30_to_slot(cell)
+    return cell - tag
+
+
+def checked_resolution(cell: int) -> int:
+    """
+    The resolution of a cell, as `get_resolution` gives it, but raising ValueError
+    if the value is not an A5 cell ID (see `cell_first_slot` for what that requires).
+    """
+    tag = cell & -cell
+    if tag == 0:
+        return -1
+    bit = tag.bit_length() - 1
+    if bit < 56:
+        if bit % 2 == 1 and cell < WORLD_SLOTS:
+            return (59 - bit) >> 1
+        if bit <= 4 and bit % 2 == 0:
+            return MAX_RESOLUTION
+    else:
+        top = cell >> QUINTANT_SHIFT
+        if bit == 57 and top < 12:
+            return 0
+        if bit == 56 and top < 60:
+            return 1
+    raise _invalid_cell(cell)
+
+
+def _invalid_cell(cell: int) -> ValueError:
+    return ValueError(f"Invalid cell: {cell:#x}")
+
+
+def cell_slot_count(cell: int) -> int:
+    """The number of slots a cell occupies."""
+    # The resolution tag: the lowest set bit (0 for the world cell)
+    tag = cell & -cell
+    if tag == 0:
+        return WORLD_SLOTS
+    if tag == RESOLUTION_TAGS[0]:
+        return ORIGIN_SLOTS
+    if tag == RESOLUTION_TAGS[1]:
+        return QUINTANT_SLOTS
+    if tag & RES30_TAG_BITS:
+        return 1
+    # Resolutions 2-29: the slots are symmetric about the ID
+    return tag << 1
+
+
+def slot_to_cell(slot: int, resolution: int) -> int:
+    """The res-r cell whose block of slots starts at `slot`."""
+    if resolution < 0:
+        return WORLD_CELL
+    if 0 < resolution < MAX_RESOLUTION:
+        return slot + RESOLUTION_TAGS[resolution]
+    if resolution == 0:
+        return (((slot >> QUINTANT_SHIFT) // 5) << QUINTANT_SHIFT) | RESOLUTION_TAGS[0]
+    return _slot_to_res30(slot)
+
 
 def get_resolution(index: int) -> int:
-    """Find resolution from position of first non-00 bits from the right."""
-    if index == 0:
+    """The resolution of a cell, from its resolution tag (lowest set bit)."""
+    # The tag's position gives the resolution: bit 57 is res 0, 56 res 1,
+    # 59 - 2r res r (2-29), and res 30 uses the patterns ...1, ...100 and
+    # ...10000 (bits 0, 2 and 4). The world cell has no tag.
+    tag = index & -index
+    if tag == 0:
         return -1
-
-    # Resolution 30 uses three encoding patterns:
-    #   ...1     -> 5-bit quintant (0-31),  58-bit S
-    #   ...100   -> 3-bit quintant (32-39), 58-bit S
-    #   ...10000 -> 1-bit quintant (40-41), 58-bit S
-    if (index & 1) or (index & 0b111) == 0b100 or (index & 0b11111) == 0b10000:
+    bit = tag.bit_length() - 1
+    if bit == 57:
+        return 0
+    if bit == 56:
+        return 1
+    if bit <= 4 and bit % 2 == 0:
         return MAX_RESOLUTION
-
-    resolution = MAX_RESOLUTION - 1
-    shifted = index >> 1
-    if shifted == 0:
-        return -1
-
-    while resolution > -1 and (shifted & 1) == 0:
-        resolution -= 1
-        # For non-Hilbert resolutions, resolution marker moves by 1 bit per resolution
-        # For Hilbert resolutions, resolution marker moves by 2 bits per resolution
-        shifted >>= 1 if resolution < FIRST_HILBERT_RESOLUTION else 2
-    return resolution
+    return (59 - bit) >> 1
 
 
 def deserialize(index: int) -> A5Cell:
@@ -48,41 +203,15 @@ def deserialize(index: int) -> A5Cell:
     if resolution == -1:
         return A5Cell(origin=origins[0], segment=0, S=0, resolution=resolution)
 
-    # For res 30, quintant bits are fewer to make room for S:
-    #   ...1     marker (1 bit)  -> 5-bit quintant (0-31)
-    #   ...100   marker (3 bits) -> 3-bit quintant + 32 (32-39)
-    #   ...10000 marker (5 bits) -> 1-bit quintant + 40 (40-41)
-    quintant_shift = HILBERT_START_BIT
-    quintant_offset = 0
-    if resolution == MAX_RESOLUTION:
-        marker_bits = 1 if (index & 1) else (3 if (index & 0b100) else 5)
-        quintant_shift = HILBERT_START_BIT + marker_bits
-        quintant_offset = 0 if marker_bits == 1 else (32 if marker_bits == 3 else 40)
-
-    # Extract origin*segment from top bits
-    top_bits = (index >> quintant_shift) + quintant_offset
-
-    # Find origin and segment
+    # The cell's first slot holds its quintant, then its S above the slots of one cell
+    slot = cell_first_slot(index)
+    quintant = slot >> QUINTANT_SHIFT
+    origin = origins[quintant // 5]
     if resolution == 0:
-        origin = origins[top_bits]
-        segment = 0
-    else:
-        origin_id = top_bits // 5
-        origin = origins[origin_id]
-        segment = (top_bits + origin.first_quintant) % 5
+        return A5Cell(origin=origin, segment=0, S=0, resolution=resolution)
 
-    if origin is None:
-        raise ValueError(f"Could not parse origin: {top_bits}")
-
-    if resolution < FIRST_HILBERT_RESOLUTION:
-        return A5Cell(origin=origin, segment=segment, S=0, resolution=resolution)
-
-    # Mask away origin & segment and shift away resolution and marker bits
-    hilbert_levels = resolution - FIRST_HILBERT_RESOLUTION + 1
-    hilbert_bits = 2 * hilbert_levels
-    removal_mask = (1 << quintant_shift) - 1
-    S = (index & removal_mask) >> (quintant_shift - hilbert_bits)
-
+    segment = (quintant + origin.first_quintant) % 5
+    S = 0 if resolution < FIRST_HILBERT_RESOLUTION else (slot & S_MASK) // SLOT_COUNTS[resolution]
     return A5Cell(origin=origin, segment=segment, S=S, resolution=resolution)
 
 
@@ -98,55 +227,20 @@ def serialize(cell: A5Cell) -> int:
 
     if resolution == -1:
         return WORLD_CELL
-
-    # For res 30, quintant bits are fewer to make room for S:
-    #   quintant 0-31:  ...1     marker -> 5-bit quintant
-    #   quintant 32-39: ...100   marker -> 3-bit quintant + 32
-    #   quintant 40-41: ...10000 marker -> 1-bit quintant + 40
-    #   quintant 42+:   fall back to res 29
-    quintant_shift = HILBERT_START_BIT
-
-    # Position of resolution marker as bit shift from LSB
-    if resolution < FIRST_HILBERT_RESOLUTION:
-        R = resolution + 1
-    else:
-        hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
-        R = 2 * hilbert_resolution + 1
-
-    # Top bits encode the origin id and segment
-    segment_n = (segment - origin.first_quintant + 5) % 5
-
     if resolution == 0:
-        index = origin.id << quintant_shift
-    else:
-        quintant = 5 * origin.id + segment_n
-        if resolution == MAX_RESOLUTION:
-            if quintant <= 31:
-                quintant_shift = HILBERT_START_BIT + 1
-                quintant_value = quintant
-            elif quintant <= 39:
-                quintant_shift = HILBERT_START_BIT + 3
-                quintant_value = quintant - 32
-            elif quintant <= 41:
-                quintant_shift = HILBERT_START_BIT + 5
-                quintant_value = quintant - 40
-            else:
-                return serialize(A5Cell(origin=origin, segment=segment, S=S >> 2, resolution=MAX_RESOLUTION - 1))
-            index = quintant_value << quintant_shift
-        else:
-            index = quintant << quintant_shift
+        return slot_to_cell(5 * origin.id * QUINTANT_SLOTS, 0)
 
-    if resolution >= FIRST_HILBERT_RESOLUTION:
-        hilbert_levels = resolution - FIRST_HILBERT_RESOLUTION + 1
-        hilbert_bits = 2 * hilbert_levels
-        if S >= (1 << hilbert_bits):
-            raise ValueError(f"S ({S}) is too large for resolution level {resolution}")
-        index += S << (quintant_shift - hilbert_bits)
+    # The cell's first slot: its quintant, then S cells of this resolution into it
+    offset = S * SLOT_COUNTS[resolution] if resolution >= FIRST_HILBERT_RESOLUTION else 0
+    if offset >= QUINTANT_SLOTS:
+        raise ValueError(f"S ({S}) is too large for resolution level {resolution}")
 
-    # Resolution is encoded by position of the least significant 1
-    index |= 1 << (quintant_shift - R)
+    quintant = 5 * origin.id + (segment - origin.first_quintant + 5) % 5
+    # Quintants 42+ have no res-30 IDs: fall back to res 29
+    if resolution == MAX_RESOLUTION and quintant > 41:
+        return serialize(A5Cell(origin=origin, segment=segment, S=S >> 2, resolution=MAX_RESOLUTION - 1))
+    return slot_to_cell((quintant << QUINTANT_SHIFT) + offset, resolution)
 
-    return index
 
 # The segments of an origin in ID (quintant) order, by its first_quintant
 _QUINTANT_SEGMENTS = [[(n + first) % 5 for n in range(5)] for first in range(5)]
@@ -188,31 +282,17 @@ def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List
     return children
 
 def _is_max_resolution(index: int) -> bool:
-    """Cheap predicate that mirrors the first three checks in get_resolution:
-    res-30 cells are exactly those whose low bits match one of the three
-    variable-width quintant marker patterns.
-    """
-    return (
-        (index & 1) != 0
-        or (index & 0b111) == 0b100
-        or (index & 0b11111) == 0b10000
-    )
+    """Whether a cell is at resolution 30: its tag is one of ...1, ...100 or ...10000."""
+    return (index & -index & RES30_TAG_BITS) != 0
 
 
 def _normalize_res30(index: int) -> int:
     """Re-pack a res-30 cell into the standard res-29 bit layout (6-bit quintant
-    in [63..58], 56-bit S in [57..2], marker at bit 1). The 58-bit res-30 S is
+    in [63..58], 56-bit S in [57..2], tag at bit 1). The 58-bit res-30 S is
     truncated by 2 bits, exactly as cell_to_parent(_, 29) would.
     """
-    if index & 1:
-        q_shift, q_offset, marker_bits = 59, 0, 1
-    elif index & 0b100:
-        q_shift, q_offset, marker_bits = 61, 32, 3
-    else:
-        q_shift, q_offset, marker_bits = 63, 40, 5
-    quintant = (index >> q_shift) + q_offset
-    s58 = (index >> marker_bits) & ((1 << 58) - 1)
-    return (quintant << 58) | ((s58 >> 2) << 2) | (1 << 1)
+    # The res-29 parent starts at the same slot, rounded down to its 4 children
+    return (_res30_to_slot(index) & ~3) | 0b10
 
 
 def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
@@ -247,14 +327,14 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
             return c
 
     if parent_resolution >= FIRST_HILBERT_RESOLUTION:
-        # Hilbert-range parent: clear bits below the parent marker, set the marker.
-        # Identity (parent res === child res) falls out for free: the marker lands
+        # Hilbert-range parent: clear bits below the parent tag, set the tag.
+        # Identity (parent res === child res) falls out for free: the tag lands
         # in the same position and bits below the keep cut are already zero.
         keep_shift = 60 - 2 * parent_resolution
         return ((c >> keep_shift) << keep_shift) | (1 << (59 - 2 * parent_resolution))
 
     if parent_resolution == 1:
-        # Top 6 bits already encode 5*originId + segmentN; only the marker moves.
+        # Top 6 bits already encode 5*originId + segmentN; only the tag moves.
         # Identity (cell already at res 1) is preserved.
         return ((c >> 58) << 58) | (1 << 56)
 
@@ -285,28 +365,6 @@ def get_res0_cells() -> List[int]:
     return list(_RES0_CELLS)
 
 
-def is_first_child(index: int, resolution: Optional[int] = None) -> bool:
-    """Check whether index corresponds to first child of its parent."""
-    if resolution is None:
-        resolution = get_resolution(index)
-
-    if resolution < 2:
-        # For resolution 0: first child is origin 0 (child count = 12)
-        # For resolution 1: first children are at multiples of 5 (child count = 5)
-        top6_bits = index >> HILBERT_START_BIT
-        child_count = 12 if resolution == 0 else 5
-        return top6_bits % child_count == 0
-
-    if resolution == MAX_RESOLUTION:
-        # S's 2 LSBs sit just above the marker bits
-        marker_bits = 1 if (index & 1) else (3 if (index & 0b100) else 5)
-        return (index & (3 << marker_bits)) == 0
-
-    s_position = 2 * (MAX_RESOLUTION - resolution)
-    s_mask = 3 << s_position  # Mask for the 2 LSBs of S
-    return (index & s_mask) == 0
-
-
 def is_child_of(child: int, parent: int, parent_resolution: int) -> bool:
     """Bit-level descendant test: is child the same cell as parent, or one of
     its descendants at any deeper resolution? Compares the high (quintant +
@@ -318,23 +376,8 @@ def is_child_of(child: int, parent: int, parent_resolution: int) -> bool:
     Callers handling those cases should fall back to cell_to_parent equality.
     """
     # Parent's identifying bits occupy positions 63..(60-2P): 6 quintant bits
-    # + 2(P-1) Hilbert bits. Bit (59-2P) is the marker, below that is zero.
+    # + 2(P-1) Hilbert bits. Bit (59-2P) is the tag, below that is zero.
     # Shifting both right by (60-2P) keeps exactly those identifying bits and
-    # discards the marker, so a descendant matches iff the high bits match.
+    # discards the tag, so a descendant matches iff the high bits match.
     shift = 60 - 2 * parent_resolution
     return (child >> shift) == (parent >> shift)
-
-
-def get_stride(resolution: int) -> int:
-    """Difference between two neighbouring sibling cells at a given resolution."""
-    # Both level 0 & 1 just write values 0-11 or 0-59 to the first 6 bits
-    if resolution < 2:
-        return 1 << HILBERT_START_BIT
-
-    # For res 30, S is shifted left by 1 (marker bit at position 0)
-    if resolution == MAX_RESOLUTION:
-        return 2
-
-    # For hilbert levels, the position shifts by 2 bits per resolution level
-    s_position = 2 * (MAX_RESOLUTION - resolution)
-    return 1 << s_position

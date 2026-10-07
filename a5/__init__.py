@@ -12,7 +12,13 @@ from a5.core.serialization import cell_to_parent, cell_to_children, get_resoluti
 from a5.core.cell_info import get_num_cells, get_num_children, cell_area, cell_edge_length_avg
 
 # Compaction
-from a5.core.compact import compact, uncompact
+from a5.collections.compact import compact, uncompact
+from a5.core.compaction_marker import is_compaction_marker
+
+# Collections
+from a5.collections.resolution import get_compaction_resolution
+from a5.collections.set_operations import contains, difference, intersect, overlaps, union
+from a5.collections.measures import area, count
 
 # Migration
 from a5.core.migrate import migrate
@@ -35,7 +41,9 @@ __all__ = [
     'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells', 'MAX_RESOLUTION', 'WORLD_CELL',
     'get_num_cells', 'get_num_children', 'cell_area', 'cell_edge_length_avg',
     # Compaction
-    'compact', 'uncompact',
+    'compact', 'uncompact', 'is_compaction_marker',
+    # Collections
+    'get_compaction_resolution', 'contains', 'difference', 'intersect', 'overlaps', 'union', 'area', 'count',
     # Migration
     'migrate',
     # Traversal

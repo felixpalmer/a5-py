@@ -19,7 +19,8 @@ Docs: ../a5/docs/api-reference/README.md
 
 ## Python Project Structure
 - `/a5` - Python source code organized into modules:
-  - `/core` - Core geospatial functionality (cell, hex, hilbert, serialization, etc.)
+  - `/core` - Core geospatial functionality (cell, hex, hilbert, serialization, leaf slots, compaction marker, etc.)
+  - `/collections` - Sets of cells: compact/uncompact, set operations, measures (depends only on `/core`)
   - `/math` - Mathematical primitives (vec2, vec3, quat)
   - `/geometry` - Geometric calculations (pentagon, spherical_triangle, spherical_polygon)
   - `/projections` - Map projection implementations (dodecahedron, authalic, gnomonic, etc.)
@@ -36,6 +37,7 @@ Docs: ../a5/docs/api-reference/README.md
 - **Resolution**: 0-30, where 0 is global coverage and 30 is ~30mm²
 - **Compaction**: Combining child cells into parent cells for efficient storage
 - **Cell ID**: Always an int (use `u64_to_hex()` for string representation)
+- **Collection / compaction marker**: compacting outputs (`compact`, `polygon_to_cells`, `spherical_cap`, `grid_disk`, set ops) end with a *compaction marker* recording the resolution, so `uncompact(cells)` takes no resolution. Inside `/a5`, compact intermediate results with `compact_cells` and finish public outputs with `to_collection(cells, resolution)` (`a5/collections/slot_runs.py`); skip markers with `is_compaction_marker` when iterating cells
 
 ## Commands
 ```bash

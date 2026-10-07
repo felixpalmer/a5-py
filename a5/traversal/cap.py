@@ -10,6 +10,7 @@ from ..core.serialization import (
 )
 from ..core.cell import cell_to_spherical
 from ..core.cell_info import cell_area
+from ..collections.slot_runs import to_collection
 from ..core.constants import AUTHALIC_RADIUS_EARTH
 from ..core.face_adjacency import walk_faces
 from ..core.origin import haversine, origins
@@ -97,8 +98,8 @@ def _coarse_cap_cells(start_cell: int, center: Spherical, h_expanded: float) -> 
 
 def spherical_cap(cell_id: int, radius: float) -> List[int]:
     """
-    Compute all cells within a great-circle radius, returning a naturally
-    compacted result (mix of resolutions).
+    Compute all cells within a great-circle radius, returning a compacted result
+    (mix of resolutions), with a compaction marker recording the resolution.
 
     Uses hierarchical BFS: starts at a coarse resolution and recursively
     subdivides boundary cells, keeping interior cells at coarser resolutions.
@@ -153,5 +154,4 @@ def spherical_cap(cell_id: int, radius: float) -> List[int]:
                     triple_children(*cell, max_row, children)
             cells = children
 
-    result.sort()
-    return result
+    return to_collection(result, target_res)
