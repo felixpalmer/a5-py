@@ -12,7 +12,7 @@ uk = country_polygon('United Kingdom')
 
 
 def _uncompact_at(cells, resolution):
-    # The resolution argument is for the pre-collection uncompact(cells, resolution),
+    # The resolution argument is for the pre-compaction-marker uncompact(cells, resolution),
     # which the baseline run may use; uncompact now reads it from the compaction marker.
     if len(inspect.signature(uncompact).parameters) == 2:
         return uncompact(cells, resolution)

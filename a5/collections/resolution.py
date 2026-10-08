@@ -8,10 +8,10 @@ from ..core.compaction_marker import compaction_marker_resolution, is_compaction
 from ..core.serialization import RES30_TAG_BITS, RESOLUTION_TAGS, get_resolution, MAX_RESOLUTION
 
 
-def get_compaction_resolution(cells: Sequence[int]) -> int:
+def covering_resolution(cells: Sequence[int]) -> int:
     """
     The resolution of a set of cells: the resolution of its compaction marker, or of
-    its finest cell when it has none. A compacted collection stands for all its
+    its finest cell when it has none. A covering stands for all its
     cells at this resolution. Returns -1 for an empty set (or the world cell).
 
     Args:
@@ -20,7 +20,7 @@ def get_compaction_resolution(cells: Sequence[int]) -> int:
     Returns:
         Resolution (-1 to 30)
     """
-    # A collection ends in its compaction marker, which records the resolution
+    # A covering ends in its compaction marker, which records the resolution
     if len(cells) > 0 and is_compaction_marker(cells[-1]):
         return compaction_marker_resolution(cells[-1])
 

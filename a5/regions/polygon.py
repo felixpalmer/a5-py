@@ -9,7 +9,7 @@ from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import cell_to_spherical
 from ..core.coordinate_transforms import from_lonlat, to_cartesian
 from ..core.serialization import cell_to_children, get_resolution, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL
-from ..collections.slot_runs import slot_runs_to_collection, to_collection
+from ..collections.slot_runs import slot_runs_to_covering, to_covering
 from ..geometry.prepared_polygon import prepare_polygon, point_in_prepared_polygon
 from ..traversal.triple_cells import cell_ids_to_triples
 from .polygon_boundary import boundary_output, classify_boundary, sample_boundary
@@ -64,10 +64,10 @@ def polygon_to_cells(
     input_rings: List[List[LonLat]] = list(polygon) if is_nested else [list(polygon)]  # type: ignore[arg-type]
 
     if len(input_rings) == 0:
-        return to_collection([], resolution)
+        return to_covering([], resolution)
     outer = _strip_closing(list(input_rings[0]))
     if len(outer) < 3:
-        return to_collection([], resolution)
+        return to_covering([], resolution)
     rings: List[List[LonLat]] = [outer]
     for r in range(1, len(input_rings)):
         hole = _strip_closing(list(input_rings[r]))
@@ -103,14 +103,14 @@ def polygon_to_cells(
         for cell in cell_to_children(WORLD_CELL, resolution):
             if cell not in boundary.set and point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)), prep):
                 out.append(cell)
-        return to_collection(out, resolution)
+        return to_covering(out, resolution)
 
     # A quintant holding no boundary cells is wholly inside or outside; it can
     # only be inside when the polygon's bounding cap holds a quintant's area (4pi/60)
     cap_holds_quintant = 2 * math.pi * (1 - prep.cap.min_dot) >= (4 * math.pi) / 60
     triples = cell_ids_to_triples(boundary.cells)
     if prefers_flood(ring_vecs_list, len(boundary.cells), resolution, cap_holds_quintant):
-        return to_collection(fill_by_flood(boundary, triples, resolution, overlapping), resolution)
-    return slot_runs_to_collection(
+        return to_covering(fill_by_flood(boundary, triples, resolution, overlapping), resolution)
+    return slot_runs_to_covering(
         fill_by_curve_runs(boundary, triples, resolution, overlapping, cap_holds_quintant), resolution
     )

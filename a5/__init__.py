@@ -15,8 +15,8 @@ from a5.core.cell_info import get_num_cells, get_num_children, cell_area, cell_e
 from a5.collections.compact import compact, uncompact
 from a5.core.compaction_marker import is_compaction_marker
 
-# Collections
-from a5.collections.resolution import get_compaction_resolution
+# Coverings
+from a5.collections.resolution import covering_resolution
 from a5.collections.set_operations import contains, difference, intersect, overlaps, union
 from a5.collections.measures import area, count
 
@@ -42,8 +42,8 @@ __all__ = [
     'get_num_cells', 'get_num_children', 'cell_area', 'cell_edge_length_avg',
     # Compaction
     'compact', 'uncompact', 'is_compaction_marker',
-    # Collections
-    'get_compaction_resolution', 'contains', 'difference', 'intersect', 'overlaps', 'union', 'area', 'count',
+    # Coverings
+    'covering_resolution', 'contains', 'difference', 'intersect', 'overlaps', 'union', 'area', 'count',
     # Migration
     'migrate',
     # Traversal

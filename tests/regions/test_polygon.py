@@ -5,7 +5,7 @@
 import json
 from pathlib import Path
 
-from a5 import polygon_to_cells, uncompact, u64_to_hex, count, get_compaction_resolution
+from a5 import polygon_to_cells, uncompact, u64_to_hex, count, covering_resolution
 
 
 def load_fixtures():
@@ -50,7 +50,7 @@ class TestPolygonToCells:
         ring = [(-5.0, 54.0), (15.0, 54.0), (15.0, 44.0), (-5.0, 44.0)]
         assert polygon_to_cells(ring, 6) == polygon_to_cells(ring, 6, {"containment": "center"})
 
-    def test_returns_empty_collection_for_less_than_3_vertices(self):
+    def test_returns_empty_covering_for_less_than_3_vertices(self):
         degenerate = [
             [],
             [(0.0, 0.0), (1.0, 1.0)],
@@ -62,8 +62,8 @@ class TestPolygonToCells:
         for polygon in degenerate:
             cells = polygon_to_cells(polygon, 5)
             assert count(cells) == 0
-            # The empty collection still records its resolution
-            assert get_compaction_resolution(cells) == 5
+            # The empty covering still records its resolution
+            assert covering_resolution(cells) == 5
 
     def test_accepts_geojson_style_closed_rings(self):
         ring = [(-5.0, 54.0), (15.0, 54.0), (15.0, 44.0), (-5.0, 44.0)]

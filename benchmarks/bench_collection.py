@@ -6,7 +6,7 @@ from a5 import contains, count, difference, intersect, lonlat_to_cell, polygon_t
 
 from .utils import country_polygon, create_random
 
-# Compacted collections at resolution 12: two neighboring countries and a cap overlapping both
+# Coverings at resolution 12: two neighboring countries and a cap overlapping both
 france = polygon_to_cells(country_polygon('France'), 12)
 uk = polygon_to_cells(country_polygon('United Kingdom'), 12)
 cap_paris = spherical_cap(lonlat_to_cell((2.3522, 48.8566), 12), 400_000)

@@ -322,7 +322,7 @@ def cell_to_boundary(
     """
     if cell_id == WORLD_CELL or is_compaction_marker(cell_id):
         # WORLD_CELL represents the entire world and is unbounded; a compaction marker
-        # (recording a compacted collection's resolution) is not a cell at all
+        # (recording a covering's resolution) is not a cell at all
         return []
 
     if options is None:

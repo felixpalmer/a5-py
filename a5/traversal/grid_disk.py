@@ -4,7 +4,7 @@
 
 from typing import List, Set
 
-from ..collections.slot_runs import compact_cells, to_collection
+from ..collections.slot_runs import compact_cells, to_covering
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
 from ..core.origin import origins
 from ..core.face_adjacency import walk_faces
@@ -55,11 +55,11 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
     origin = cell['origin']
     resolution = cell['resolution']
     if k == 0:
-        return to_collection([cell_id], resolution)
+        return to_covering([cell_id], resolution)
     if resolution == 0:
         # The cells are the 12 dodecahedron faces
         faces = walk_faces([origin.id], lambda face: True, k)
-        return to_collection(
+        return to_covering(
             [serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0}) for face in faces], 0
         )
     hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
@@ -102,7 +102,7 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
     _push_cell_ids(interior, prev_frontier.cells, hilbert_res, resolution)
     _push_cell_ids(interior, frontier.cells, hilbert_res, resolution)
 
-    return to_collection(interior, resolution)
+    return to_covering(interior, resolution)
 
 
 def grid_disk(cell_id: int, k: int) -> List[int]:

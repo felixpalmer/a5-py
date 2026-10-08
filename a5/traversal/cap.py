@@ -10,7 +10,7 @@ from ..core.serialization import (
 )
 from ..core.cell import cell_to_spherical
 from ..core.cell_info import cell_area
-from ..collections.slot_runs import to_collection
+from ..collections.slot_runs import to_covering
 from ..core.constants import AUTHALIC_RADIUS_EARTH
 from ..core.face_adjacency import walk_faces
 from ..core.origin import haversine, origins
@@ -154,4 +154,4 @@ def spherical_cap(cell_id: int, radius: float) -> List[int]:
                     triple_children(*cell, max_row, children)
             cells = children
 
-    return to_collection(result, target_res)
+    return to_covering(result, target_res)

@@ -6,7 +6,7 @@ import json
 import os
 
 from a5.collections.compact import compact, uncompact
-from a5.collections.resolution import get_compaction_resolution
+from a5.collections.resolution import covering_resolution
 from a5.core.hex import hex_to_u64
 from a5.core.serialization import get_resolution
 
@@ -25,9 +25,9 @@ class TestUncompact:
 
             assert len(result) == test_case['expectedCount'], test_case['name']
             assert result == [hex_to_u64(h) for h in test_case['expectedCells']], test_case['name']
-            assert get_compaction_resolution(input_cells) == test_case['expectedResolution'], test_case['name']
+            assert covering_resolution(input_cells) == test_case['expectedResolution'], test_case['name']
 
-            # All results should be at the collection's resolution
+            # All results should be at the covering's resolution
             for cell in result:
                 assert get_resolution(cell) == test_case['expectedResolution'], test_case['name']
 

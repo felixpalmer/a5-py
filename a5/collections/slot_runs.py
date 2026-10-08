@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-# The collection engine. Each cell covers a block of leaf slots (see
+# The covering engine. Each cell covers a block of leaf slots (see
 # core/serialization), so a set of cells is a list of sorted, disjoint slot runs:
 # cells are turned into slot runs, set operations merge runs, and runs are
 # turned back into the coarsest cells covering them. Nothing is uncompacted.
@@ -80,7 +80,7 @@ def to_slot_runs(cells: Cells) -> SlotRuns:
     The slot runs covered by a set of cells, sorted and merged. Compaction
     markers are skipped.
 
-    Collections come sorted in curve order, so the cells are first merged as
+    Coverings come sorted in curve order, so the cells are first merged as
     given, checking the order as they go; only input found out of order is
     sorted, and merged again.
     """
@@ -141,7 +141,7 @@ def slot_runs_to_cells(runs: SlotRuns) -> List[int]:
     return out
 
 
-def slot_runs_to_collection(runs: SlotRuns, resolution: int) -> List[int]:
+def slot_runs_to_covering(runs: SlotRuns, resolution: int) -> List[int]:
     """The coarsest cells covering slot runs, in curve order, then the compaction marker for `resolution`."""
     cells = slot_runs_to_cells(runs)
     if resolution >= 0:
@@ -157,11 +157,11 @@ def compact_cells(cells: Cells) -> List[int]:
     return slot_runs_to_cells(to_slot_runs(cells))
 
 
-def to_collection(cells: Cells, resolution: int) -> List[int]:
+def to_covering(cells: Cells, resolution: int) -> List[int]:
     """
-    Compact cells, at resolution `resolution` or coarser, into a collection: the
+    Compact cells, at resolution `resolution` or coarser, into a covering: the
     coarsest cells covering them, sorted in curve order, then the compaction
     marker for `resolution`. The resolution is given, so an empty fill still
     records it.
     """
-    return slot_runs_to_collection(to_slot_runs(cells), resolution)
+    return slot_runs_to_covering(to_slot_runs(cells), resolution)

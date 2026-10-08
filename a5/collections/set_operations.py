@@ -6,8 +6,8 @@ from typing import Callable, List
 
 from ..core.compaction_marker import is_compaction_marker
 from ..core.serialization import cell_first_slot, cell_first_slot_unchecked, cell_slot_count, checked_resolution
-from .resolution import get_compaction_resolution
-from .slot_runs import Cells, SlotRuns, append_slot_run, slot_runs_to_collection, to_slot_runs
+from .resolution import covering_resolution
+from .slot_runs import Cells, SlotRuns, append_slot_run, slot_runs_to_covering, to_slot_runs
 
 
 def _union_slot_runs(a: SlotRuns, b: SlotRuns) -> SlotRuns:
@@ -71,8 +71,8 @@ def _same_resolution(a: Cells, b: Cells) -> int:
     The resolution of two sets of cells, which must be the same: A5 resolutions
     don't nest geometrically, so combining sets at different ones has no meaning.
     """
-    resolution_a = get_compaction_resolution(a)
-    resolution_b = get_compaction_resolution(b)
+    resolution_a = covering_resolution(a)
+    resolution_b = covering_resolution(b)
     if resolution_a != resolution_b:
         raise ValueError(f"Cannot combine cells at resolution {resolution_a} with cells at resolution {resolution_b}")
     return resolution_a
@@ -81,7 +81,7 @@ def _same_resolution(a: Cells, b: Cells) -> int:
 def _combine(a: Cells, b: Cells, operation: Callable[[SlotRuns, SlotRuns], SlotRuns]) -> List[int]:
     """Combine two sets of cells as slot runs, compacted at their resolution."""
     resolution = _same_resolution(a, b)
-    return slot_runs_to_collection(operation(to_slot_runs(a), to_slot_runs(b)), resolution)
+    return slot_runs_to_covering(operation(to_slot_runs(a), to_slot_runs(b)), resolution)
 
 
 def union(a: Cells, b: Cells) -> List[int]:
@@ -180,7 +180,7 @@ def contains(cells: Cells, cell: int) -> bool:
         ValueError: If the cell is at a different resolution from the set, or it, or the set's cell the
             search lands on, is not an A5 cell ID
     """
-    resolution = get_compaction_resolution(cells)
+    resolution = covering_resolution(cells)
     cell_resolution = checked_resolution(cell)
     if cell_resolution != resolution:
         raise ValueError(f"Cannot test a cell at resolution {cell_resolution} against cells at resolution {resolution}")

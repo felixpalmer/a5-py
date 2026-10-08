@@ -3,7 +3,7 @@
 # Copyright (c) A5 contributors
 
 """
-compact/uncompact for A5 DGGS. A compacted set of cells is a collection: its
+compact/uncompact for A5 DGGS. A compacted set of cells is a covering: its
 cells sorted in curve order, then a compaction marker recording the resolution
 they stand for (see ..core.compaction_marker).
 """
@@ -13,8 +13,8 @@ from typing import List, Sequence
 from ..core.cell_info import get_num_children
 from ..core.compaction_marker import is_compaction_marker
 from ..core.serialization import checked_resolution, cell_to_children
-from .slot_runs import to_collection
-from .resolution import get_compaction_resolution
+from .slot_runs import to_covering
+from .resolution import covering_resolution
 
 
 def uncompact(cells: Sequence[int]) -> List[int]:
@@ -29,7 +29,7 @@ def uncompact(cells: Sequence[int]) -> List[int]:
     Raises:
         ValueError: If a value is neither an A5 cell ID nor a compaction marker
     """
-    target_resolution = get_compaction_resolution(cells)
+    target_resolution = covering_resolution(cells)
     result: List[int] = []
     for cell in cells:
         if is_compaction_marker(cell):
@@ -56,4 +56,4 @@ def compact(cells: Sequence[int]) -> List[int]:
     Raises:
         ValueError: If a value is neither an A5 cell ID nor a compaction marker
     """
-    return to_collection(cells, get_compaction_resolution(cells))
+    return to_covering(cells, covering_resolution(cells))

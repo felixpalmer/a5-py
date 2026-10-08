@@ -10,7 +10,7 @@ import pytest
 from a5.collections.compact import compact, uncompact
 from a5.collections.measures import area, count
 from a5.collections.set_operations import contains, difference, intersect, overlaps, union
-from a5.collections.resolution import get_compaction_resolution
+from a5.collections.resolution import covering_resolution
 from a5.core.compaction_marker import is_compaction_marker
 from a5.core.cell import cell_to_boundary
 from a5.core.hex import hex_to_u64
@@ -34,7 +34,7 @@ class TestSetOperations:
         assert difference(a, b) == to_cells(f['difference'])
         assert overlaps(a, b) == f['overlaps']
         assert overlaps(b, a) == f['overlaps']
-        assert get_compaction_resolution(union(a, b)) == f['resolution']
+        assert covering_resolution(union(a, b)) == f['resolution']
 
     @pytest.mark.parametrize('f', fixtures['mismatchedResolutions'], ids=lambda f: f['name'])
     def test_refuse_mismatched_resolutions(self, f):
@@ -58,7 +58,7 @@ class TestMeasures:
     @pytest.mark.parametrize('f', fixtures['measures'], ids=lambda f: f['name'])
     def test_fixtures(self, f):
         cells = to_cells(f['cells'])
-        assert get_compaction_resolution(cells) == f['resolution']
+        assert covering_resolution(cells) == f['resolution']
         assert count(cells) == int(f['count'])
         assert abs(area(cells) - f['area']) <= 1e-10 * f['area']
 
@@ -95,7 +95,7 @@ class TestIsCompactionMarker:
     def test_records_resolution(self):
         for f in fixtures['isCompactionMarker']:
             if f['expected']:
-                assert get_compaction_resolution([hex_to_u64(f['value'])]) == f['resolution']
+                assert covering_resolution([hex_to_u64(f['value'])]) == f['resolution']
 
     def test_empty_boundary(self):
         for f in fixtures['isCompactionMarker']:

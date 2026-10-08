@@ -7,7 +7,7 @@ from typing import Dict, Sequence
 from ..core.cell_info import cell_area, get_num_children
 from ..core.compaction_marker import is_compaction_marker
 from ..core.serialization import checked_resolution
-from .resolution import get_compaction_resolution
+from .resolution import covering_resolution
 
 
 def count(cells: Sequence[int]) -> int:
@@ -26,7 +26,7 @@ def count(cells: Sequence[int]) -> int:
     Raises:
         ValueError: If a value is neither an A5 cell ID nor a compaction marker
     """
-    resolution = get_compaction_resolution(cells)
+    resolution = covering_resolution(cells)
     # Children per cell, by cell resolution
     children: Dict[int, int] = {}
     total = 0
