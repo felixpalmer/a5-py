@@ -65,8 +65,8 @@ class TestSphericalCap:
         for case in fixtures["sphericalCap"]:
             cell_id = hex_to_int(case["cellId"])
             radius = case["radius"]
-            expected = sorted(hex_to_int(h) for h in case["cells"])
-            result = sorted(uncompact(spherical_cap(cell_id, radius)))
+            expected = [hex_to_int(h) for h in case["cells"]]
+            result = uncompact(spherical_cap(cell_id, radius))
             assert result == expected, \
                 f'cellId={case["cellId"]}, radius={radius}: got {len(result)} cells, expected {len(expected)}'
 
