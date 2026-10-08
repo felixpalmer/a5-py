@@ -10,8 +10,6 @@ from a5.core.serialization import (
     cell_to_parent,
     cell_to_children,
     get_res0_cells,
-    is_first_child,
-    get_stride,
 )
 from a5.core.utils import A5Cell
 from a5.core.origin import origins
@@ -291,7 +289,7 @@ def test_res30_round_trip_valid_quintants():
         serialized = serialize(cell)
         assert get_resolution(serialized) == 30
 
-        # Verify correct marker pattern
+        # Verify correct tag pattern
         if q <= 31:
             assert serialized & 1 == 1  # ...1 encoding
         elif q <= 39:
@@ -330,11 +328,11 @@ def test_res30_bit_layout_1_encoding():
     origin = origins[0]
     segment = (0 + origin.first_quintant) % 5
 
-    # Quintant 0, S=0 -> just the marker bit
+    # Quintant 0, S=0 -> just the tag bit
     cell0 = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))
     assert cell0 == 1
 
-    # Quintant 0, S=1 -> marker + S shifted left by 1
+    # Quintant 0, S=1 -> tag + S shifted left by 1
     cell1 = serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))
     assert cell1 == 0b11
 
@@ -344,11 +342,11 @@ def test_res30_bit_layout_10000_encoding():
     origin = origins[8]
     segment = (0 + origin.first_quintant) % 5
 
-    # Quintant 40, S=0 -> just the marker
+    # Quintant 40, S=0 -> just the tag
     cell0 = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))
     assert cell0 == 0b10000
 
-    # Quintant 40, S=1 -> S shifted left by 5 + marker
+    # Quintant 40, S=1 -> S shifted left by 5 + tag
     cell1 = serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))
     assert cell1 == 0b110000
 
@@ -360,11 +358,11 @@ def test_res30_bit_layout_100_encoding():
     segment_n = 2
     segment = (segment_n + origin.first_quintant) % 5
 
-    # Quintant 32, S=0 -> just the marker
+    # Quintant 32, S=0 -> just the tag
     cell0 = serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))
     assert cell0 == 0b100
 
-    # Quintant 32, S=1 -> S shifted left by 3 + marker
+    # Quintant 32, S=1 -> S shifted left by 3 + tag
     cell1 = serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))
     assert cell1 == 0b1100
 
@@ -379,7 +377,7 @@ def test_res30_round_trip_nonzero_s_100_encoding():
     for s in test_s_values:
         cell = A5Cell(origin=origin, segment=segment, S=s, resolution=30)
         serialized = serialize(cell)
-        assert serialized & 0b111 == 0b100  # ...100 marker
+        assert serialized & 0b111 == 0b100  # ...100 tag
         deserialized = deserialize(serialized)
         assert deserialized["S"] == s
         assert deserialized["resolution"] == 30
@@ -396,7 +394,7 @@ def test_res30_round_trip_nonzero_s_10000_encoding():
     for s in test_s_values:
         cell = A5Cell(origin=origin, segment=segment, S=s, resolution=30)
         serialized = serialize(cell)
-        assert serialized & 0b11111 == 0b10000  # ...10000 marker
+        assert serialized & 0b11111 == 0b10000  # ...10000 tag
         deserialized = deserialize(serialized)
         assert deserialized["S"] == s
         assert deserialized["resolution"] == 30
@@ -474,41 +472,6 @@ def test_res30_children_parent_round_trip():
         assert cell_to_parent(child) == parent
 
 
-def test_res30_get_stride():
-    """getStride returns 2 for res 30."""
-    assert get_stride(30) == 2
-
-
-def test_res30_is_first_child_1_encoding():
-    """isFirstChild works for res 30 (...1 encoding)."""
-    origin = origins[0]
-    segment = (0 + origin.first_quintant) % 5
-
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))) is True
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))) is False
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=4, resolution=30))) is True
-
-
-def test_res30_is_first_child_100_encoding():
-    """isFirstChild works for res 30 (...100 encoding)."""
-    origin = origins[7]  # quintant 35, uses ...100
-    segment = (0 + origin.first_quintant) % 5
-
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))) is True
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))) is False
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=4, resolution=30))) is True
-
-
-def test_res30_is_first_child_10000_encoding():
-    """isFirstChild works for res 30 (...10000 encoding)."""
-    origin = origins[8]  # quintant 40, uses ...10000
-    segment = (0 + origin.first_quintant) % 5
-
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=30))) is True
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=1, resolution=30))) is False
-    assert is_first_child(serialize(A5Cell(origin=origin, segment=segment, S=4, resolution=30))) is True
-
-
 def test_res30_children_parent_round_trip_10000_encoding():
     """cellToChildren/cellToParent round trip (...10000 encoding)."""
     origin = origins[8]
@@ -519,7 +482,7 @@ def test_res30_children_parent_round_trip_10000_encoding():
     assert len(children) == 4
     for child in children:
         assert get_resolution(child) == 30
-        assert child & 0b11111 == 0b10000  # ...10000 marker
+        assert child & 0b11111 == 0b10000  # ...10000 tag
         assert cell_to_parent(child) == parent
 
 
@@ -533,7 +496,7 @@ def test_res30_children_parent_round_trip_100_encoding():
     assert len(children) == 4
     for child in children:
         assert get_resolution(child) == 30
-        assert child & 0b111 == 0b100  # ...100 marker
+        assert child & 0b111 == 0b100  # ...100 tag
         assert cell_to_parent(child) == parent
 
 

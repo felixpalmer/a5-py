@@ -25,6 +25,7 @@ from ..lattice.triple import triple_to_s
 from ..lattice.curve import round_to_triple
 from ..lattice.types import Triple
 from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL
+from .compaction_marker import is_compaction_marker
 from ..geometry.spherical_polygon import SphericalPolygonShape
 
 # Reuse this object to avoid allocation
@@ -319,8 +320,9 @@ def cell_to_boundary(
     Returns:
         List of (longitude, latitude) coordinates forming the cell boundary
     """
-    # WORLD_CELL represents the entire world and is unbounded
-    if cell_id == WORLD_CELL:
+    if cell_id == WORLD_CELL or is_compaction_marker(cell_id):
+        # WORLD_CELL represents the entire world and is unbounded; a compaction marker
+        # (recording a covering's resolution) is not a cell at all
         return []
 
     if options is None:

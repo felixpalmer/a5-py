@@ -5,8 +5,8 @@
 import json
 from pathlib import Path
 from a5.traversal.grid_disk import grid_disk, grid_disk_vertex
-from a5.core.serialization import get_resolution
-from a5.core.compact import uncompact
+from a5.collections.compact import uncompact
+from a5.core.compaction_marker import is_compaction_marker
 
 
 def load_fixtures():
@@ -25,11 +25,20 @@ class TestGridDisk:
         for case in fixtures:
             cell_id = hex_to_int(case["cellId"])
             k = case["k"]
-            target_res = get_resolution(cell_id)
             expected = sorted(hex_to_int(h) for h in case["cells"])
-            result = sorted(uncompact(grid_disk(cell_id, k), target_res))
+            result = sorted(uncompact(grid_disk(cell_id, k)))
             assert result == expected, \
                 f'cellId={case["cellId"]}, k={k}: got {len(result)} cells, expected {len(expected)}'
+
+
+    def test_k0_returns_only_center_cell(self):
+        cell_id = hex_to_int(load_fixtures()[0]["cellId"])
+        result = grid_disk(cell_id, 0)
+        # The cell itself, then the compaction marker recording its resolution
+        assert len(result) == 2
+        assert result[0] == cell_id
+        assert is_compaction_marker(result[1])
+        assert uncompact(result) == [cell_id]
 
 
 class TestGridDiskVertex:
@@ -38,11 +47,19 @@ class TestGridDiskVertex:
         for case in fixtures:
             cell_id = hex_to_int(case["cellId"])
             k = case["k"]
-            target_res = get_resolution(cell_id)
             # grid_disk_vertex returns edge + vertex cells
             extra = [hex_to_int(h) for h in case.get("extraVertexCells", [])]
             expected_edge = [hex_to_int(h) for h in case["cells"]]
             expected = sorted(set(expected_edge + extra))
-            result = sorted(uncompact(grid_disk_vertex(cell_id, k), target_res))
+            result = sorted(uncompact(grid_disk_vertex(cell_id, k)))
             assert result == expected, \
                 f'cellId={case["cellId"]}, k={k}: got {len(result)} cells, expected {len(expected)}'
+
+    def test_k0_returns_only_center_cell(self):
+        cell_id = hex_to_int(load_fixtures()[0]["cellId"])
+        result = grid_disk_vertex(cell_id, 0)
+        # The cell itself, then the compaction marker recording its resolution
+        assert len(result) == 2
+        assert result[0] == cell_id
+        assert is_compaction_marker(result[1])
+        assert uncompact(result) == [cell_id]

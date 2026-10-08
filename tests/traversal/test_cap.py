@@ -5,8 +5,7 @@
 import json
 from pathlib import Path
 from a5.traversal.cap import meters_to_h, estimate_cell_radius, pick_coarse_resolution, spherical_cap
-from a5.core.serialization import get_resolution
-from a5.core.compact import uncompact
+from a5.collections.compact import uncompact
 
 
 def load_fixtures():
@@ -66,9 +65,8 @@ class TestSphericalCap:
         for case in fixtures["sphericalCap"]:
             cell_id = hex_to_int(case["cellId"])
             radius = case["radius"]
-            target_res = get_resolution(cell_id)
-            expected = sorted(hex_to_int(h) for h in case["cells"])
-            result = sorted(uncompact(spherical_cap(cell_id, radius), target_res))
+            expected = [hex_to_int(h) for h in case["cells"]]
+            result = uncompact(spherical_cap(cell_id, radius))
             assert result == expected, \
                 f'cellId={case["cellId"]}, radius={radius}: got {len(result)} cells, expected {len(expected)}'
 
