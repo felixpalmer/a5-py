@@ -9,7 +9,7 @@ from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import cell_to_spherical
 from ..core.coordinate_transforms import from_lonlat, to_cartesian
 from ..core.serialization import cell_to_children, get_resolution, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL
-from ..collections.slot_runs import slot_runs_to_covering, to_covering
+from ..coverings.slot_runs import slot_runs_to_covering, to_covering
 from ..geometry.prepared_polygon import prepare_polygon, point_in_prepared_polygon
 from ..traversal.triple_cells import cell_ids_to_triples
 from .polygon_boundary import boundary_output, classify_boundary, sample_boundary

@@ -7,15 +7,15 @@ import os
 
 import pytest
 
-from a5.collections.compact import compact, uncompact
-from a5.collections.measures import area, count
-from a5.collections.set_operations import contains, difference, intersect, overlaps, union
-from a5.collections.resolution import covering_resolution
+from a5.coverings.compact import compact, uncompact
+from a5.coverings.measures import area, count
+from a5.coverings.set_operations import contains, difference, intersect, overlaps, union
+from a5.coverings.resolution import covering_resolution
 from a5.core.compaction_marker import is_compaction_marker
 from a5.core.cell import cell_to_boundary
 from a5.core.hex import hex_to_u64
 
-fixtures_path = os.path.join(os.path.dirname(__file__), '../fixtures/collection.json')
+fixtures_path = os.path.join(os.path.dirname(__file__), '../fixtures/covering.json')
 with open(fixtures_path, 'r') as f:
     fixtures = json.load(f)
 

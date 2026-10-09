@@ -8,7 +8,7 @@
 # stretch of the curve (a range of slots) into runs that lie wholly inside or
 # wholly outside the polygon: a step over the boundary would have to land in
 # the band. One probe classifies a run, and an inside run is emitted whole, as
-# a slot run (see collections/slot_runs), so the interior costs O(boundary), not
+# a slot run (see coverings/slot_runs), so the interior costs O(boundary), not
 # O(area).
 
 from typing import Dict, List, Optional
@@ -18,7 +18,7 @@ from ..core.coordinate_transforms import to_cartesian
 from ..core.serialization import (
     cell_first_slot, slot_to_cell, QUINTANT_SHIFT, S_MASK, SLOT_COUNTS, FIRST_HILBERT_RESOLUTION,
 )
-from ..collections.slot_runs import SlotRuns, append_slot_run
+from ..coverings.slot_runs import SlotRuns, append_slot_run
 from ..geometry.prepared_polygon import point_in_prepared_polygon
 from ..lattice import Triple, s_to_triple, triple_flavor, triple_to_s
 from ..traversal.neighbors import NEIGHBOR_DELTAS

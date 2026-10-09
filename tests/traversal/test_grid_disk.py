@@ -5,7 +5,7 @@
 import json
 from pathlib import Path
 from a5.traversal.grid_disk import grid_disk, grid_disk_vertex
-from a5.collections.compact import uncompact
+from a5.coverings.compact import uncompact
 from a5.core.compaction_marker import is_compaction_marker
 
 

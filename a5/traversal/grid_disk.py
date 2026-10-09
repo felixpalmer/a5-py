@@ -4,7 +4,7 @@
 
 from typing import List, Set
 
-from ..collections.slot_runs import compact_cells, to_covering
+from ..coverings.slot_runs import compact_cells, to_covering
 from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
 from ..core.origin import origins
 from ..core.face_adjacency import walk_faces
