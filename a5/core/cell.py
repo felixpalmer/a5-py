@@ -24,7 +24,9 @@ from ..lattice import s_to_cell, triple_flavor, triple_in_bounds
 from ..lattice.triple import triple_to_s
 from ..lattice.curve import round_to_triple
 from ..lattice.types import Triple
-from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL
+from .serialization import (
+    deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
+)
 from .compaction_marker import is_compaction_marker
 from ..geometry.spherical_polygon import SphericalPolygonShape
 
@@ -147,7 +149,7 @@ def _lookup_in_quintant(dodec_point, origin, quintant: int, resolution: int):
     # res-29 cell CONTAINING the point. (Previously the cap lived only in
     # serialize, which swapped in the res-29 parent of a res-30 search result --
     # a cell that fails to contain the query point ~44% of the time there.)
-    if resolution == MAX_RESOLUTION and 5 * origin.id + (segment - origin.first_quintant + 5) % 5 > 41:
+    if resolution == MAX_RESOLUTION and 5 * origin.id + (segment - origin.first_quintant + 5) % 5 >= RES30_QUINTANTS:
         resolution = MAX_RESOLUTION - 1
 
     px, py = dodec_point

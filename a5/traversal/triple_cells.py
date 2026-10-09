@@ -9,8 +9,8 @@
 from typing import Callable, Iterable, List, Optional
 
 from ..core.coordinate_systems import Spherical
-from ..lattice import Triple, s_to_triple, triple_flavor, triple_in_bounds, triple_to_s
-from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
+from ..lattice import Orientation, Triple, s_to_triple, triple_flavor, triple_in_bounds, triple_to_s
+from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT
 from ..core.origin import origins, quintant_to_segment, segment_to_quintant
 from ..core.tiling import get_pentagon_center
 from ..projections.dodecahedron import DodecahedronProjection
@@ -28,8 +28,22 @@ _KEY_BITS = 22
 _KEY_MASK = (1 << _KEY_BITS) - 1
 _KEY_SIDE = 1 << _KEY_BITS
 
-# Segment and curve orientation of each of the 60 quintants, by origin.id * 5 + quintant
-_QUINTANT_SEGMENTS = [quintant_to_segment(q, origin) for origin in origins for q in range(5)]
+# Each of the 60 quintants, by triple quintant (origin.id * 5 + quintant): its
+# segment, curve orientation and slot prefix (its place in ID order, shifted
+# into the top bits of a slot); and the triple quintant in each place of ID
+# order.
+QUINTANT_SEGMENT: List[int] = []
+QUINTANT_ORIENTATION: List[Orientation] = []
+QUINTANT_PREFIX: List[int] = []
+TRIPLE_QUINTANT_BY_ID_ORDER: List[int] = [0] * 60
+for _origin in origins:
+    for _quintant in range(5):
+        _segment, _orientation = quintant_to_segment(_quintant, _origin)
+        _id_order = 5 * _origin.id + (_segment - _origin.first_quintant + 5) % 5
+        QUINTANT_SEGMENT.append(_segment)
+        QUINTANT_ORIENTATION.append(_orientation)
+        QUINTANT_PREFIX.append(_id_order << QUINTANT_SHIFT)
+        TRIPLE_QUINTANT_BY_ID_ORDER[_id_order] = 5 * _origin.id + _quintant
 
 
 def triple_cell_key(origin_id: int, quintant: int, x: int, y: int, z: int) -> int:
@@ -41,9 +55,9 @@ def triple_cell_key(origin_id: int, quintant: int, x: int, y: int, z: int) -> in
 def triple_cell_to_id(origin_id: int, quintant: int, x: int, y: int, z: int,
                       hilbert_res: int, resolution: int) -> int:
     """The cell ID of a cell given in triple space."""
-    segment, orientation = _QUINTANT_SEGMENTS[origin_id * 5 + quintant]
-    s = triple_to_s(Triple(x, y, z), hilbert_res, orientation)
-    return serialize({'origin': origins[origin_id], 'segment': segment, 'S': s, 'resolution': resolution})
+    q = origin_id * 5 + quintant
+    s = triple_to_s(Triple(x, y, z), hilbert_res, QUINTANT_ORIENTATION[q])
+    return serialize({'origin': origins[origin_id], 'segment': QUINTANT_SEGMENT[q], 'S': s, 'resolution': resolution})
 
 
 
@@ -158,45 +172,3 @@ def _visit_boundary(origin_id: int, quintant: int, triple: Triple, max_row: int,
     for i in range(0, len(boundary), 5):
         visit(boundary[i], boundary[i + 1], boundary[i + 2], boundary[i + 3], boundary[i + 4])
 
-
-# The cell hierarchy in triple space. A cell's 4 children are 2*triple + the
-# offsets for its flavor (each level of A5 refines the square grid R of
-# g o^r D into 4); only their curve order depends on the orientation.
-_CHILD_OFFSETS = [
-    [(0, 0, 0), (0, 1, -1), (0, 1, 0), (0, 2, -1)],  # flavor 0
-    [(-1, -1, 0), (-1, 0, -1), (-1, 0, 0), (-1, 1, -1)],  # flavor 1
-    [(-1, 1, 0), (0, 0, 0), (0, 1, -1), (0, 1, 0)],  # flavor 2
-    [(-1, 0, -1), (-1, 0, 0), (-1, 1, -1), (0, 0, -1)],  # flavor 3
-]
-
-
-def triple_children(origin_id: int, quintant: int, x: int, y: int, z: int,
-                    max_row: int, out: List[int]) -> None:
-    """The 4 children of a cell given in triple space (`max_row` is its own), appended to `out`."""
-    for dx, dy, dz in _CHILD_OFFSETS[triple_flavor(Triple(x, y, z), max_row)]:
-        out.extend((origin_id, quintant, 2 * x + dx, 2 * y + dy, 2 * z + dz))
-
-
-def triple_parent(origin_id: int, quintant: int, x: int, y: int, z: int,
-                  parent_max_row: int, out: List[int]) -> None:
-    """
-    The parent of a cell given in triple space (`parent_max_row` is the
-    parent's), appended to `out`. The child's coordinates mod 2 fix
-    child - 2*parent, but for two classes, where the two candidate parents
-    differ in flavor -- and so, sharing x and z, in apex colour (see
-    triple_flavor).
-
-    Not used by the library: kept for completeness, as the inverse of
-    `triple_children`, for traversals that coarsen in triple space.
-    """
-    dx = -(x & 1)
-    dz = -(z & 1)
-    dy = y & 1
-    px = (x - dx) >> 1
-    pz = (z - dz) >> 1
-    colour = (parent_max_row + 1 + px + pz) & 1
-    if dx == 0 and dy == 0 and dz == -1:
-        dy = 2 if colour == 0 else 0  # flavor 0 or 3 parent
-    if dx == -1 and dy == 1 and dz == 0:
-        dy = 1 if colour == 1 else -1  # flavor 2 or 1 parent
-    out.extend((origin_id, quintant, px, (y - dy) >> 1, pz))

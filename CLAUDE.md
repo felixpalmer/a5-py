@@ -24,6 +24,9 @@ Docs: ../a5/docs/api-reference/README.md
   - `/math` - Mathematical primitives (vec2, vec3, quat)
   - `/geometry` - Geometric calculations (pentagon, spherical_triangle, spherical_polygon)
   - `/projections` - Map projection implementations (dodecahedron, authalic, gnomonic, etc.)
+  - `/lattice` - The A5 curve on the triangular lattice (L-system in `lattice/lsystem/`, triples, compat curve)
+  - `/traversal` - Neighbors, grid disk, spherical cap, line, curve-order descent (`curve_descent.py`)
+  - `/regions` - Polygon fill, subcell/supercell
 - `/tests` - pytest test files organized by module
   - `/core/fixtures` - Test data fixtures for core module
   - `/geometry/fixtures` - Test data fixtures for geometry module
@@ -94,6 +97,7 @@ When porting features to Python:
    - `LonLat::new(lon, lat)` → `(lon, lat)`
    - `Result<T, String>` → direct return or raise exception
 5. **Test patterns**: Follow existing test structure with `class Test*` grouping tests
+6. **TS "filled on first use" tables** (e.g. `fillQuintantTables`) exist only to dodge V8 type-feedback quirks — in Python just compute them at module load. TS out-params into `{x, y, z}` objects become return values here, since `Triple` is an immutable NamedTuple
 
 ## CI Checks (run as a final verification)
 ```bash
