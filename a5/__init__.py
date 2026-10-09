@@ -13,13 +13,13 @@ from a5.core.cell_info import get_num_cells, get_num_children, cell_area, cell_e
 from a5.regions.subcell import cell_to_subcell, cell_to_supercell
 
 # Compaction
-from a5.collections.compact import compact, uncompact
+from a5.coverings.compact import compact, uncompact
 from a5.core.compaction_marker import is_compaction_marker
 
 # Coverings
-from a5.collections.resolution import covering_resolution
-from a5.collections.set_operations import contains, difference, intersect, overlaps, union
-from a5.collections.measures import area, count
+from a5.coverings.resolution import covering_resolution
+from a5.coverings.set_operations import contains, difference, intersect, overlaps, union
+from a5.coverings.measures import area, count
 
 # Migration
 from a5.core.migrate import migrate

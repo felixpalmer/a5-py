@@ -13,7 +13,7 @@ from typing import Callable, List
 from ..core.coordinate_systems import Face
 from ..core.serialization import FIRST_HILBERT_RESOLUTION, SLOT_COUNTS
 from ..core.tiling import get_pentagon_center
-from ..collections.slot_runs import SlotRuns, append_slot_run
+from ..coverings.slot_runs import SlotRuns, append_slot_run
 from ..lattice import CurveNode, Triple, curve_child, triple_to_curve_node
 from .triple_cells import QUINTANT_ORIENTATION, QUINTANT_PREFIX
 

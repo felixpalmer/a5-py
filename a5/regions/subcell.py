@@ -17,7 +17,7 @@ from ..core.serialization import (
     deserialize, get_resolution, slot_to_cell, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
 )
 from ..core.tiling import get_face_vertices
-from ..collections.slot_runs import SlotRuns, slot_runs_to_covering, to_covering
+from ..coverings.slot_runs import SlotRuns, slot_runs_to_covering, to_covering
 from ..traversal.curve_descent import descend_in_curve_order, INSIDE, OUTSIDE, SPLIT
 
 # How far the center of any descendant of a cell can lie from the cell's own

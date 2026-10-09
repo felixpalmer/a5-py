@@ -10,7 +10,7 @@ from ..core.serialization import (
 )
 from ..core.cell import cell_to_spherical
 from ..core.cell_info import cell_area
-from ..collections.slot_runs import SlotRuns, slot_runs_to_covering, to_covering
+from ..coverings.slot_runs import SlotRuns, slot_runs_to_covering, to_covering
 from ..core.constants import AUTHALIC_RADIUS_EARTH
 from ..core.face_adjacency import walk_faces
 from ..core.origin import haversine, origins
