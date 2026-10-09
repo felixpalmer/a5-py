@@ -21,6 +21,8 @@ WORLD_CELL = 0
 #   ...100   -> 3-bit quintant (32-39), 58-bit S
 #   ...10000 -> 1-bit quintant (40-41), 58-bit S
 # Quintants 42-59 have no res-30 IDs.
+# The number of quintants (in ID order) with resolution 30 IDs.
+RES30_QUINTANTS = 42
 
 
 def _res30_to_slot(index: int) -> int:
@@ -236,8 +238,8 @@ def serialize(cell: A5Cell) -> int:
         raise ValueError(f"S ({S}) is too large for resolution level {resolution}")
 
     quintant = 5 * origin.id + (segment - origin.first_quintant + 5) % 5
-    # Quintants 42+ have no res-30 IDs: fall back to res 29
-    if resolution == MAX_RESOLUTION and quintant > 41:
+    # Quintants past RES30_QUINTANTS have no res-30 IDs: fall back to res 29
+    if resolution == MAX_RESOLUTION and quintant >= RES30_QUINTANTS:
         return serialize(A5Cell(origin=origin, segment=segment, S=S >> 2, resolution=MAX_RESOLUTION - 1))
     return slot_to_cell((quintant << QUINTANT_SHIFT) + offset, resolution)
 

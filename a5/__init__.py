@@ -10,6 +10,7 @@ from a5.core.hex import hex_to_u64, u64_to_hex
 # Hierarchy
 from a5.core.serialization import cell_to_parent, cell_to_children, get_resolution, get_res0_cells, MAX_RESOLUTION, WORLD_CELL
 from a5.core.cell_info import get_num_cells, get_num_children, cell_area, cell_edge_length_avg
+from a5.regions.subcell import cell_to_subcell, cell_to_supercell
 
 # Compaction
 from a5.collections.compact import compact, uncompact
@@ -40,6 +41,7 @@ __all__ = [
     # Hierarchy
     'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells', 'MAX_RESOLUTION', 'WORLD_CELL',
     'get_num_cells', 'get_num_children', 'cell_area', 'cell_edge_length_avg',
+    'cell_to_subcell', 'cell_to_supercell',
     # Compaction
     'compact', 'uncompact', 'is_compaction_marker',
     # Coverings

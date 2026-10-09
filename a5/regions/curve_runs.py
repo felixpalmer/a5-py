@@ -15,36 +15,24 @@ from typing import Dict, List, Optional
 
 from ..core.cell import cell_to_spherical
 from ..core.coordinate_transforms import to_cartesian
-from ..core.serialization import cell_first_slot, slot_to_cell, QUINTANT_SHIFT, S_MASK, FIRST_HILBERT_RESOLUTION
+from ..core.serialization import (
+    cell_first_slot, slot_to_cell, QUINTANT_SHIFT, S_MASK, SLOT_COUNTS, FIRST_HILBERT_RESOLUTION,
+)
 from ..collections.slot_runs import SlotRuns, append_slot_run
-from ..core.origin import origins, quintant_to_segment, segment_to_quintant
 from ..geometry.prepared_polygon import point_in_prepared_polygon
 from ..lattice import Triple, s_to_triple, triple_flavor, triple_to_s
 from ..traversal.neighbors import NEIGHBOR_DELTAS
-from ..traversal.triple_cells import for_each_triple_neighbor, triple_cell_center
+from ..traversal.triple_cells import (
+    for_each_triple_neighbor, triple_cell_center, QUINTANT_ORIENTATION, QUINTANT_PREFIX, TRIPLE_QUINTANT_BY_ID_ORDER,
+)
 from .polygon_boundary import Boundary, boundary_neighbors, emits_boundary_cell, inside_next_to
 
 # Cells are ordered on the curve by the leaf slots they occupy (see core/serialization).
 
-# Curve orientation of each quintant by its 6-bit slot prefix, and the slot
-# prefix and orientation by triple quintant (origin.id * 5 + quintant).
-_PREFIX_ORIENTATION = [
-    segment_to_quintant((q + origins[q // 5].first_quintant) % 5, origins[q // 5])[1] for q in range(60)
-]
-_TRIPLE_PREFIX: List[int] = []
-_TRIPLE_ORIENTATION = []
-for _origin in origins:
-    for _quintant in range(5):
-        _segment, _orientation = quintant_to_segment(_quintant, _origin)
-        _q = 5 * _origin.id + (_segment - _origin.first_quintant + 5) % 5
-        _TRIPLE_PREFIX.append(_q << QUINTANT_SHIFT)
-        _TRIPLE_ORIENTATION.append(_orientation)
-
-
 def _triple_slot(origin_id: int, quintant: int, x: int, y: int, z: int, hilbert_res: int, unit_shift: int) -> int:
     """The slot of a cell given in triple space."""
     i = origin_id * 5 + quintant
-    return _TRIPLE_PREFIX[i] | (triple_to_s(Triple(x, y, z), hilbert_res, _TRIPLE_ORIENTATION[i]) << unit_shift)
+    return QUINTANT_PREFIX[i] | (triple_to_s(Triple(x, y, z), hilbert_res, QUINTANT_ORIENTATION[i]) << unit_shift)
 
 
 def fill_by_curve_runs(
@@ -64,8 +52,8 @@ def fill_by_curve_runs(
         lambda b, c, visit: for_each_triple_neighbor(*b[c:c + 5], max_row, False, visit),
     ])
 
+    unit = SLOT_COUNTS[resolution]
     unit_shift = 58 - 2 * hilbert_res
-    unit = 1 << unit_shift
 
     # Band slots carry two flags below the slot: EMIT (the cell is in the output)
     # and RING. (Python ints are unbounded, so `slot << 2` always has room.)
@@ -100,7 +88,7 @@ def fill_by_curve_runs(
             return None
         c = ring_by_slot[ring_slot]
         q = slot >> QUINTANT_SHIFT
-        t = s_to_triple((slot & S_MASK) >> unit_shift, hilbert_res, _PREFIX_ORIENTATION[q])
+        t = s_to_triple((slot & S_MASK) >> unit_shift, hilbert_res, QUINTANT_ORIENTATION[TRIPLE_QUINTANT_BY_ID_ORDER[q]])
         rx, ry, rz = ring_cells[c + 2], ring_cells[c + 3], ring_cells[c + 4]
         dx, dy, dz = t.x - rx, t.y - ry, t.z - rz
         for d in NEIGHBOR_DELTAS[triple_flavor(Triple(rx, ry, rz), max_row)].all:

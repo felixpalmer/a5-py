@@ -4,9 +4,10 @@
 
 from typing import List, Tuple
 
-from ..lattice import Triple, triple_in_bounds
+from ..lattice import Triple, triple_flavor, triple_in_bounds
 from ..core.utils import Origin
-from ..core.face_adjacency import FACE_ADJACENCY
+from ..core.face_adjacency import FACE_ADJACENCY, seam_triple
+from .neighbors import NEIGHBOR_DELTAS
 
 # Neighbor delta: (dx, dy, dz, is_edge_sharing)
 NeighborDelta = Tuple[int, int, int, bool]
@@ -36,16 +37,6 @@ RIGHT_EDGE_DELTAS: List[List[NeighborDelta]] = [
     # parity=1, yOdd
     [],
 ]
-
-# Cross-face base-edge deltas (source y=maxRow), indexed by parity.
-# Applied to the mirrored position [z, maxRow, x] on the adjacent face.
-CROSS_FACE_DELTAS: List[List[NeighborDelta]] = [
-    # parity=0
-    [(0, 0, 0, True), (1, 0, 0, True), (1, 0, -1, False)],
-    # parity=1
-    [(0, 0, -1, True), (0, 0, 0, False)],
-]
-
 
 def _push_triple(
     out: List[int], x: int, y: int, z: int, origin_id: int, quintant: int, max_row: int,
@@ -107,11 +98,19 @@ def get_boundary_neighbor_triples(
         _push_deltas(out, Triple(triple.z, triple.y, 0), RIGHT_EDGE_DELTAS[delta_index], edge_only,
                      origin.id, target_quintant, max_row)
 
-    # Base edge (y=maxRow): neighbor on adjacent face at mirrored [z, maxRow, x]
+    # Base edge (y=maxRow): across the face seam the lattice continues, so the
+    # neighbors on the adjacent face are those of the cell's image there
     if triple.y == max_row:
         adj_face_id, adj_quintant = FACE_ADJACENCY[origin.id][source_quintant]
-        _push_deltas(out, Triple(triple.z, max_row, triple.x), CROSS_FACE_DELTAS[parity], edge_only,
-                     adj_face_id, adj_quintant, max_row)
+        image = seam_triple(triple, max_row)
+        # The image's pentagon is the cell's turned half-way round: its flavor's parity bit flipped
+        deltas = NEIGHBOR_DELTAS[triple_flavor(triple, max_row) ^ 1]
+        delta_list = deltas.edge if edge_only else deltas.all
+        for i in range(len(delta_list)):
+            d = delta_list[i]
+            # Only steps back towards the seam (dy < 0) can land inside the neighbor quintant
+            if d.y < 0:
+                _push_triple(out, image.x + d.x, image.y + d.y, image.z + d.z, adj_face_id, adj_quintant, max_row)
 
     # Apex [0,0,0]: cells from all 5 quintants meet at the face center
     if triple.x == 0 and triple.y == 0 and triple.z == 0:
