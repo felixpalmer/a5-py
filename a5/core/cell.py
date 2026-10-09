@@ -249,6 +249,25 @@ def _spherical_to_cell_boundary(spherical, resolution: int, first_origin_id, fir
     return _accept_candidate(winner)
 
 
+def cell_center_to_cell(cell_id: int, resolution: int) -> int:
+    """The cell at `resolution` containing the center of `cell_id`:
+    `spherical_to_cell(cell_to_spherical(cell_id), resolution)` without the
+    round trip through the sphere. A cell's center lies on its own face, so the
+    lookup runs in that face's frame. A center within float noise of a cell
+    edge, where the round trip's own noise decides, goes round the sphere so
+    ties resolve exactly as `spherical_to_cell` resolves them."""
+    cell = deserialize(cell_id)
+    if resolution >= FIRST_HILBERT_RESOLUTION - 1 and cell["resolution"] >= FIRST_HILBERT_RESOLUTION - 1:
+        quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
+        hilbert_resolution = cell["resolution"] - FIRST_HILBERT_RESOLUTION + 1
+        cell_geom = s_to_cell(cell["S"], hilbert_resolution, orientation)
+        center = get_pentagon_center(hilbert_resolution, quintant, cell_geom.triple, cell_geom.flavor)
+        best = _lookup_in_quintant(center, cell["origin"], get_quintant_polar(to_polar(center)), resolution)
+        if best is not None and best[0] > _TIE_EPS * (1 << best[5]):
+            return best[1]
+    return spherical_to_cell(cell_to_spherical(cell_id), resolution)
+
+
 def _get_pentagon(cell: A5Cell) -> PentagonShape:
     """
     Get the pentagon shape for a given cell.

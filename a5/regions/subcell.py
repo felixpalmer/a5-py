@@ -11,7 +11,7 @@
 import math
 from typing import List, Sequence
 
-from ..core.cell import _get_pentagon, cell_to_spherical, spherical_to_cell
+from ..core.cell import _get_pentagon, cell_center_to_cell
 from ..core.face_adjacency import FACE_ADJACENCY, seam_transform
 from ..core.serialization import (
     deserialize, get_resolution, slot_to_cell, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
@@ -54,7 +54,7 @@ def cell_to_supercell(cell: int, resolution: int) -> int:
         )
     if resolution == cell_resolution:
         return cell
-    return spherical_to_cell(cell_to_spherical(cell), resolution)
+    return cell_center_to_cell(cell, resolution)
 
 
 def cell_to_subcell(cell: int, resolution: int) -> List[int]:
