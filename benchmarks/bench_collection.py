@@ -2,13 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-import pytest
-
-try:
-    from a5 import contains, count, difference, intersect, lonlat_to_cell, polygon_to_cells, spherical_cap, union
-except ImportError:
-    # The baseline run may use a library without set operations; report these as new benchmarks
-    pytest.skip('set operations not available', allow_module_level=True)
+from a5 import contains, count, difference, intersect, lonlat_to_cell, polygon_to_cells, spherical_cap, union
 
 from .utils import country_polygon, create_random
 

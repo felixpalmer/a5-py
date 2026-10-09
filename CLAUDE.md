@@ -74,7 +74,9 @@ uv publish
 ## Benchmarks
 - `/benchmarks` - performance benchmark suite (mirrors the TypeScript `../a5/benchmarks`), one `bench_<topic>.py` file per topic, using **pytest-benchmark**.
 - Shared helpers in `benchmarks/utils.py`: deterministic `create_random` (mulberry32) PRNG, `sample_points`, `sample_cells`, and fixture loaders (`load_countries`, `country_polygon`).
-- Hot calls rotate through `N=256` precomputed inputs via an `itertools.count()` counter passed to the `benchmark` fixture.
+- Slower calls (≳1µs) rotate through `N` precomputed inputs via an `itertools.count()` counter in the lambda passed to the `benchmark` fixture.
+- Calls under ~1µs are batched: a local `def run()` makes `BATCH` (100, `benchmarks/utils.py`) calls per measured call over `BATCH` distinct precomputed inputs (`for i in range(BATCH): f(inputs[i])`), and the function name ends in `_x100`. Timed one call at a time, the lambda + counter overhead and timer granularity dominate and noise reads as a 15-25% regression.
+- Write benchmarks against the current API only, with no guards (`getattr`, `inspect.signature`, `try/except ImportError`, `skipif`) for older versions. CI (`.github/workflows/bench.yml`) runs the PR's `benchmarks/` against the merge-base's `a5/` too; that baseline run uses `--continue-on-collection-errors` and tolerates failures, so a module that fails to import or a benchmark that errors there is just missing from `bench-baseline.json` and `scripts/compare_benchmarks.py` reports it as new. A benchmark that errors in the PR run still fails the job.
 - Run with: `uv run pytest benchmarks --benchmark-only`
 - `pytest-benchmark` is in the `bench` optional-dependency group and the `dev` dependency group; install via `uv sync --group dev` (or `uv pip install -e ".[bench]"`).
 - `testpaths` stays `["tests"]`, so a plain `uv run pytest` does NOT collect benchmarks; the ini also recognizes `bench_*.py` files/`bench_*` functions so `benchmarks/` collects when its path is given explicitly.

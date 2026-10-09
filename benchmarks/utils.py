@@ -21,6 +21,16 @@ _FIXTURE_PATH = os.path.join(
     'tests', 'regions', 'fixtures', 'polygon.json',
 )
 
+# Calls per measured call for benchmarks of functions that take under ~1µs.
+# Each sample times one call of the benchmarked function, and for a call that
+# short the harness's own per-call overhead (the lambda plus an itertools
+# counter to rotate inputs) and the timer's granularity dominate: noise of a
+# few tens of ns reads as a 15-25% regression. These benchmarks make BATCH
+# calls per measured call, over BATCH different precomputed inputs, so the
+# time reported (per batch, marked "_x100" in the name) is the work being
+# measured.
+BATCH = 100
+
 
 def load_countries() -> list:
     """Load the country polygon fixtures used by compact/polygon benchmarks."""

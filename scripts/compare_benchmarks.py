@@ -18,6 +18,11 @@
 # Output is GitHub-flavored markdown for $GITHUB_STEP_SUMMARY: regressions and
 # gains beyond the threshold are surfaced in their own tables at the top, with
 # the full results in a collapsed <details> section below.
+#
+# The PR's benchmark files drive both runs, so in the baseline run a benchmark
+# of a function the PR adds fails to import or errors and is missing from the
+# baseline JSON: it is reported as new. A benchmark that errors in the PR's own
+# run fails that pytest step before this script runs.
 
 import json
 import sys
