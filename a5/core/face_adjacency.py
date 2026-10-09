@@ -3,7 +3,11 @@
 # Copyright (c) A5 contributors
 
 import math
-from typing import Callable, List
+from typing import Callable, List, Tuple
+
+from .constants import TWO_PI_OVER_5
+from .pentagon import BASIS
+from ..lattice.types import Triple
 
 # Computed empirically from cell boundary vertex sharing at resolution 4.
 
@@ -25,6 +29,49 @@ FACE_ADJACENCY = [
     [[2, 4], [1, 4], [11, 4], [7, 4], [9, 3]],    # origin 10
     [[1, 3], [0, 4], [6, 4], [7, 0], [10, 2]],    # origin 11
 ]
+
+# The seam across a base edge. Unfolded about the edge, quintant q of a face
+# and quintant FACE_ADJACENCY[origin_id][q] of its neighbor continue one
+# lattice: in each quintant's own lattice coordinates (IJ, in face units) the
+# point ij of one is the point (1, 1) - ij of the other, a half-turn about the
+# edge's midpoint. `seam_transform` and `seam_triple` are this map in face
+# coordinates and on cells.
+
+
+def seam_transform(origin_id: int, quintant: int) -> Tuple[float, float, float, float, float, float]:
+    """
+    The map from a face's frame into the frame of its neighbor across the base
+    edge of `quintant`, as (a, b, c, d, tx, ty) taking (x, y) to
+    (a x + c y + tx, b x + d y + ty). With R(k) the rotation of quintant k into
+    place and q' the neighbor's quintant, it is p -> R(q') (BASIS (1, 1) - R(-q) p).
+    """
+    angle = TWO_PI_OVER_5 * FACE_ADJACENCY[origin_id][quintant][1]
+    cos = math.cos(angle)
+    sin = math.sin(angle)
+    # The linear part is R(q') R(-q) negated: a half-turn plus the change of quintant
+    turn = angle - TWO_PI_OVER_5 * quintant
+    ex = BASIS[0][0] + BASIS[0][1]
+    ey = BASIS[1][0] + BASIS[1][1]
+    return (
+        -math.cos(turn),
+        -math.sin(turn),
+        math.sin(turn),
+        -math.cos(turn),
+        cos * ex - sin * ey,
+        sin * ex + cos * ey,
+    )
+
+
+def seam_triple(t: Triple, max_row: int) -> Triple:
+    """
+    A cell's image across the seam at its quintant's base edge (`max_row` is its
+    own), in the neighbor quintant's triples. The half-turn maps the lattice to
+    itself, so the image is a cell: its pentagon is the cell's own turned
+    half-way round, which flips the flavor's parity bit. It lies just outside
+    the neighbor quintant; its neighbors inside it are the cell's neighbors
+    across the seam.
+    """
+    return Triple(-max_row - t.x, 2 * max_row + 1 - t.y, -max_row - t.z)
 
 
 def walk_faces(seeds: List[int], expand: Callable[[int], bool], max_rings: float = math.inf) -> List[int]:

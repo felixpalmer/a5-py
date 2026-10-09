@@ -9,20 +9,16 @@
 # one exactly.
 
 import math
-from typing import List, Sequence, Tuple
+from typing import List, Sequence
 
 from ..core.cell import _get_pentagon, cell_to_spherical, spherical_to_cell
-from ..core.constants import TWO_PI_OVER_5
-from ..core.face_adjacency import FACE_ADJACENCY
+from ..core.face_adjacency import FACE_ADJACENCY, seam_transform
 from ..core.serialization import (
     deserialize, get_resolution, slot_to_cell, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
 )
 from ..core.tiling import get_face_vertices
-from ..projections.dodecahedron import DodecahedronProjection
 from ..collections.slot_runs import SlotRuns, slot_runs_to_covering, to_covering
 from ..traversal.curve_descent import descend_in_curve_order, INSIDE, OUTSIDE, SPLIT
-
-_dodecahedron = DodecahedronProjection()
 
 # How far the center of any descendant of a cell can lie from the cell's own
 # center, in units of the cell's lattice spacing (face units * 2^hilbert_res). A
@@ -92,7 +88,7 @@ def cell_to_subcell(cell: int, resolution: int) -> List[int]:
 
     # Cells along a dodecahedron edge interlock with the neighboring face's, so a
     # cell's subcells can come from the faces next to its own: search each face
-    # the cell's pentagon reaches into, in that face's frame.
+    # the cell's pentagon reaches into, in that face's frame (see seam_transform).
     a5cell = deserialize(cell)
     origin_id = a5cell['origin'].id
     own: List[float] = []
@@ -103,7 +99,8 @@ def cell_to_subcell(cell: int, resolution: int) -> List[int]:
     frame_vertices = [own]
     face_edges = _face_edges()
     for q in range(5):
-        adjacent_id, m = _unfold(origin_id, q)
+        adjacent_id = FACE_ADJACENCY[origin_id][q][0]
+        m = seam_transform(origin_id, q)
         mapped = [0.0] * 10
         reaches = False
         for i in range(0, 10, 2):
@@ -204,47 +201,3 @@ def _signed_margin(lines: List[float], x: float, y: float) -> float:
             margin = d
     return margin
 
-
-# By origin.id * 5 + quintant: the face across that quintant's edge, and the
-# map from this face's frame into that face's, as [a, b, c, d, tx, ty] taking
-# (x, y) to (a x + c y + tx, b x + d y + ty). Beyond its edges a face's frame
-# extends into the neighboring face by unfolding the dodecahedron about the
-# shared edge, so the map is rigid; it is fitted from three points of the
-# neighbor's quintant on that edge. Filled on first use.
-_UNFOLDS: List[Tuple[int, Tuple[float, ...]]] = []
-
-
-def _unfold(origin_id: int, quintant: int) -> Tuple[int, Tuple[float, ...]]:
-    if not _UNFOLDS:
-        for o in range(12):
-            for q in range(5):
-                adjacent_id, adjacent_quintant = FACE_ADJACENCY[o][q]
-                # Points of the neighbor's quintant (in its frame), and where they land in this one
-                to: List[float] = []
-                frm: List[float] = []
-                for r, angle in ((0.3, 0.0), (0.55, -0.4), (0.55, 0.4)):
-                    gamma = adjacent_quintant * TWO_PI_OVER_5 + angle
-                    point = (r * math.cos(gamma), r * math.sin(gamma))
-                    landed = _dodecahedron.forward(_dodecahedron.inverse(point, adjacent_id), o)
-                    to.extend(point)
-                    frm.extend((landed[0], landed[1]))
-                # Solve [to1 - to0, to2 - to0] = M [from1 - from0, from2 - from0]
-                f1x = frm[2] - frm[0]
-                f1y = frm[3] - frm[1]
-                f2x = frm[4] - frm[0]
-                f2y = frm[5] - frm[1]
-                det = f1x * f2y - f2x * f1y
-                t1x = to[2] - to[0]
-                t1y = to[3] - to[1]
-                t2x = to[4] - to[0]
-                t2y = to[5] - to[1]
-                a = (t1x * f2y - t2x * f1y) / det
-                c = (t2x * f1x - t1x * f2x) / det
-                b = (t1y * f2y - t2y * f1y) / det
-                d = (t2y * f1x - t1y * f2x) / det
-                _UNFOLDS.append((adjacent_id, (
-                    a, b, c, d,
-                    to[0] - a * frm[0] - c * frm[1],
-                    to[1] - b * frm[0] - d * frm[1],
-                )))
-    return _UNFOLDS[origin_id * 5 + quintant]
