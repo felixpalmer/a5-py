@@ -44,8 +44,18 @@ jobs:
           echo "Baseline commit: $BASE"
           git checkout "$BASE" -- a5
 
+      # Benchmarks are written against the PR's API only, so against the baseline
+      # library a module may fail to import (e.g. a function the PR adds) or a
+      # benchmark may error. Those record no result and are reported as new by
+      # the comparison; the rest still run and are written to the JSON. A
+      # benchmark that errors in the PR run above still fails the job.
       - name: Run benchmarks (baseline)
-        run: uv run pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --benchmark-json=bench-baseline.json
+        shell: bash
+        run: |
+          if ! uv run pytest benchmarks --benchmark-only --benchmark-disable-gc --benchmark-warmup=on --continue-on-collection-errors --benchmark-json=bench-baseline.json; then
+            echo "::warning::Some benchmarks could not run against the baseline library; they are reported as new"
+          fi
+          test -s bench-baseline.json
 
       - name: Restore PR library code
         run: git checkout HEAD -- a5
