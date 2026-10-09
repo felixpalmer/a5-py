@@ -124,10 +124,31 @@ def cell_first_slot_unchecked(cell: int) -> int:
     return cell - tag
 
 
+U64_MAX = (1 << 64) - 1
+
+
+def is_valid_cell(cell: int) -> bool:
+    """
+    Check whether a 64-bit value is an A5 cell ID: its tag (lowest set bit) must
+    be a resolution tag, and its origin (res 0) or quintant (res 1-29) must exist.
+    The world cell counts as a cell: it has no boundary, but `cell_to_parent` gives
+    it as the parent of the res-0 cells. A compaction marker is not a cell.
+    """
+    if cell <= 0 or cell > U64_MAX:
+        return cell == WORLD_CELL
+    bit = (cell & -cell).bit_length() - 1
+    # Resolutions 2-29 (odd bits 55-1), in quintants 0-59, or 30 (bits 4, 2, 0)
+    if bit < 56:
+        return cell < WORLD_SLOTS if bit % 2 == 1 else bit <= 4
+    # Resolution 0 (bit 57) of origins 0-11, or 1 (bit 56) of quintants 0-59
+    top = cell >> QUINTANT_SHIFT
+    return (bit == 57 and top < 12) or (bit == 56 and top < 60)
+
+
 def checked_resolution(cell: int) -> int:
     """
     The resolution of a cell, as `get_resolution` gives it, but raising ValueError
-    if the value is not an A5 cell ID (see `cell_first_slot` for what that requires).
+    if the value is not an A5 cell ID (see `is_valid_cell`).
     """
     tag = cell & -cell
     if tag == 0:

@@ -14,6 +14,7 @@ from a5.coverings.resolution import covering_resolution
 from a5.core.compaction_marker import is_compaction_marker
 from a5.core.cell import cell_to_boundary
 from a5.core.hex import hex_to_u64
+from a5.core.serialization import is_valid_cell
 
 fixtures_path = os.path.join(os.path.dirname(__file__), '../fixtures/covering.json')
 with open(fixtures_path, 'r') as f:
@@ -101,6 +102,18 @@ class TestIsCompactionMarker:
         for f in fixtures['isCompactionMarker']:
             if f['expected']:
                 assert cell_to_boundary(hex_to_u64(f['value'])) == []
+
+
+class TestIsValidCell:
+    def test_recognizes_cells_only(self):
+        for f in fixtures['isValidCell']:
+            assert is_valid_cell(hex_to_u64(f['value'])) == f['expected'], f['value']
+
+    def test_refuses_values_outside_64_bits(self):
+        assert not is_valid_cell(-1)
+        assert not is_valid_cell(-(1 << 3))
+        assert not is_valid_cell(1 << 64)
+        assert not is_valid_cell((1 << 64) | 1)
 
 
 INVALID_CELL_OPERATIONS = {
