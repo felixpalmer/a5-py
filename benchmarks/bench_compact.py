@@ -9,8 +9,8 @@ from .utils import country_polygon
 uk = country_polygon('United Kingdom')
 
 # A realistic mixed-resolution cell set: country fill expanded to a flat list
-compacted = polygon_to_cells(uk, 10)
-flat = uncompact(compacted, 10)
+flat = uncompact(polygon_to_cells(uk, 10))
+compacted_12 = polygon_to_cells(uk, 12)
 
 
 def bench_compact_uk_res_10(benchmark):
@@ -18,5 +18,5 @@ def bench_compact_uk_res_10(benchmark):
     benchmark(lambda: compact(flat))
 
 
-def bench_uncompact_uk_res_10_to_12(benchmark):
-    benchmark(lambda: uncompact(flat, 12))
+def bench_uncompact_uk_res_12(benchmark):
+    benchmark(lambda: uncompact(compacted_12))

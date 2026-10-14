@@ -50,7 +50,7 @@ class DodecahedronProjection:
         """
         Same as `forward` but takes a Cartesian unit vector -- skips the
         `to_cartesian` round-trip when the caller already has the Cartesian
-        form (e.g. in the spiral-search path inside `spherical_to_cell`).
+        form.
         """
         origin = origins[origin_id]
 

@@ -30,11 +30,6 @@ Polar = NewType('Polar', Tuple[float, Radians])
 """
 IJ = NewType('IJ', Vec2)
 
-"""
-2D planar coordinate system formed by the transformation K -> I + J
-"""
-KJ = NewType('KJ', Vec2)
-
 # 3D coordinate systems
 """
 3D cartesian system centered on unit sphere/dodecahedron

@@ -1,11 +1,11 @@
 """
 A5 Python package.
 
-The public API below is served by one of two interchangeable backends -- the
-pure-Python reference implementation, or PyO3 bindings to the a5-rs crate.
-Signatures, return types and exceptions are identical either way; see
-:mod:`a5._backend` for how one is chosen and :func:`get_backend` for which one
-is active.
+The public API below is served by one of two interchangeable backends -- PyO3
+bindings to the a5-rs crate (the default wherever the compiled extension is
+available), or the pure-Python reference implementation. Signatures, return
+types and exceptions are identical either way; see :mod:`a5._backend` for how
+one is chosen and :func:`get_backend` for which one is active.
 """
 
 from a5._backend import BACKEND, get_backend
@@ -16,10 +16,15 @@ if BACKEND == 'rust':
         cell_to_boundary, cell_to_lonlat, lonlat_to_cell,
         hex_to_u64, u64_to_hex,
         # Hierarchy
-        cell_to_parent, cell_to_children, get_resolution, get_res0_cells,
+        cell_to_parent, cell_to_children, get_resolution, get_res0_cells, is_valid_cell,
         get_num_cells, get_num_children, cell_area, cell_edge_length_avg,
+        cell_to_subcell, cell_to_supercell,
         # Compaction
-        compact, uncompact,
+        compact, uncompact, is_compaction_marker,
+        # Coverings
+        covering_resolution, contains, difference, intersect, overlaps, union, area, count,
+        # Migration
+        migrate,
         # Traversal
         grid_disk, grid_disk_vertex, spherical_cap, line_string_to_cells,
         # Regions
@@ -31,11 +36,21 @@ else:
     from a5.core.hex import hex_to_u64, u64_to_hex
 
     # Hierarchy
-    from a5.core.serialization import cell_to_parent, cell_to_children, get_resolution, get_res0_cells
+    from a5.core.serialization import cell_to_parent, cell_to_children, get_resolution, get_res0_cells, is_valid_cell
     from a5.core.cell_info import get_num_cells, get_num_children, cell_area, cell_edge_length_avg
+    from a5.regions.subcell import cell_to_subcell, cell_to_supercell
 
     # Compaction
-    from a5.core.compact import compact, uncompact
+    from a5.coverings.compact import compact, uncompact
+    from a5.core.compaction_marker import is_compaction_marker
+
+    # Coverings
+    from a5.coverings.resolution import covering_resolution
+    from a5.coverings.set_operations import contains, difference, intersect, overlaps, union
+    from a5.coverings.measures import area, count
+
+    # Migration
+    from a5.core.migrate import migrate
 
     # Traversal
     from a5.traversal import grid_disk, grid_disk_vertex, spherical_cap, line_string_to_cells
@@ -53,10 +68,15 @@ __all__ = [
     'cell_to_boundary', 'cell_to_lonlat', 'lonlat_to_cell',
     'hex_to_u64', 'u64_to_hex',
     # Hierarchy
-    'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells', 'MAX_RESOLUTION', 'WORLD_CELL',
+    'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells', 'is_valid_cell', 'MAX_RESOLUTION', 'WORLD_CELL',
     'get_num_cells', 'get_num_children', 'cell_area', 'cell_edge_length_avg',
+    'cell_to_subcell', 'cell_to_supercell',
     # Compaction
-    'compact', 'uncompact',
+    'compact', 'uncompact', 'is_compaction_marker',
+    # Coverings
+    'covering_resolution', 'contains', 'difference', 'intersect', 'overlaps', 'union', 'area', 'count',
+    # Migration
+    'migrate',
     # Traversal
     'grid_disk', 'grid_disk_vertex', 'spherical_cap', 'line_string_to_cells',
     # Regions

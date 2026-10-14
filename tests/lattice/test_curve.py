@@ -7,7 +7,7 @@ from pathlib import Path
 
 from a5.lattice import (
     Triple,
-    s_to_cell, s_to_triple, triple_to_s, triple_parity, triple_in_bounds, ij_to_s,
+    s_to_cell, s_to_triple, triple_to_s, triple_parity, triple_in_bounds, round_to_triple,
 )
 
 
@@ -44,12 +44,24 @@ class TestCurve:
             s = triple_to_s(triple, f["resolution"], f["orientation"])
             assert s == f["s"]
 
-    def test_ij_to_s(self):
-        for f in load_fixtures()["IJToS"]:
-            s = ij_to_s((f["i"], f["j"]), f["resolution"], f["orientation"])
+    def test_point_to_s(self):
+        for f in load_fixtures()["pointToS"]:
+            s = triple_to_s(round_to_triple((f["i"], f["j"]), f["resolution"]), f["resolution"], f["orientation"])
             assert s == f["s"]
 
     def test_triple_in_bounds(self):
         for f in load_fixtures()["tripleInBounds"]:
             triple = Triple(f["x"], f["y"], f["z"])
             assert triple_in_bounds(triple, f["maxRow"]) == f["expected"]
+
+
+def test_triple_flavor_closed_form():
+    """Pin the closed form against the descent over all cells at res 0-6
+    (res 0 included: its single corner cell is flavor 2), two orientations."""
+    from a5.lattice import s_to_cell, triple_flavor
+    for orientation in ['uv', 'wu']:
+        for res in range(7):
+            max_row = (1 << res) - 1
+            for s in range(1 << (2 * res)):
+                cell = s_to_cell(s, res, orientation)
+                assert triple_flavor(cell.triple, max_row) == cell.flavor, (s, res, orientation)

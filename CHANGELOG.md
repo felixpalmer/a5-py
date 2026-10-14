@@ -19,6 +19,33 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v1.0.0b1] - October 9 2026
+
+**BREAKING: new, permanent cell-ID system.** The grid moves to a new non-self-intersecting curve and a new face tour, so cell IDs are not compatible with 0.x — re-index from lon/lat OR use the migrate() function
+
+- feat: cellToSubcell/supercell (#81)
+- Feat: Covering + set operations (#80)
+- fix: better polygon 'overlapping' accuracy (#79)
+- fix: cellToChildren order (#78)
+- feat: Polygon fill from boundary only (#77)
+- feat: tripleChildren & tripleParent speedup (#76)
+- feat: optimize polygonToCells (#75)
+- feat: sphericalCap optimize (#74)
+- feat: optimize linestringToCells (#73)
+- feat: faster gridDisk (#72)
+- Fix: polygon fills for huge polygons (#71)
+- fix: Cleaner tripleFlavor function (#70)
+- Feat: Simpler tour through dodecahedron faces (#69)
+- feat: Cell ID migration helper (#68)
+- fix: Pentagonal cells at resolution 1 (#67)
+- fix: Remove slow spiral search (#66)
+- feat: Cutover to new non-selfintersecting curve (#55)
+- chore: fix test workflow (#63)
+
+#### pya5 [v0.10.1] - September 16 2026
+
+- chore: cleanup CRS debug logging (#64)
+
 #### pya5 [v0.10.0] - August 28 2026
 
 - Improve precision in vec3.angle function (#59)

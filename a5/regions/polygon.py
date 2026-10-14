@@ -3,222 +3,18 @@
 # Copyright (c) A5 contributors
 
 import math
-from typing import Dict, List, Optional, Sequence, Set, Tuple, TypedDict, Union
+from typing import List, Optional, Sequence, TypedDict, Union
 
 from ..core.coordinate_systems import LonLat, Cartesian
-from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_to_spherical
-from ..core.coordinate_transforms import from_lonlat, to_cartesian, to_spherical
-from ..core.serialization import (
-    cell_to_parent, cell_to_children, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
-)
-from ..core.compact import compact
-from ..geometry.spherical_polygon import ring_winding_sign
-from ..geometry.prepared_polygon import (
-    PreparedPolygon, prepare_polygon, point_in_prepared_polygon,
-)
-from ..traversal.cap import estimate_cell_radius
-from ..utils.great_circle import sample_great_circle_arc
-from ..traversal.lattice_neighbors import get_lattice_neighbors
-from ..traversal.lattice_flood_fill import triple_space_flood_fill
-
-
-# Maps each boundary cell to the indices of the ring segments that produced it.
-# Segment indices are global across rings (outer ring first, then holes).
-SegmentMap = Dict[int, List[int]]
-
-
-def _dense_sample_boundary(
-    rings: List[List[LonLat]], ring_vecs_list: List[List[Cartesian]], resolution: int,
-) -> Tuple[List[int], Set[int], SegmentMap]:
-    """
-    Dense-sample boundary cells along every closed ring (outer + holes) at
-    cell_radius * 0.4 spacing, calling spherical_to_cell per sample.
-    """
-    boundary_cells: List[int] = []
-    boundary_set: Set[int] = set()
-    segment_map: SegmentMap = {}
-    cell_radius = estimate_cell_radius(resolution)
-    sample_interval = cell_radius * 0.4
-
-    def record_cell(cell: int, seg_idx: int) -> None:
-        if cell not in boundary_set:
-            boundary_set.add(cell)
-            boundary_cells.append(cell)
-        existing = segment_map.get(cell)
-        if existing is not None:
-            if existing[-1] != seg_idx:
-                existing.append(seg_idx)
-        else:
-            segment_map[cell] = [seg_idx]
-
-    seg_offset = 0
-    for r in range(len(rings)):
-        ring = rings[r]
-        ring_vecs = ring_vecs_list[r]
-
-        n = len(ring)
-        vertex_cells: List[int] = [0] * n
-        for i in range(n):
-            vertex_cells[i] = lonlat_to_cell(ring[i], resolution)
-
-        for i in range(n):
-            next_i = (i + 1) % n
-            record_cell(vertex_cells[i], seg_offset + i)
-
-            # Skip the lonLat round-trip: samples are authalic-Cartesian already.
-            samples = sample_great_circle_arc(ring_vecs[i], ring_vecs[next_i], sample_interval)
-            for s in samples:
-                record_cell(spherical_to_cell(to_spherical(s), resolution), seg_offset + i)
-            record_cell(vertex_cells[next_i], seg_offset + i)
-        seg_offset += n
-
-    return boundary_cells, boundary_set, segment_map
-
-
-def _filter_boundary_cells(
-    boundary_cells: List[int], segment_map: SegmentMap,
-    seg_normals: List[Cartesian], seg_signs: List[int],
-    prep: PreparedPolygon,
-) -> List[int]:
-    """
-    Filter boundary cells to those whose center is inside the polygon.
-
-    For each cell we know which ring segment(s) sampled it. When all of those
-    segments place the cell on the interior side (cheap signed-dot test), we
-    accept immediately. When they disagree (vertex / concave corner) or the
-    cell wasn't recorded, fall back to full PIP.
-    """
-    out: List[int] = []
-    for cell in boundary_cells:
-        cv = to_cartesian(cell_to_spherical(cell))
-        segments = segment_map.get(cell)
-        if segments is None:
-            if point_in_prepared_polygon(cv, prep):
-                out.append(cell)
-            continue
-        all_inside = True
-        any_inside = False
-        ambiguous = False
-        for seg_idx in segments:
-            n = seg_normals[seg_idx]
-            dot = n[0] * cv[0] + n[1] * cv[1] + n[2] * cv[2]
-            if abs(dot) < 1e-14:
-                ambiguous = True
-                break
-            if dot * seg_signs[seg_idx] > 0:
-                any_inside = True
-            else:
-                all_inside = False
-        if ambiguous or (any_inside and not all_inside):
-            if point_in_prepared_polygon(cv, prep):
-                out.append(cell)
-        elif all_inside:
-            out.append(cell)
-    return out
-
-
-def _expand_shell(boundary_cells: List[int], boundary_set: Set[int]) -> List[int]:
-    """
-    Buffer the boundary by one cell using 3-edge lattice neighbors. The shell
-    matches the connectivity of `triple_space_flood_fill` so the firewall (boundary
-    + exterior shell) is a tight topological barrier for the subsequent flood.
-    """
-    shell_cells: List[int] = []
-    shell_set: Set[int] = set()
-    for cell in boundary_cells:
-        for neighbor in get_lattice_neighbors(cell, True):
-            if neighbor in boundary_set:
-                continue
-            if neighbor not in shell_set:
-                shell_set.add(neighbor)
-                shell_cells.append(neighbor)
-    return shell_cells
-
-
-def _flood_interior(
-    interior_seeds: List[int], visited: Set[int], boundary_size: int, resolution: int,
-) -> List[int]:
-    """
-    Hierarchical flood fill from interior seed cells. Runs a few fine BFS layers
-    to clear the boundary, then a coarse-resolution BFS through the bulk, then
-    resumes fine BFS to fill gaps near the boundary. The coarse phase is skipped
-    when the polygon is too small to amortize its setup overhead.
-    """
-    for cell in interior_seeds:
-        visited.add(cell)
-
-    # Isoperimetric bound: B^2 / (4*pi) is the max interior for B boundary cells.
-    max_interior = boundary_size * boundary_size / (4 * math.pi)
-    # res 30 has a different encoding the parent-emit optimization can't use.
-    use_coarse_phase = (
-        resolution > FIRST_HILBERT_RESOLUTION
-        and resolution < MAX_RESOLUTION
-        and max_interior > 1000
-    )
-
-    if not use_coarse_phase:
-        result = triple_space_flood_fill(visited, interior_seeds, resolution)
-        return list(interior_seeds) + result['interior_cells']
-
-    parent_res = resolution - 1
-    coarse_firewall: Set[int] = set()
-    for cell in visited:
-        coarse_firewall.add(cell_to_parent(cell, parent_res))
-
-    # Phase 1: short fine BFS to move the frontier off the boundary.
-    phase1 = triple_space_flood_fill(visited, interior_seeds, resolution, 3)
-
-    # Phase 2: coarse BFS through the bulk interior.
-    coarse_interior_set = None
-    phase3_delta: List[int] = []
-    coarse_interior_cells: List[int] = []
-    if len(phase1['frontier_cell_ids']) > 0:
-        coarse_seeds: Set[int] = set()
-        for cell in phase1['frontier_cell_ids']:
-            parent = cell_to_parent(cell, parent_res)
-            if parent not in coarse_firewall:
-                coarse_seeds.add(parent)
-
-        if len(coarse_seeds) > 0:
-            coarse_visited = set(coarse_firewall)
-            for seed in coarse_seeds:
-                coarse_visited.add(seed)
-            coarse_result = triple_space_flood_fill(coarse_visited, list(coarse_seeds), parent_res)
-            coarse_interior = list(coarse_seeds) + coarse_result['interior_cells']
-            coarse_interior_set = set(coarse_interior)
-            coarse_interior_cells.extend(coarse_interior)
-
-            # Children become firewall for phase 3; the coarse parent represents
-            # them in the output, so we don't emit them individually.
-            for coarse_cell in coarse_interior:
-                for child in cell_to_children(coarse_cell, resolution):
-                    if child not in visited:
-                        visited.add(child)
-                        phase3_delta.append(child)
-
-    # Emit fine cells only when not already covered by a coarse parent.
-    interior_cells: List[int] = []
-    if coarse_interior_set is None:
-        interior_cells.extend(interior_seeds)
-        interior_cells.extend(phase1['interior_cells'])
-    else:
-        for cell in interior_seeds:
-            if cell_to_parent(cell, parent_res) not in coarse_interior_set:
-                interior_cells.append(cell)
-        for cell in phase1['interior_cells']:
-            if cell_to_parent(cell, parent_res) not in coarse_interior_set:
-                interior_cells.append(cell)
-        interior_cells.extend(coarse_interior_cells)
-
-    # Phase 3: resume fine BFS, reusing phase 1's packed state.
-    phase3 = triple_space_flood_fill(
-        {'state': phase1['state'], 'delta': phase3_delta},
-        phase1['frontier_cell_ids'],
-        resolution,
-    )
-    interior_cells.extend(phase3['interior_cells'])
-
-    return interior_cells
+from ..core.cell import cell_to_spherical
+from ..core.coordinate_transforms import from_lonlat, to_cartesian
+from ..core.serialization import cell_to_children, get_resolution, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL
+from ..coverings.slot_runs import slot_runs_to_covering, to_covering
+from ..geometry.prepared_polygon import prepare_polygon, point_in_prepared_polygon
+from ..traversal.triple_cells import cell_ids_to_triples
+from .polygon_boundary import boundary_output, classify_boundary, sample_boundary
+from .curve_runs import fill_by_curve_runs
+from .interior_flood import fill_by_flood, prefers_flood
 
 
 def _strip_closing(ring: List[LonLat]) -> List[LonLat]:
@@ -245,8 +41,8 @@ def polygon_to_cells(
     options: Optional[PolygonToCellsOptions] = None,
 ) -> List[int]:
     """
-    Find all cells within a polygon. The result is compacted -- use `uncompact`
-    to expand to the input resolution.
+    Find all cells within a polygon. The result is compacted, with a compaction marker
+    recording the resolution -- use `uncompact` to expand it.
 
     Args:
         polygon: Either a single ring of [longitude, latitude] vertices, or
@@ -260,7 +56,7 @@ def polygon_to_cells(
             gap-free coverage).
 
     Returns:
-        Sorted, compacted list of cell IDs
+        Compacted cells sorted in curve order, then the compaction marker
     """
     containment = (options or {}).get('containment', 'center')
     # Normalize: a flat ring is shorthand for a polygon with no holes.
@@ -268,10 +64,10 @@ def polygon_to_cells(
     input_rings: List[List[LonLat]] = list(polygon) if is_nested else [list(polygon)]  # type: ignore[arg-type]
 
     if len(input_rings) == 0:
-        return []
+        return to_covering([], resolution)
     outer = _strip_closing(list(input_rings[0]))
     if len(outer) < 3:
-        return []
+        return to_covering([], resolution)
     rings: List[List[LonLat]] = [outer]
     for r in range(1, len(input_rings)):
         hole = _strip_closing(list(input_rings[r]))
@@ -285,44 +81,36 @@ def polygon_to_cells(
         ring_vecs_list.append([to_cartesian(from_lonlat(ring[i])) for i in range(len(ring))])
 
     prep = prepare_polygon(ring_vecs_list)
+    # 'overlapping' output is the boundary itself, so it needs every cell the
+    # boundary touches; 'center' only needs a boundary the fill can't step past
+    # (the curve runs' ring covers any cell the sampling skips).
+    overlapping = containment == 'overlapping'
+    sampled = sample_boundary(rings, resolution, overlapping)
 
-    boundary_cells, boundary_set, segment_map = _dense_sample_boundary(rings, ring_vecs_list, resolution)
+    # Res 30 covers only quintants 0-41 (elsewhere A5 answers at res 29, see
+    # serialize), so a polygon reaching past them is filled at res 29: mixing the
+    # two lattices would leave the fill without a consistent grid.
+    if resolution == MAX_RESOLUTION and any(get_resolution(cell) != resolution for cell in sampled[0]):
+        return polygon_to_cells(polygon, resolution - 1, options)
 
-    # The boundary contribution to the output. In 'overlapping' mode every
-    # densely-sampled boundary cell contains a point on the polygon boundary, so
-    # it overlaps the polygon -- keep them all, unfiltered. In 'center' mode we
-    # filter down to those whose center lies inside.
-    if containment == 'overlapping':
-        boundary_out = boundary_cells
-    else:
-        # Flattened per-segment normals and interior-side signs, indexed like the
-        # segment map. The polygon interior lies on the *outside* of a hole ring,
-        # so hole segments get the opposite sign.
-        seg_normals: List[Cartesian] = []
-        seg_signs: List[int] = []
-        for r in range(len(rings)):
-            sign = (1 if r == 0 else -1) * ring_winding_sign(ring_vecs_list[r])
-            normals = prep.ring_normals[r]
-            for normal in normals:
-                seg_normals.append(normal)
-                seg_signs.append(sign)
-        boundary_out = _filter_boundary_cells(boundary_cells, segment_map, seg_normals, seg_signs, prep)
+    boundary = classify_boundary(sampled, ring_vecs_list, prep)
 
-    # Dense sampling can leave gaps; the shell catches them, classifying each cell.
-    shell_cells = _expand_shell(boundary_cells, boundary_set)
-    if len(shell_cells) == 0:
-        return compact(boundary_out)
+    # Resolutions 0 and 1 have no lattice (a quintant is a single cell): every
+    # cell off the boundary is in or out by its center, and there are at most 60
+    # of them.
+    if resolution < FIRST_HILBERT_RESOLUTION:
+        out = boundary_output(boundary, overlapping)
+        for cell in cell_to_children(WORLD_CELL, resolution):
+            if cell not in boundary.set and point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)), prep):
+                out.append(cell)
+        return to_covering(out, resolution)
 
-    interior_seeds: List[int] = []
-    visited: Set[int] = set(boundary_set)
-    for cell in shell_cells:
-        if point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)), prep):
-            interior_seeds.append(cell)
-        else:
-            visited.add(cell)  # exterior shell (and hole interiors) join the firewall
-    if len(interior_seeds) == 0:
-        return compact(boundary_out)
-
-    interior_cells = _flood_interior(interior_seeds, visited, len(boundary_set), resolution)
-
-    return compact(boundary_out + interior_cells)
+    # A quintant holding no boundary cells is wholly inside or outside; it can
+    # only be inside when the polygon's bounding cap holds a quintant's area (4pi/60)
+    cap_holds_quintant = 2 * math.pi * (1 - prep.cap.min_dot) >= (4 * math.pi) / 60
+    triples = cell_ids_to_triples(boundary.cells)
+    if prefers_flood(ring_vecs_list, len(boundary.cells), resolution, cap_holds_quintant):
+        return to_covering(fill_by_flood(boundary, triples, resolution, overlapping), resolution)
+    return slot_runs_to_covering(
+        fill_by_curve_runs(boundary, triples, resolution, overlapping, cap_holds_quintant), resolution
+    )

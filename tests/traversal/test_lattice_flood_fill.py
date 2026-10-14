@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from a5.traversal.lattice_flood_fill import triple_space_flood_fill
+from a5.traversal.triple_cells import cell_ids_to_triples
 from a5.core.hex import hex_to_u64, u64_to_hex
 
 
@@ -19,8 +20,8 @@ class TestTripleSpaceFloodFill:
     def test_lattice_flood_fill_fixtures(self):
         fixtures = load_fixtures()
         for f in fixtures["cases"]:
-            seeds = [hex_to_u64(c) for c in f["seedCells"]]
-            firewall = set(hex_to_u64(c) for c in f["firewallCells"])
+            seeds = cell_ids_to_triples(hex_to_u64(c) for c in f["seedCells"])
+            firewall = cell_ids_to_triples(hex_to_u64(c) for c in f["firewallCells"])
 
             result = triple_space_flood_fill(firewall, seeds, f["resolution"], f.get("maxLayers"))
             interior = sorted(u64_to_hex(c) for c in result['interior_cells'])

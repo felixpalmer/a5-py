@@ -28,11 +28,11 @@
 # what keeps every parallelogram cell on-axis.
 
 import math
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, Optional, Tuple
 
 from ..types import Orientation, Triple
 from .grammar import RULES, DRAWS
-from .tables import compile_grammar, CurveTables, POW2, BSP_EPS
+from .tables import compile_grammar, CurveTables, POW2
 from .turtle import AB
 
 # The compiled A5 grammar.
@@ -64,17 +64,20 @@ def ab_to_triple(sum_a: float, sum_b: float) -> Triple:
     sb = int(round(sum_b))
     if (2 * sa + sb) % 12 != 0 or sb % 4 != 0:
         raise ValueError(f'ab_to_triple: off-lattice corner sum ({sum_a},{sum_b})')
-    yz = (2 * sa + sb - 12) // 12  # y - z
-    e = (sb + 4) // 4  # 2x - y - z
-    for parity in (0, 1):
-        if (e + parity) % 3 != 0:
-            continue
-        x = (e + parity) // 3
-        r = parity - x  # = y + z
-        if (r + yz) % 2 != 0:
-            continue
-        return Triple(x, (r + yz) // 2, (r - yz) // 2)
-    raise ValueError(f'ab_to_triple: no integer triple for ({sum_a},{sum_b})')
+    # x = (2x - y - z + parity) / 3 is an integer, which pins the parity
+    parity = (-((sb + 4) // 4)) % 3
+    triple = _ab_to_triple_with_parity(sa, sb, parity)
+    if parity > 1 or triple.x + triple.y + triple.z != parity:
+        raise ValueError(f'ab_to_triple: no integer triple for ({sum_a},{sum_b})')
+    return triple
+
+
+def _ab_to_triple_with_parity(sum_a: int, sum_b: int, parity: int) -> Triple:
+    """`ab_to_triple` for an (integer) corner sum whose parity is known: no search and no checks."""
+    x = ((sum_b + 4) // 4 + parity) // 3
+    r = parity - x  # y + z
+    yz = (2 * sum_a + sum_b - 12) // 12  # y - z
+    return Triple(x, (r + yz) // 2, (r - yz) // 2)
 
 
 def triple_to_ab(t: Triple) -> Tuple[float, float]:
@@ -113,44 +116,38 @@ def axiom_leaf_cell(t: CurveTables, s: int, R: int, axiom: int) -> LeafCell:
 
 
 # ---------- inverse: descend by which child's convex footprint contains the target ----------
+# A real cell's corner sum lies exactly on a separator (0, exact in floats) or
+# at least 48 corner-sum units off it, at every level: the gap is between
+# integer points and fixed lines, so it does not shrink as the scale grows. A
+# threshold scaled with the level (as the footprints' BSP_EPS is) would
+# swallow that gap by level 28 and pick the wrong child.
+_CLASSIFY_THRESHOLD = -1
+
+
 def _classify(t, state, rel_a, rel_b, scale):
     """Branchless child pick: 3 separator dot products form a 3-bit pattern that
     indexes the per-state lookup table. Used on the exact path, where the target
     is strictly interior at every level."""
     s = t.class_sep
     b = state * 9
-    thr = -BSP_EPS * scale
+    thr = _CLASSIFY_THRESHOLD
     b0 = 1 if (s[b] * rel_a + s[b + 1] * rel_b + s[b + 2] * scale) >= thr else 0
     b1 = 1 if (s[b + 3] * rel_a + s[b + 4] * rel_b + s[b + 5] * scale) >= thr else 0
     b2 = 1 if (s[b + 6] * rel_a + s[b + 7] * rel_b + s[b + 8] * scale) >= thr else 0
     return t.class_lut[state * 8 + (b0 | (b1 << 1) | (b2 << 2))]
 
 
-def _inside_score(t, motif, flip, lvl, pos_a, pos_b, ta, tb, best):
-    scale = POW2[lvl - 1]
-    edges = t.fp_edges[motif * 2 + flip]
-    # pos is fixed across this hull; fold 3*pos into the target once.
-    ra = ta - 3.0 * pos_a
-    rb = tb - 3.0 * pos_b
-    min_cross = math.inf
-    e = 0
-    while e < len(edges):
-        dta = ra - edges[e] * scale
-        dtb = rb - edges[e + 1] * scale
-        cross = edges[e + 2] * dtb - edges[e + 3] * dta
-        if cross < min_cross:
-            min_cross = cross
-            if min_cross <= 0.0 and min_cross <= best:
-                return min_cross
-        e += 4
-    return min_cross
-
-
-# Shared descent for both leaf modes. `exact` targets are corner sums of real
-# cells (leaf resolved by exact sum match); fractional targets resolve the leaf
-# by point-in-cell over the 4 level-1 triangles. Internal; also used by compat.py.
-def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, exact: bool):
-    """Returns (s, leaf_flavor). Callers that only need `s` take [0]."""
+# Shared descent: the target is the corner sum of a real cell, which is
+# strictly interior at every level, so the branchless classifier is provably
+# the containing child (and the leaf resolves by exact sum match). Fractional
+# point location no longer descends at all -- spherical_to_cell rounds to a triple
+# (see curve.py round_to_triple). Internal; also used by compat.py.
+def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int,
+                      below: Optional['CurveNode'] = None):
+    """
+    Returns (s, leaf_flavor). Callers that only need `s` take [0]. With `below`,
+    also writes the descent state below the leaf there (see curve_child).
+    """
     motif = axiom
     flip = 0
     pos_a = 0.0
@@ -158,30 +155,8 @@ def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, 
     s_val = 0
     for level in range(R, 1, -1):
         scale = POW2[level - 2]
+        best_d = _classify(t, motif * 2 + flip, ta - 3.0 * pos_a, tb - 3.0 * pos_b, scale)
         sign = -scale if flip else scale
-        # Exact targets (real cell corner sums) are strictly interior at every
-        # level, so the branchless classifier is provably the containing child.
-        # Fractional targets can sit on a child boundary, where the classifier's
-        # tie-break can differ from the argmax, so keep the exact argmax scan for
-        # that path (only sum_point_to_s uses it -- compat locates points via the
-        # old sign tests).
-        if exact:
-            best_d = _classify(t, motif * 2 + flip, ta - 3.0 * pos_a, tb - 3.0 * pos_b, scale)
-        else:
-            best_d = 0
-            best_score = -math.inf
-            for d in range(4):
-                ci = motif * 4 + d
-                score = _inside_score(
-                    t, t.child_token[ci], flip ^ t.child_flip[ci], level - 1,
-                    pos_a + t.child_off_a[ci] * sign, pos_b + t.child_off_b[ci] * sign,
-                    ta, tb, best_score,
-                )
-                if score > best_score:
-                    best_score = score
-                    best_d = d
-                    if score > 0.0:
-                        break  # strictly inside: the unique containing child
         ci = motif * 4 + best_d
         pos_a += t.child_off_a[ci] * sign
         pos_b += t.child_off_b[ci] * sign
@@ -189,38 +164,21 @@ def axiom_target_to_s(t: CurveTables, ta: float, tb: float, R: int, axiom: int, 
         motif = t.child_token[ci]
         idx = level - 1
         s_val += best_d << (2 * idx)
-    # level 1: pick the leaf cell, by exact corner-sum match or point-in-cell
+    # level 1: pick the leaf cell by exact corner-sum match
     base = motif * 2 + flip
     d0 = 0
-    if exact:
-        rel_a = ta - 3.0 * pos_a
-        rel_b = tb - 3.0 * pos_b
-        found = False
-        for d in range(4):
-            if t.leaf_sum[base * 8 + d * 2] == rel_a and t.leaf_sum[base * 8 + d * 2 + 1] == rel_b:
-                d0 = d
-                found = True
-                break
-        if not found:
-            raise ValueError(f'lsystem inverse: no leaf match for corner sum ({ta},{tb})')
-    else:
-        ra = ta - 3.0 * pos_a
-        rb = tb - 3.0 * pos_b
-        best_score = -math.inf
-        for d in range(4):
-            min_cross = math.inf
-            for e in range(3):
-                o = base * 48 + d * 12 + e * 4
-                dta = ra - t.leaf_tri[o]
-                dtb = rb - t.leaf_tri[o + 1]
-                cross = t.leaf_tri[o + 2] * dtb - t.leaf_tri[o + 3] * dta
-                if cross < min_cross:
-                    min_cross = cross
-            if min_cross > best_score:
-                best_score = min_cross
-                d0 = d
-                if min_cross > 0.0:
-                    break
+    rel_a = ta - 3.0 * pos_a
+    rel_b = tb - 3.0 * pos_b
+    found = False
+    for d in range(4):
+        if t.leaf_sum[base * 8 + d * 2] == rel_a and t.leaf_sum[base * 8 + d * 2 + 1] == rel_b:
+            d0 = d
+            found = True
+            break
+    if not found:
+        raise ValueError(f'lsystem inverse: no leaf match for corner sum ({ta},{tb})')
+    if below is not None:
+        _step_below(t, motif, flip, pos_a, pos_b, d0, below)
     return s_val + d0, t.leaf_flavor[base * 4 + d0]
 
 
@@ -239,12 +197,24 @@ _ORIENT = {
 }
 
 
+# The flavor of the single cell at resolution 0. There the leaf is the axiom
+# itself, whose flavor reflects the axiom rather than the cell, so it is fixed
+# instead. The single cell is the quintant's corner cell [-max_row, max_row, 0],
+# which touches a dodecahedron vertex and is flavor 2 at every resolution, so
+# the corner cells keep one orientation all the way down. This orientation is
+# also the one where none of its 4 children lies entirely outside it, and the
+# one triple_flavor gives it (see triple.py).
+LEVEL0_FLAVOR = 2
+
+
 def s_to_cell(s: int, resolution: int, orientation: Orientation = 'uv') -> Cell:
     """
     The A5 curve position `s` -> cell (triple coordinate + pentagon flavor), for
     a given resolution and orientation. The triple is bijective with
     `triple_to_s_lattice`.
     """
+    if resolution == 0:
+        return Cell(triple=Triple(0, 0, 0), flavor=LEVEL0_FLAVOR)
     axiom, reverse, is_b = _ORIENT[orientation]
     s_axiom = ((1 << (2 * resolution)) - 1 - s) if reverse else s
     cell = axiom_leaf_cell(A5, s_axiom, resolution, axiom)
@@ -262,21 +232,109 @@ def s_to_triple(s: int, resolution: int, orientation: Orientation = 'uv') -> Tri
 
 def triple_to_s_lattice(triple: Triple, resolution: int, orientation: Orientation = 'uv') -> int:
     """Triple coordinate -> the A5 curve position `s`. Inverse of `s_to_triple`."""
+    return _triple_to_curve(triple, resolution, orientation)[0]
+
+
+def _triple_to_curve(triple: Triple, resolution: int, orientation: Orientation,
+                     below: Optional['CurveNode'] = None) -> Tuple[int, int]:
+    """`triple_to_s_lattice`, also giving the leaf flavor and, with `below`, the descent state below the cell."""
     axiom, reverse, is_b = _ORIENT[orientation]
     ab_a, ab_b = triple_to_ab(triple)
     tau_sum = 12.0 * POW2[resolution] if is_b else 0.0
-    s_axiom = axiom_target_to_s(A5, ab_a - tau_sum, ab_b + tau_sum, resolution, axiom, True)[0]
-    return ((1 << (2 * resolution)) - 1 - s_axiom) if reverse else s_axiom
+    s_axiom, flavor = axiom_target_to_s(A5, ab_a - tau_sum, ab_b + tau_sum, resolution, axiom, below)
+    return (((1 << (2 * resolution)) - 1 - s_axiom) if reverse else s_axiom), flavor
 
 
-def sum_point_to_s(ta: float, tb: float, resolution: int, orientation: Orientation = 'uv') -> int:
+# ---------- stepwise descent: the cell hierarchy in curve order ----------
+# A walk down the hierarchy reads one digit per level, so rather than a full
+# O(resolution) descent per cell it carries each cell's descent state and
+# takes each child in O(1). The state below a cell is the one its children's
+# digits are read from: the motif, flip and turtle position after the cell's
+# own digits, the position in units of the children's level (one level down,
+# it doubles).
+
+# The parity (x + y + z) of each leaf cell by (motif, flip, digit): a cell's
+# position only translates its leaf by lattice vectors, which keep the parity.
+_LEAF_PARITY = [sum(ab_to_triple(A5.leaf_sum[2 * i], A5.leaf_sum[2 * i + 1])) for i in range(len(A5.leaf_flavor))]
+
+
+class CurveNode:
+    """The descent state below a cell (see `curve_child`, `triple_to_curve_node`)."""
+    __slots__ = ('motif', 'flip', 'pos_a', 'pos_b')
+
+    def __init__(self, motif: int = 0, flip: int = 0, pos_a: float = 0.0, pos_b: float = 0.0):
+        self.motif = motif
+        self.flip = flip
+        self.pos_a = pos_a
+        self.pos_b = pos_b
+
+    def __eq__(self, other: object) -> bool:
+        return (isinstance(other, CurveNode) and self.motif == other.motif and self.flip == other.flip
+                and self.pos_a == other.pos_a and self.pos_b == other.pos_b)
+
+    def __repr__(self) -> str:
+        return f'CurveNode(motif={self.motif}, flip={self.flip}, pos_a={self.pos_a}, pos_b={self.pos_b})'
+
+
+def curve_child(node: CurveNode, digit: int, resolution: int, orientation: Orientation,
+                below: CurveNode) -> Tuple[Triple, int]:
     """
-    Fractional point -> the curve position `s` of the containing cell, by direct
-    descent. The target is given in the corner-sum frame (= 3x the L-system (a,b)
-    point frame); callers map their coordinate system into it (for the IJ plane
-    the exact affine map is target = (12*(i+j), -12*j), see curve.py).
+    The child with curve digit `digit` (0-3, the child's last digit of s) of the
+    cell whose descent state is `node`: returns its triple at `resolution` (the
+    child's) and its flavor, and writes the descent state below it to `below`
+    (which may be `node` itself). Agrees with `s_to_cell` on the child's s.
     """
-    axiom, reverse, is_b = _ORIENT[orientation]
-    tau_sum = 12.0 * POW2[resolution] if is_b else 0.0
-    s_axiom = axiom_target_to_s(A5, ta - tau_sum, tb + tau_sum, resolution, axiom, False)[0]
-    return ((1 << (2 * resolution)) - 1 - s_axiom) if reverse else s_axiom
+    leaf_sum = A5.leaf_sum
+    _, reverse, is_b = _ORIENT[orientation]
+    # A reversed curve reads s as N - 1 - s: every digit complemented
+    d = 3 - digit if reverse else digit
+    motif = node.motif
+    flip = node.flip
+    pos_a = node.pos_a
+    pos_b = node.pos_b
+    base = motif * 2 + flip
+    # The parity is known up front (see _LEAF_PARITY): no search
+    sum_a = int(3 * pos_a + leaf_sum[base * 8 + d * 2])
+    sum_b = int(3 * pos_b + leaf_sum[base * 8 + d * 2 + 1])
+    triple = _ab_to_triple_with_parity(sum_a, sum_b, _LEAF_PARITY[base * 4 + d])
+    if is_b:
+        p = 1 << resolution
+        triple = Triple(triple.x - p, triple.y + p, triple.z)
+    _step_below(A5, motif, flip, pos_a, pos_b, d, below)
+    return triple, A5.leaf_flavor[base * 4 + d]
+
+
+def _step_below(t: CurveTables, motif: int, flip: int, pos_a: float, pos_b: float, d: int,
+                below: CurveNode) -> None:
+    """
+    The descent state below the child with (axiom-order) digit `d` of the cell
+    whose descent state is (motif, flip, pos_a, pos_b), written to `below`.
+    """
+    ci = motif * 4 + d
+    sign = -1 if flip else 1
+    below.motif = t.child_token[ci]
+    below.flip = flip ^ t.child_flip[ci]
+    below.pos_a = 2 * pos_a + t.child_off_a[ci] * sign
+    below.pos_b = 2 * pos_b + t.child_off_b[ci] * sign
+
+
+class CurveNodeResult(NamedTuple):
+    """A cell's curve position, flavor and the descent state below it (see `triple_to_curve_node`)."""
+    s: int
+    flavor: int
+    node: CurveNode
+
+
+def triple_to_curve_node(triple: Triple, resolution: int, orientation: Orientation) -> CurveNodeResult:
+    """
+    A cell's curve position `s`, flavor and the descent state below it, from its
+    triple: where a walk down to the cell by `curve_child` would arrive, in one
+    descent rather than one step per level.
+    """
+    # Below the resolution-0 cell (the whole quintant) is the axiom itself
+    node = CurveNode(_ORIENT[orientation][0], 0, 0.0, 0.0)
+    if resolution == 0:
+        return CurveNodeResult(0, LEVEL0_FLAVOR, node)
+    s, flavor = _triple_to_curve(triple, resolution, orientation, node)
+    return CurveNodeResult(s, flavor, node)
+

@@ -35,3 +35,9 @@ class TestGetGlobalCellNeighbors:
             result = get_global_cell_neighbors(cell_id, edge_only=True)
             assert result == expected, \
                 f'cellId={case["input"]["cellId"]}: got {[hex(c) for c in result]}, expected {[hex(c) for c in expected]}'
+
+    def test_five_edge_neighbors_at_every_resolution(self):
+        # Every cell is a pentagon: the dodecahedron faces at resolution 0, the
+        # pentagonal hexecontahedron at resolution 1, the lattice tiling beyond
+        for case in load_fixtures():
+            assert len(case["output"]["edgeNeighbors"]) == 5, case["input"]["cellId"]

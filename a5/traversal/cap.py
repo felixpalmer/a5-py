@@ -4,12 +4,21 @@
 
 import math
 from typing import List
-from ..core.serialization import get_resolution, cell_to_parent, cell_to_children, FIRST_HILBERT_RESOLUTION
+from ..core.coordinate_systems import Spherical
+from ..core.serialization import (
+    get_resolution, cell_to_parent, deserialize, serialize, FIRST_HILBERT_RESOLUTION,
+)
 from ..core.cell import cell_to_spherical
 from ..core.cell_info import cell_area
+from ..coverings.slot_runs import SlotRuns, slot_runs_to_covering, to_covering
 from ..core.constants import AUTHALIC_RADIUS_EARTH
-from .global_neighbors import get_global_cell_neighbors
-from ..core.origin import haversine
+from ..core.face_adjacency import walk_faces
+from ..core.origin import haversine, origins
+from ..projections.dodecahedron import DodecahedronProjection
+from .curve_descent import descend_in_curve_order, INSIDE, OUTSIDE, SPLIT
+from .triple_cells import cell_ids_to_triples, triple_cell_center, walk_triple_cells
+
+_dodecahedron = DodecahedronProjection()
 
 # Safety factor applied to equal-area circle radius to get conservative circumradius estimate
 CELL_RADIUS_SAFETY_FACTOR = 2.0
@@ -66,12 +75,36 @@ def pick_coarse_resolution(radius: float, target_res: int) -> int:
     return target_res  # No coarsening benefit
 
 
+def _coarse_cap_cells(start_cell: int, center: Spherical, h_expanded: float) -> List[int]:
+    """
+    BFS at the cap's coarse resolution (1 or above) from `start_cell` through every
+    cell whose center lies within `h_expanded` of `center`, returning those cells
+    (the ring just outside lies beyond every threshold the descent applies).
+
+    Runs in triple space (cells as flat (origin_id, quintant, x, y, z)): neighbors
+    (edge and vertex) come from the per-flavor triple deltas plus the boundary
+    delta tables, and a cell's center straight from its triple.
+    """
+    hilbert_res = get_resolution(start_cell) - FIRST_HILBERT_RESOLUTION + 1
+    max_row = (1 << hilbert_res) - 1
+    cells = cell_ids_to_triples([start_cell])
+
+    def expand(origin_id: int, q: int, x: int, y: int, z: int) -> bool:
+        within = haversine(center, triple_cell_center(origin_id, q, x, y, z, hilbert_res, max_row)) <= h_expanded
+        if within:
+            cells.extend((origin_id, q, x, y, z))
+        return within
+
+    walk_triple_cells(list(cells), max_row, expand)
+    return cells
+
+
 def spherical_cap(cell_id: int, radius: float) -> List[int]:
     """
-    Compute all cells within a great-circle radius, returning a naturally
-    compacted result (mix of resolutions).
+    Compute all cells within a great-circle radius, returning a compacted result
+    (mix of resolutions), with a compaction marker recording the resolution.
 
-    Uses hierarchical BFS: starts at a coarse resolution and recursively
+    Descends the hierarchy (see curve_descent): starts at a coarse resolution and
     subdivides boundary cells, keeping interior cells at coarser resolutions.
     Only cells whose centers fall within the radius are included.
     """
@@ -79,54 +112,52 @@ def spherical_cap(cell_id: int, radius: float) -> List[int]:
     coarse_res = pick_coarse_resolution(radius, target_res)
     center = cell_to_spherical(cell_id)
 
-    # Pre-compute haversine threshold for the exact radius
+    # Pre-compute haversine thresholds: the exact radius, and the radius expanded
+    # so the coarse BFS captures every overlapping cell
     h_radius = meters_to_h(radius)
-
-    # BFS at coarse resolution with expanded radius to capture all overlapping cells.
+    h_expanded = meters_to_h(radius + estimate_cell_radius(coarse_res))
     start_cell = cell_to_parent(cell_id, coarse_res) if coarse_res < target_res else cell_id
-    coarse_cell_radius = estimate_cell_radius(coarse_res)
-    h_expanded = meters_to_h(radius + coarse_cell_radius)
-    coarse_visited = {start_cell}
-    coarse_frontier = {start_cell}
+    if coarse_res == 0:
+        # The target is resolution 0: the cells are the 12 dodecahedron faces
+        result: List[int] = []
 
-    while len(coarse_frontier) > 0:
-        next_frontier = set()
-        for cid in coarse_frontier:
-            for neighbor in get_global_cell_neighbors(cid):
-                if neighbor in coarse_visited:
-                    continue
-                coarse_visited.add(neighbor)
-                if haversine(center, cell_to_spherical(neighbor)) <= h_expanded:
-                    next_frontier.add(neighbor)
-        coarse_frontier = next_frontier
+        def face_cell(face: int) -> int:
+            return serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0})
 
-    # Recursive subdivision from coarseRes to targetRes.
-    result: List[int] = []
-    boundary = list(coarse_visited)
+        def near(face: int, h: float) -> bool:
+            return haversine(center, cell_to_spherical(face_cell(face))) <= h
 
-    for res in range(coarse_res, target_res):
-        cell_radius_val = estimate_cell_radius(res)
-        h_inner = meters_to_h(radius - cell_radius_val) if radius > cell_radius_val else -1
-        h_outer = meters_to_h(radius + cell_radius_val)
-        next_boundary: List[int] = []
+        for face in walk_faces([deserialize(start_cell)['origin'].id], lambda face: near(face, h_expanded)):
+            if near(face, h_radius):
+                result.append(face_cell(face))
+        return to_covering(result, target_res)
 
-        for cell in boundary:
-            h = haversine(center, cell_to_spherical(cell))
-            if h <= h_inner:
-                result.append(cell)
-            elif h > h_outer:
-                # Cell's entire extent is outside the cap -- discard
-                pass
-            else:
-                for child in cell_to_children(cell, res + 1):
-                    next_boundary.append(child)
+    # Descend from the coarse cells to target_res, classifying each cell by
+    # comparing haversine(center, cell) against pre-computed h thresholds:
+    # - Interior (h <= h_inner): keep whole, all descendants inside
+    # - Outside  (h > h_outer): discard, no descendants inside
+    # - Boundary: split into children
+    # At the target resolution both thresholds are the exact radius.
+    h_inner = [0.0] * (target_res + 1)
+    h_outer = [0.0] * (target_res + 1)
+    for res in range(coarse_res, target_res + 1):
+        cell_radius = estimate_cell_radius(res)
+        last = res == target_res
+        h_inner[res] = h_radius if last else (meters_to_h(radius - cell_radius) if radius > cell_radius else -1)
+        h_outer[res] = h_radius if last else meters_to_h(radius + cell_radius)
 
-        boundary = next_boundary
+    inverse = _dodecahedron.inverse
 
-    # Final target resolution: strict haversine check
-    for cell in boundary:
-        if haversine(center, cell_to_spherical(cell)) <= h_radius:
-            result.append(cell)
+    def classify(origin_id: int, res: int, face, slot: int) -> int:
+        h = haversine(center, inverse(face, origin_id))
+        return INSIDE if h <= h_inner[res] else SPLIT if h <= h_outer[res] else OUTSIDE
 
-    result.sort()
-    return result
+    runs: SlotRuns = []
+    descend_in_curve_order(
+        _coarse_cap_cells(start_cell, center, h_expanded),
+        coarse_res - FIRST_HILBERT_RESOLUTION + 1,
+        target_res,
+        classify,
+        runs,
+    )
+    return slot_runs_to_covering(runs, target_res)

@@ -22,14 +22,15 @@ The public API has two interchangeable implementations. Selection happens once a
 import time via `A5_BACKEND` (`auto` | `rust` | `python`). `a5.get_backend()`
 reports the active one.
 
-- **python** — the pure-Python implementation in `/a5`. The default in 0.x, and
-  always the *reference* implementation: fixtures are written against it, and
-  where the two disagree, Python is presumed right.
 - **rust** — PyO3 bindings to the a5-rs crate, built from `/src/lib.rs` into the
-  private extension module `a5._a5`. ~100x faster.
+  private extension module `a5._a5`. ~100x faster. The default since 1.0
+  (`auto`: used whenever the extension imports).
+- **python** — the pure-Python implementation in `/a5`. Opt-in via
+  `A5_BACKEND=python`, and the automatic fallback when no compiled extension is
+  available. Always the *reference* implementation: fixtures are written against
+  it, and where the two disagree, Python is presumed right.
 
-The default lives in one constant, `_DEFAULT_BACKEND` in `a5/_backend.py`; it flips
-to `'auto'` at 1.0.
+The default lives in one constant, `_DEFAULT_BACKEND` in `a5/_backend.py` (`'auto'`).
 
 **Never remove or stop testing the pure-Python implementation.** Running the
 fixture suite once per backend is what makes it a continuous differential test of
@@ -48,10 +49,14 @@ module, the PyO3 binding in `/src/lib.rs`, and both branches of `a5/__init__.py`
 - `/Cargo.toml` - extension crate; pins the `a5` crate to an exact a5-rs commit
 - `/a5` - Python source code organized into modules:
   - `_backend.py` - backend selection; `_native.py` - shim adapting `a5._a5` to the Python API
-  - `/core` - Core geospatial functionality (cell, hex, hilbert, serialization, etc.)
+  - `/core` - Core geospatial functionality (cell, hex, hilbert, serialization, leaf slots, compaction marker, etc.)
+  - `/coverings` - Coverings (sets of cells at one resolution): compact/uncompact, set operations, measures (depends only on `/core`)
   - `/math` - Mathematical primitives (vec2, vec3, quat)
   - `/geometry` - Geometric calculations (pentagon, spherical_triangle, spherical_polygon)
   - `/projections` - Map projection implementations (dodecahedron, authalic, gnomonic, etc.)
+  - `/lattice` - The A5 curve on the triangular lattice (L-system in `lattice/lsystem/`, triples, compat curve)
+  - `/traversal` - Neighbors, grid disk, spherical cap, line, curve-order descent (`curve_descent.py`)
+  - `/regions` - Polygon fill, subcell/supercell
 - `/tests` - pytest test files organized by module
   - `/core/fixtures` - Test data fixtures for core module
   - `/geometry/fixtures` - Test data fixtures for geometry module
@@ -65,6 +70,7 @@ module, the PyO3 binding in `/src/lib.rs`, and both branches of `a5/__init__.py`
 - **Resolution**: 0-30, where 0 is global coverage and 30 is ~30mm²
 - **Compaction**: Combining child cells into parent cells for efficient storage
 - **Cell ID**: Always an int (use `u64_to_hex()` for string representation)
+- **Covering / compaction marker**: a *covering* is a set of cells at one resolution, stored compacted; compacting outputs (`compact`, `polygon_to_cells`, `spherical_cap`, `grid_disk`, set ops) end with a *compaction marker* recording the resolution, so `uncompact(cells)` takes no resolution. Inside `/a5`, compact intermediate results with `compact_cells` and finish public outputs with `to_covering(cells, resolution)` (`a5/coverings/slot_runs.py`); skip markers with `is_compaction_marker` when iterating cells
 
 ## Commands
 ```bash
@@ -73,8 +79,8 @@ uv sync --group dev           # Install dev dependencies (pytest, benchmarks, ma
 uv run maturin develop --release  # Build a5/_a5.abi3.so in place
 
 # Testing -- run BOTH backends before calling a change done
-uv run pytest                 # Run all tests (pure Python, the 0.x default)
-A5_BACKEND=rust A5_EXPECT_BACKEND=rust uv run pytest    # ...and again on Rust
+A5_BACKEND=rust A5_EXPECT_BACKEND=rust uv run pytest      # Run all tests on Rust (the default)
+A5_BACKEND=python A5_EXPECT_BACKEND=python uv run pytest  # ...and again on pure Python
 uv run pytest tests/core/     # Run tests in specific directory
 uv run pytest tests/test_cell.py  # Run specific test file
 uv run pytest -k "test_name"  # Run tests matching pattern
@@ -121,7 +127,9 @@ a5 = { path = "../a5-rs" }
 ## Benchmarks
 - `/benchmarks` - performance benchmark suite (mirrors the TypeScript `../a5/benchmarks`), one `bench_<topic>.py` file per topic, using **pytest-benchmark**.
 - Shared helpers in `benchmarks/utils.py`: deterministic `create_random` (mulberry32) PRNG, `sample_points`, `sample_cells`, and fixture loaders (`load_countries`, `country_polygon`).
-- Hot calls rotate through `N=256` precomputed inputs via an `itertools.count()` counter passed to the `benchmark` fixture.
+- Slower calls (≳1µs) rotate through `N` precomputed inputs via an `itertools.count()` counter in the lambda passed to the `benchmark` fixture.
+- Calls under ~1µs are batched: a local `def run()` makes `BATCH` (100, `benchmarks/utils.py`) calls per measured call over `BATCH` distinct precomputed inputs (`for i in range(BATCH): f(inputs[i])`), and the function name ends in `_x100`. Timed one call at a time, the lambda + counter overhead and timer granularity dominate and noise reads as a 15-25% regression.
+- Write benchmarks against the current API only, with no guards (`getattr`, `inspect.signature`, `try/except ImportError`, `skipif`) for older versions. CI (`.github/workflows/bench.yml`) runs the PR's `benchmarks/` against the merge-base's `a5/` too; that baseline run uses `--continue-on-collection-errors` and tolerates failures, so a module that fails to import or a benchmark that errors there is just missing from `bench-baseline.json` and `scripts/compare_benchmarks.py` reports it as new. A benchmark that errors in the PR run still fails the job.
 - Run with: `uv run pytest benchmarks --benchmark-only`
 - `pytest-benchmark` is in the `bench` optional-dependency group and the `dev` dependency group; install via `uv sync --group dev` (or `uv pip install -e ".[bench]"`).
 - `testpaths` stays `["tests"]`, so a plain `uv run pytest` does NOT collect benchmarks; the ini also recognizes `bench_*.py` files/`bench_*` functions so `benchmarks/` collects when its path is given explicitly.
@@ -144,6 +152,7 @@ When porting features to Python:
    - `LonLat::new(lon, lat)` → `(lon, lat)`
    - `Result<T, String>` → direct return or raise exception
 5. **Test patterns**: Follow existing test structure with `class Test*` grouping tests
+6. **TS "filled on first use" tables** (e.g. `fillQuintantTables`) exist only to dodge V8 type-feedback quirks — in Python just compute them at module load. TS out-params into `{x, y, z}` objects become return values here, since `Triple` is an immutable NamedTuple
 
 ## CI Checks (run as a final verification)
 ```bash

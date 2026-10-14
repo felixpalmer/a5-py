@@ -12,7 +12,7 @@
 # A LOWERCASE motif is its uppercase counterpart REVERSED, generated automatically
 # by `reverse_motif` -- so only the 7 uppercase rules below need to be authored.
 
-from typing import Dict, List
+from typing import Dict
 
 # Each motif's production rule (the 7 authored motifs).
 RULES: Dict[str, str] = {
@@ -29,13 +29,6 @@ RULES: Dict[str, str] = {
 DRAWS: Dict[str, str] = {
     'A': 'E', 'B': '+e-', 'C': '-e+', 'M': 'T', 'P': 'S', 'Q': 'D', 'R': '+++D---',
 }
-
-# The authored (uppercase) motif keys.
-MOTIFS: List[str] = list(RULES.keys())
-
-# All motif keys, uppercase + their lowercase (reversed) counterparts.
-ALL_MOTIFS: List[str] = MOTIFS + [m.lower() for m in MOTIFS]
-
 
 def _swap_case(c: str) -> str:
     return c.upper() if c.islower() else c.lower()
