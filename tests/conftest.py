@@ -32,16 +32,16 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import pytest  # noqa: E402
 
-import a5  # noqa: E402
+from a5._backend import get_backend  # noqa: E402
 
 
 def pytest_report_header(config):
-    return 'a5 backend: {}'.format(a5.get_backend())
+    return 'a5 backend: {}'.format(get_backend())
 
 
 def pytest_collection(session):
     expected = os.environ.get('A5_EXPECT_BACKEND', '').strip().lower()
-    actual = a5.get_backend()
+    actual = get_backend()
     if expected and expected != actual:
         raise pytest.UsageError(
             'A5_EXPECT_BACKEND={!r} but the active backend is {!r}. The compiled '

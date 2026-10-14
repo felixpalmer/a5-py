@@ -19,8 +19,8 @@ Docs: ../a5/docs/api-reference/README.md
 
 ## Backends
 The public API has two interchangeable implementations. Selection happens once at
-import time via `A5_BACKEND` (`auto` | `rust` | `python`). `a5.get_backend()`
-reports the active one.
+import time via `A5_BACKEND` (`auto` | `rust` | `python`). `a5._backend.get_backend()`
+reports the active one (internal, not part of the public API).
 
 - **rust** — PyO3 bindings to the a5-rs crate, built from `/src/lib.rs` into the
   private extension module `a5._a5`. ~100x faster. The default since 1.0
@@ -97,13 +97,14 @@ uv run pytest benchmarks --benchmark-only
 python3 scripts/compare_backends.py bench-python.json bench-rust.json
 
 # Building & Publishing
-# .github/workflows/wheels.yml (cibuildwheel) builds the full platform matrix and
-# uploads the wheels as CI artifacts -- it does NOT publish. Releasing is still
-# manual, and `uv build` produces a wheel for the current platform only.
-rm -rf dist/*
+# .github/workflows/wheels.yml builds every distribution: the cibuildwheel
+# platform matrix, the pure-Python py3-none-any wheel (pip's fallback where no
+# platform wheel matches, so installs never need Rust) and the sdist. Releases
+# go through publish.yml, which calls wheels.yml and uploads all of them:
 uv version --bump patch|minor|major   # also bump version in Cargo.toml
-uv build
-uv publish
+./publish.sh beta|prod               # tags v<version> and pushes; CI publishes
+# Pure-Python wheel locally (needs pip, which uv venvs lack):
+uv run --no-project --with pip python scripts/build_pure_wheel.py
 ```
 
 ### Working against a local a5-rs
