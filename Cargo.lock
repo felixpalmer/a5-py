@@ -4,8 +4,8 @@ version = 4
 
 [[package]]
 name = "a5"
-version = "0.10.0"
-source = "git+https://github.com/felixpalmer/a5-rs?rev=7ad0978388782d94c52525974807cd0391e8e757#7ad0978388782d94c52525974807cd0391e8e757"
+version = "1.0.0-beta.2"
+source = "git+https://github.com/felixpalmer/a5-rs?rev=4091ab6edca23c309118299e05bef1644e49b46e#4091ab6edca23c309118299e05bef1644e49b46e"
 dependencies = [
  "lazy_static",
 ]
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "pya5"
-version = "0.10.0"
+version = "1.0.0-beta.1"
 dependencies = [
  "a5",
  "pyo3",

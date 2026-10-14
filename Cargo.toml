@@ -1,6 +1,6 @@
 [package]
 name = "pya5"
-version = "0.10.0"
+version = "1.0.0-beta.1"
 edition = "2021"
 authors = ["Felix Palmer <felixpalmer@gmail.com>"]
 description = "PyO3 bindings for the A5 geospatial index (private extension module for the pya5 package)"
@@ -32,7 +32,7 @@ path = "src/lib.rs"
 # (untracked):
 #   [patch."https://github.com/felixpalmer/a5-rs"]
 #   a5 = { path = "../a5-rs" }
-a5 = { git = "https://github.com/felixpalmer/a5-rs", rev = "7ad0978388782d94c52525974807cd0391e8e757" }
+a5 = { git = "https://github.com/felixpalmer/a5-rs", rev = "4091ab6edca23c309118299e05bef1644e49b46e" }
 
 # abi3-py38: one wheel per platform covers CPython 3.8+ rather than one wheel per
 # interpreter minor version, and keeps the compiled backend's floor equal to the

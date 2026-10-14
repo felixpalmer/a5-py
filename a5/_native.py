@@ -27,9 +27,12 @@ from . import _a5
 __all__ = [
     'cell_to_boundary', 'cell_to_lonlat', 'lonlat_to_cell',
     'hex_to_u64', 'u64_to_hex',
-    'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells',
+    'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells', 'is_valid_cell',
     'get_num_cells', 'get_num_children', 'cell_area', 'cell_edge_length_avg',
-    'compact', 'uncompact',
+    'cell_to_subcell', 'cell_to_supercell',
+    'compact', 'uncompact', 'is_compaction_marker',
+    'covering_resolution', 'contains', 'difference', 'intersect', 'overlaps', 'union', 'area', 'count',
+    'migrate',
     'grid_disk', 'grid_disk_vertex', 'spherical_cap', 'line_string_to_cells',
     'polygon_to_cells',
 ]
@@ -45,13 +48,28 @@ cell_to_parent = _a5.cell_to_parent
 cell_to_children = _a5.cell_to_children
 get_resolution = _a5.get_resolution
 get_res0_cells = _a5.get_res0_cells
+is_valid_cell = _a5.is_valid_cell
 get_num_cells = _a5.get_num_cells
 get_num_children = _a5.get_num_children
 cell_area = _a5.cell_area
 cell_edge_length_avg = _a5.cell_edge_length_avg
+cell_to_subcell = _a5.cell_to_subcell
+cell_to_supercell = _a5.cell_to_supercell
 
 compact = _a5.compact
 uncompact = _a5.uncompact
+is_compaction_marker = _a5.is_compaction_marker
+
+covering_resolution = _a5.covering_resolution
+contains = _a5.contains
+difference = _a5.difference
+intersect = _a5.intersect
+overlaps = _a5.overlaps
+union = _a5.union
+area = _a5.area
+count = _a5.count
+
+migrate = _a5.migrate
 
 grid_disk = _a5.grid_disk
 grid_disk_vertex = _a5.grid_disk_vertex
@@ -93,9 +111,7 @@ def polygon_to_cells(
     shorthand is expanded here, using the same test the pure-Python
     implementation uses.
     """
-    if len(polygon) == 0:
-        return []
-    is_nested = not isinstance(polygon[0][0], (int, float))
+    is_nested = len(polygon) > 0 and not isinstance(polygon[0][0], (int, float))
     rings = polygon if is_nested else [polygon]
     containment = (options or {}).get('containment', 'center')
     return _a5.polygon_to_cells(rings, resolution, containment == 'overlapping')

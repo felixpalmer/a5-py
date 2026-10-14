@@ -20,13 +20,13 @@ A5 ships two interchangeable implementations of the same public API:
 
 Selection is controlled by ``A5_BACKEND``:
 
-``auto``
+``auto`` (the default)
     Use ``rust`` if the extension module imports, otherwise ``python``.
 ``rust``
     Require the extension module; raise :class:`ImportError` if it is missing,
     so an opt-in never degrades to pure Python without saying so.
 ``python``
-    Always use the pure-Python implementation.
+    Always use the pure-Python implementation (opt-in).
 
 The backend is resolved once, at import time. Changing the environment
 afterwards has no effect.
@@ -39,12 +39,10 @@ __all__ = ['get_backend', 'native_module']
 
 # The default when A5_BACKEND is unset.
 #
-# 0.x ships pure Python as the default so that upgrading cannot change results
-# or performance characteristics under anyone's feet, with ``A5_BACKEND=rust``
-# as the opt-in for testing the compiled path. This flips to ``'auto'`` in 1.0,
-# at which point the compiled backend becomes the default wherever a wheel
-# provides it. That release note is the only thing this constant gates.
-_DEFAULT_BACKEND = 'python'
+# Since 1.0 the compiled backend is the default wherever a wheel provides it,
+# falling back to pure Python where it does not. ``A5_BACKEND=python`` opts in to
+# the pure-Python implementation regardless. (0.x defaulted to ``'python'``.)
+_DEFAULT_BACKEND = 'auto'
 
 _VALID_BACKENDS = ('auto', 'rust', 'python')
 

@@ -38,10 +38,16 @@ from a5._native import polygon_to_cells as rs_polygon_to_cells  # noqa: E402
 
 import a5.core.cell as py_cell  # noqa: E402
 import a5.core.cell_info as py_cell_info
-import a5.core.compact as py_compact
+import a5.core.compaction_marker as py_compaction_marker
 import a5.core.hex as py_hex
+import a5.core.migrate as py_migrate
 import a5.core.serialization as py_serialization
+import a5.coverings.compact as py_compact
+import a5.coverings.measures as py_measures
+import a5.coverings.resolution as py_resolution
+import a5.coverings.set_operations as py_set_operations
 import a5.regions.polygon as py_polygon
+import a5.regions.subcell as py_subcell
 import a5.traversal.cap as py_cap
 import a5.traversal.line as py_line
 
@@ -168,7 +174,7 @@ class TestHierarchy:
                 # Bound the sweep by the cell's own resolution, not the requested
                 # one: res-30 cells normalise to the res-29 layout, so asking for
                 # a parent at 30 would be out of domain. See
-                # test_known_divergences for what the two ports do there.
+                # RUST_BUGS.md #3 for what the two ports do there.
                 actual_resolution = py_serialization.get_resolution(cell)
                 for parent_resolution in range(-1, actual_resolution + 1):
                     assert native.cell_to_parent(
@@ -201,37 +207,63 @@ class TestHierarchy:
             ), resolution
 
     def test_get_num_cells(self):
-        # Resolutions 28+ are a known a5-rs bug, pinned by
-        # test_known_divergences and written up in RUST_BUGS.md.
-        for resolution in range(-1, 28):
+        for resolution in range(-1, 31):
             assert native.get_num_cells(resolution) == py_cell_info.get_num_cells(
                 resolution
             ), resolution
 
     def test_get_num_children(self):
-        # Inherits the get_num_cells bug; see test_get_num_cells.
         for parent in range(-1, 31):
             for child in range(-1, 31):
-                # get_num_children only consults get_num_cells below the first
-                # Hilbert resolution; above it the aperture-4 shortcut is exact
-                # in both ports, so only that corner inherits the divergence.
-                if parent < py_cell_info.FIRST_HILBERT_RESOLUTION and child >= 28:
-                    continue
                 assert native.get_num_children(parent, child) == py_cell_info.get_num_children(
                     parent, child
                 ), (parent, child)
+
+
+    def test_is_valid_cell(self):
+        values = [0, 1, 2, 3, py_serialization.WORLD_CELL, (1 << 64) - 1]
+        for resolution in RESOLUTIONS:
+            values.extend(_cells(resolution, 10))
+        rng = random.Random(7)
+        values.extend(rng.getrandbits(64) for _ in range(2000))
+        for value in values:
+            assert native.is_valid_cell(value) == py_serialization.is_valid_cell(value), value
+
+    def test_cell_to_subcell_and_supercell(self):
+        for resolution in (0, 1, 3, 6, 10):
+            for cell in _cells(resolution, 6):
+                for target in range(resolution, min(resolution + 3, 31)):
+                    assert native.cell_to_subcell(cell, target) == py_subcell.cell_to_subcell(
+                        cell, target
+                    ), (cell, target)
+        for resolution in (2, 5, 12, 20, 30):
+            for cell in _cells(resolution, 10):
+                for target in range(-1, py_serialization.get_resolution(cell) + 1):
+                    assert native.cell_to_supercell(cell, target) == py_subcell.cell_to_supercell(
+                        cell, target
+                    ), (cell, target)
+
+    def test_migrate(self):
+        for resolution in RESOLUTIONS:
+            for cell in _cells(resolution, 30):
+                assert native.migrate(cell) == py_migrate.migrate(cell), cell
 
 
 class TestCompaction:
     def test_uncompact_then_compact(self):
         for resolution in (2, 5, 9, 14):
             cells = _cells(resolution, 30)
+            assert native.compact(cells) == py_compact.compact(cells), resolution
             for target in range(resolution, min(resolution + 4, 31)):
-                expanded = py_compact.uncompact(cells, target)
-                assert native.uncompact(cells, target) == expanded, (resolution, target)
-                assert native.compact(expanded) == py_compact.compact(expanded), (
-                    resolution,
-                    target,
+                # A covering at a finer resolution: expand each cell to its
+                # children, then compact -- which appends the compaction marker.
+                children = [c for cell in cells for c in py_serialization.cell_to_children(cell, target)]
+                covering = py_compact.compact(children)
+                assert native.compact(children) == covering, (resolution, target)
+                expanded = py_compact.uncompact(covering)
+                assert native.uncompact(covering) == expanded, (resolution, target)
+                assert native.covering_resolution(covering) == py_resolution.covering_resolution(
+                    covering
                 )
 
     def test_compact_of_complete_sibling_sets(self):
@@ -242,7 +274,51 @@ class TestCompaction:
 
     def test_empty_input(self):
         assert native.compact([]) == py_compact.compact([])
-        assert native.uncompact([], 5) == py_compact.uncompact([], 5)
+        assert native.uncompact([]) == py_compact.uncompact([])
+        assert native.covering_resolution([]) == py_resolution.covering_resolution([])
+
+    def test_is_compaction_marker(self):
+        values = []
+        for resolution in (0, 4, 13, 30):
+            values.extend(py_compact.compact(_cells(resolution, 5)))
+        rng = random.Random(11)
+        values.extend(rng.getrandbits(64) for _ in range(2000))
+        for value in values:
+            assert native.is_compaction_marker(value) == py_compaction_marker.is_compaction_marker(
+                value
+            ), value
+
+
+class TestCoverings:
+    @staticmethod
+    def _covering_pairs():
+        for resolution in (4, 7, 10):
+            for i in range(0, 40, 8):
+                a = py_cap.spherical_cap(_cells(resolution, 40)[i], 300000.0)
+                b = py_cap.spherical_cap(_cells(resolution, 40)[i + 1], 3000000.0)
+                yield a, b
+                yield a, a
+                # An empty covering that still records the resolution.
+                yield a, py_set_operations.difference(a, a)
+
+    @pytest.mark.parametrize('name', ['union', 'intersect', 'difference', 'overlaps'])
+    def test_set_operations(self, name):
+        for a, b in self._covering_pairs():
+            expected = getattr(py_set_operations, name)(a, b)
+            assert getattr(native, name)(a, b) == expected, (name, a, b)
+            assert getattr(native, name)(b, a) == getattr(py_set_operations, name)(b, a)
+
+    def test_contains(self):
+        for a, _ in self._covering_pairs():
+            resolution = py_resolution.covering_resolution(a)
+            for cell in _cells(resolution, 40):
+                assert native.contains(a, cell) == py_set_operations.contains(a, cell), cell
+
+    def test_measures(self):
+        for a, b in self._covering_pairs():
+            for cells in (a, b):
+                assert native.count(cells) == py_measures.count(cells)
+                assert native.area(cells) == py_measures.area(cells)
 
 
 class TestTraversal:
@@ -360,9 +436,24 @@ class TestErrors:
             native.cell_to_parent, py_serialization.cell_to_parent, cell, 31
         )
 
-    def test_uncompact_to_lower_resolution(self):
-        cells = _cells(10, 3)
-        self._assert_same_error(native.uncompact, py_compact.uncompact, cells, 4)
+    def test_set_operations_at_different_resolutions(self):
+        a = py_compact.compact(_cells(5, 3))
+        b = py_compact.compact(_cells(6, 3))
+        for name in ('union', 'intersect', 'difference', 'overlaps'):
+            self._assert_same_error(
+                getattr(native, name), getattr(py_set_operations, name), a, b
+            )
+
+    def test_contains_at_different_resolution(self):
+        a = py_compact.compact(_cells(5, 3))
+        self._assert_same_error(
+            native.contains, py_set_operations.contains, a, _cells(6, 1)[0]
+        )
+
+    def test_subcell_supercell_out_of_range(self):
+        cell = _cells(8, 1)[0]
+        self._assert_same_error(native.cell_to_subcell, py_subcell.cell_to_subcell, cell, 4)
+        self._assert_same_error(native.cell_to_supercell, py_subcell.cell_to_supercell, cell, 12)
 
     def test_hex_to_u64_rejects_garbage(self):
         # Message text differs (Rust reports the parse failure, Python the
@@ -382,29 +473,3 @@ def test_constants_agree():
     assert native.MAX_RESOLUTION == py_serialization.MAX_RESOLUTION
     assert native.WORLD_CELL == py_serialization.WORLD_CELL
 
-
-def test_known_divergences():
-    """Pin the one place the two ports disagree, so it cannot spread unnoticed.
-
-    a5-rs hard-codes the JavaScript double-rounded values for
-    `get_num_cells(28..30)` to match the TypeScript `number` overload, even
-    though it returns u64. Python implements the exact `bigint` overload, which
-    is what the shared fixture records as `countBigInt` and what a5-py's own
-    fixture test asserts. Python is right here; a5-rs needs the fix.
-
-    Consequences are confined to `get_num_cells` and to `get_num_children` with
-    a sub-Hilbert parent: `cell_area` divides by the count, and both integers
-    round to the same f64, so areas are unaffected.
-    """
-    for resolution in (28, 29, 30):
-        exact = py_cell_info.get_num_cells(resolution)
-        lossy = native.get_num_cells(resolution)
-        assert exact != lossy, (
-            'a5-rs get_num_cells({}) now agrees with the exact value -- the '
-            'upstream fix has landed, so drop this test and widen '
-            'test_get_num_cells / test_get_num_children.'.format(resolution)
-        )
-        # Not a precision difference: the exact value is representable as an
-        # f64, so both literals denote the same double. a5-rs simply froze
-        # JavaScript's shortest round-trip *printing* of it into a u64.
-        assert float(exact) == float(lossy), resolution

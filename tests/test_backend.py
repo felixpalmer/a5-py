@@ -64,12 +64,10 @@ def backend_under(**env_overrides):
 
 
 class TestSelection:
-    def test_default_is_pure_python_in_0x(self):
-        # 0.x keeps the pre-existing behaviour as the default so that upgrading
-        # cannot silently change which implementation runs. This assertion is
-        # the tripwire for the 1.0 flip: when `_DEFAULT_BACKEND` becomes
-        # 'auto', this test has to be updated deliberately.
-        assert backend_under() == 'python'
+    def test_default_is_auto(self):
+        # Since 1.0 the compiled backend is the default wherever it is built;
+        # pure Python is opt-in (or the fallback, see TestFallback).
+        assert backend_under() == ('rust' if HAVE_NATIVE else 'python')
 
     def test_explicit_python(self):
         assert backend_under(A5_BACKEND='python') == 'python'

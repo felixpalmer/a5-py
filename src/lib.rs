@@ -140,6 +140,12 @@ fn get_res0_cells() -> PyResult<Vec<u64>> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (cell))]
+fn is_valid_cell(cell: u64) -> bool {
+    a5::is_valid_cell(cell)
+}
+
+#[pyfunction]
 #[pyo3(signature = (resolution))]
 fn get_num_cells(resolution: i32) -> u64 {
     a5::get_num_cells(resolution)
@@ -163,6 +169,19 @@ fn cell_edge_length_avg(resolution: i32) -> f64 {
     a5::cell_edge_length_avg(resolution)
 }
 
+#[pyfunction]
+#[pyo3(signature = (cell, resolution))]
+fn cell_to_subcell(py: Python<'_>, cell: u64, resolution: i32) -> PyResult<Vec<u64>> {
+    py.allow_threads(|| a5::cell_to_subcell(cell, resolution))
+        .map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (cell, resolution))]
+fn cell_to_supercell(cell: u64, resolution: i32) -> PyResult<u64> {
+    a5::cell_to_supercell(cell, resolution).map_err(to_py)
+}
+
 // ---------------------------------------------------------------------------
 // Compaction
 // ---------------------------------------------------------------------------
@@ -174,10 +193,77 @@ fn compact(py: Python<'_>, cells: Vec<u64>) -> PyResult<Vec<u64>> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (cells, target_resolution))]
-fn uncompact(py: Python<'_>, cells: Vec<u64>, target_resolution: i32) -> PyResult<Vec<u64>> {
-    py.allow_threads(|| a5::uncompact(&cells, target_resolution))
-        .map_err(to_py)
+#[pyo3(signature = (cells))]
+fn uncompact(py: Python<'_>, cells: Vec<u64>) -> PyResult<Vec<u64>> {
+    py.allow_threads(|| a5::uncompact(&cells)).map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (value))]
+fn is_compaction_marker(value: u64) -> bool {
+    a5::is_compaction_marker(value)
+}
+
+// ---------------------------------------------------------------------------
+// Coverings
+// ---------------------------------------------------------------------------
+
+#[pyfunction]
+#[pyo3(signature = (cells))]
+fn covering_resolution(cells: Vec<u64>) -> i32 {
+    a5::covering_resolution(&cells)
+}
+
+#[pyfunction]
+#[pyo3(signature = (cells, cell))]
+fn contains(py: Python<'_>, cells: Vec<u64>, cell: u64) -> PyResult<bool> {
+    py.allow_threads(|| a5::contains(&cells, cell)).map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (a, b))]
+fn union(py: Python<'_>, a: Vec<u64>, b: Vec<u64>) -> PyResult<Vec<u64>> {
+    py.allow_threads(|| a5::union(&a, &b)).map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (a, b))]
+fn intersect(py: Python<'_>, a: Vec<u64>, b: Vec<u64>) -> PyResult<Vec<u64>> {
+    py.allow_threads(|| a5::intersect(&a, &b)).map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (a, b))]
+fn difference(py: Python<'_>, a: Vec<u64>, b: Vec<u64>) -> PyResult<Vec<u64>> {
+    py.allow_threads(|| a5::difference(&a, &b)).map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (a, b))]
+fn overlaps(py: Python<'_>, a: Vec<u64>, b: Vec<u64>) -> PyResult<bool> {
+    py.allow_threads(|| a5::overlaps(&a, &b)).map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (cells))]
+fn area(py: Python<'_>, cells: Vec<u64>) -> PyResult<f64> {
+    py.allow_threads(|| a5::area(&cells)).map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (cells))]
+fn count(py: Python<'_>, cells: Vec<u64>) -> PyResult<u64> {
+    py.allow_threads(|| a5::count(&cells)).map_err(to_py)
+}
+
+// ---------------------------------------------------------------------------
+// Migration
+// ---------------------------------------------------------------------------
+
+#[pyfunction]
+#[pyo3(signature = (cell))]
+fn migrate(cell: u64) -> PyResult<u64> {
+    a5::migrate(cell).map_err(to_py)
 }
 
 // ---------------------------------------------------------------------------
@@ -263,14 +349,31 @@ fn a5_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cell_to_parent, m)?)?;
     m.add_function(wrap_pyfunction!(cell_to_children, m)?)?;
     m.add_function(wrap_pyfunction!(get_res0_cells, m)?)?;
+    m.add_function(wrap_pyfunction!(is_valid_cell, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_cells, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_children, m)?)?;
     m.add_function(wrap_pyfunction!(cell_area, m)?)?;
     m.add_function(wrap_pyfunction!(cell_edge_length_avg, m)?)?;
+    m.add_function(wrap_pyfunction!(cell_to_subcell, m)?)?;
+    m.add_function(wrap_pyfunction!(cell_to_supercell, m)?)?;
 
     // Compaction
     m.add_function(wrap_pyfunction!(compact, m)?)?;
     m.add_function(wrap_pyfunction!(uncompact, m)?)?;
+    m.add_function(wrap_pyfunction!(is_compaction_marker, m)?)?;
+
+    // Coverings
+    m.add_function(wrap_pyfunction!(covering_resolution, m)?)?;
+    m.add_function(wrap_pyfunction!(contains, m)?)?;
+    m.add_function(wrap_pyfunction!(difference, m)?)?;
+    m.add_function(wrap_pyfunction!(intersect, m)?)?;
+    m.add_function(wrap_pyfunction!(overlaps, m)?)?;
+    m.add_function(wrap_pyfunction!(union, m)?)?;
+    m.add_function(wrap_pyfunction!(area, m)?)?;
+    m.add_function(wrap_pyfunction!(count, m)?)?;
+
+    // Migration
+    m.add_function(wrap_pyfunction!(migrate, m)?)?;
 
     // Traversal
     m.add_function(wrap_pyfunction!(grid_disk, m)?)?;
