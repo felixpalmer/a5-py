@@ -19,6 +19,14 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v1.0.0b3] - October 14 2026
+
+- chore: python pins rust crate not commit (#88)
+- ci: pure python wheel (#87)
+- Chore: refactor to avoid using Hilbert name (#86)
+- feat: Add optional backend for binding to Rust implementation (#61)
+- feat: Faster cellToSupercell (#85)
+
 #### pya5 [v1.0.0b2] - October 9 2026
 
 - feat: isValidCell (#84)
