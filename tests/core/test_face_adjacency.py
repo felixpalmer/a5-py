@@ -35,8 +35,8 @@ class TestFaceSeam:
 
     def test_seam_triple_is_seam_transform_on_cells(self):
         """seam_triple is seam_transform on cells."""
-        for hilbert_res in (1, 2, 5):
-            max_row = (1 << hilbert_res) - 1
+        for curve_level in (1, 2, 5):
+            max_row = (1 << curve_level) - 1
             for q in range(5):
                 m = seam_transform(0, q)
                 adjacent_quintant = FACE_ADJACENCY[0][q][1]
@@ -50,7 +50,7 @@ class TestFaceSeam:
                             flavor = triple_flavor(triple, max_row)
                             image = seam_triple(triple, max_row)
                             assert triple_flavor(image, max_row) == flavor ^ 1
-                            center = apply(m, get_pentagon_center(hilbert_res, q, triple, flavor))
-                            image_center = get_pentagon_center(hilbert_res, adjacent_quintant, image, flavor ^ 1)
+                            center = apply(m, get_pentagon_center(curve_level, q, triple, flavor))
+                            image_center = get_pentagon_center(curve_level, adjacent_quintant, image, flavor ^ 1)
                             assert abs(center[0] - image_center[0]) < TOLERANCE
                             assert abs(center[1] - image_center[1]) < TOLERANCE

@@ -6,7 +6,7 @@ import math
 from typing import List
 from ..core.coordinate_systems import Spherical
 from ..core.serialization import (
-    get_resolution, cell_to_parent, deserialize, serialize, FIRST_HILBERT_RESOLUTION,
+    get_resolution, cell_to_parent, deserialize, serialize, FIRST_CURVE_RESOLUTION,
 )
 from ..core.cell import cell_to_spherical
 from ..core.cell_info import cell_area
@@ -68,7 +68,7 @@ def pick_coarse_resolution(radius: float, target_res: int) -> int:
     half_angle_sin = math.sin(radius / (2 * AUTHALIC_RADIUS_EARTH))
     cap_area_m2 = 4 * math.pi * AUTHALIC_RADIUS_EARTH * AUTHALIC_RADIUS_EARTH * half_angle_sin * half_angle_sin
 
-    for res in range(FIRST_HILBERT_RESOLUTION, target_res + 1):
+    for res in range(FIRST_CURVE_RESOLUTION, target_res + 1):
         c_area = cell_area(res)
         if cap_area_m2 / c_area >= MIN_CELLS_FOR_SUBDIVISION:
             return res
@@ -85,12 +85,12 @@ def _coarse_cap_cells(start_cell: int, center: Spherical, h_expanded: float) -> 
     (edge and vertex) come from the per-flavor triple deltas plus the boundary
     delta tables, and a cell's center straight from its triple.
     """
-    hilbert_res = get_resolution(start_cell) - FIRST_HILBERT_RESOLUTION + 1
-    max_row = (1 << hilbert_res) - 1
+    curve_level = get_resolution(start_cell) - FIRST_CURVE_RESOLUTION + 1
+    max_row = (1 << curve_level) - 1
     cells = cell_ids_to_triples([start_cell])
 
     def expand(origin_id: int, q: int, x: int, y: int, z: int) -> bool:
-        within = haversine(center, triple_cell_center(origin_id, q, x, y, z, hilbert_res, max_row)) <= h_expanded
+        within = haversine(center, triple_cell_center(origin_id, q, x, y, z, curve_level, max_row)) <= h_expanded
         if within:
             cells.extend((origin_id, q, x, y, z))
         return within
@@ -155,7 +155,7 @@ def spherical_cap(cell_id: int, radius: float) -> List[int]:
     runs: SlotRuns = []
     descend_in_curve_order(
         _coarse_cap_cells(start_cell, center, h_expanded),
-        coarse_res - FIRST_HILBERT_RESOLUTION + 1,
+        coarse_res - FIRST_CURVE_RESOLUTION + 1,
         target_res,
         classify,
         runs,

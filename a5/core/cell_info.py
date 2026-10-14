@@ -6,7 +6,7 @@ import math
 from .constants import AUTHALIC_AREA_EARTH
 
 AUTHALIC_AREA = AUTHALIC_AREA_EARTH
-FIRST_HILBERT_RESOLUTION = 2
+FIRST_CURVE_RESOLUTION = 2
 
 def get_num_cells(resolution: int) -> int:
     """
@@ -40,7 +40,7 @@ def get_num_children(parent_resolution: int, child_resolution: int) -> int:
         return 0
     if child_resolution == parent_resolution:
         return 1
-    if parent_resolution >= FIRST_HILBERT_RESOLUTION:
+    if parent_resolution >= FIRST_CURVE_RESOLUTION:
         # Between levels of constant aperture of 4, relation simplifies
         return 4 ** (child_resolution - parent_resolution)
 

@@ -25,7 +25,7 @@ from ..lattice.triple import triple_to_s
 from ..lattice.curve import round_to_triple
 from ..lattice.types import Triple
 from .serialization import (
-    deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
+    deserialize, serialize, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
 )
 from .compaction_marker import is_compaction_marker
 from ..geometry.spherical_polygon import SphericalPolygonShape
@@ -134,7 +134,7 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
 
 
 # A candidate is the tuple (margin, cell_id, triple, flavor, quintant,
-# hilbert_resolution, origin_id, resolution); margin > 0 iff the unique
+# curve_level, origin_id, resolution); margin > 0 iff the unique
 # strictly-containing pentagon.
 def _lookup_in_quintant(dodec_point, origin, quintant: int, resolution: int):
     """The best cell for `dodec_point` (face frame of `origin`) within one
@@ -157,13 +157,13 @@ def _lookup_in_quintant(dodec_point, origin, quintant: int, resolution: int):
         extra = 2 * PI_OVER_5 * quintant
         c, s = math.cos(-extra), math.sin(-extra)
         px, py = c * px - s * py, s * px + c * py
-    hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
-    scale = 1 << hilbert_resolution
+    curve_level = 1 + resolution - FIRST_CURVE_RESOLUTION
+    scale = 1 << curve_level
     px *= scale
     py *= scale
     ij = face_to_ij((px, py))
 
-    base = round_to_triple(ij, hilbert_resolution)
+    base = round_to_triple(ij, curve_level)
     triple = base
     max_row = scale - 1
     flavor = triple_flavor(base, max_row)
@@ -184,20 +184,20 @@ def _lookup_in_quintant(dodec_point, origin, quintant: int, resolution: int):
                 margin = neighbor_margin
                 if margin > 0:
                     break
-    S = triple_to_s(triple, hilbert_resolution, orientation)
+    S = triple_to_s(triple, curve_level, orientation)
     if S is None:
         return None
     cell_id = serialize({'origin': origin, 'segment': segment, 'S': S, 'resolution': resolution})
-    return (margin, cell_id, triple, flavor, quintant, hilbert_resolution, origin.id, resolution)
+    return (margin, cell_id, triple, flavor, quintant, curve_level, origin.id, resolution)
 
 
 def _accept_candidate(c) -> int:
     """Cache the winning pentagon for the dense-sample fast accept and return its id."""
     global _last_result
-    margin, cell_id, triple, flavor, quintant, hilbert_resolution, origin_id, resolution = c
+    margin, cell_id, triple, flavor, quintant, curve_level, origin_id, resolution = c
     _last_result = {
         'cell_id': cell_id,
-        'pentagon': get_pentagon_vertices(hilbert_resolution, quintant, triple, flavor),
+        'pentagon': get_pentagon_vertices(curve_level, quintant, triple, flavor),
         'origin_id': origin_id,
         'resolution': resolution,
     }
@@ -205,8 +205,8 @@ def _accept_candidate(c) -> int:
 
 
 # Tie margin tolerance: containment margins are cross products of unit-scale
-# pentagon edges against coordinates of magnitude up to 2^hilbert_resolution,
-# so their float noise is ~2^(hilbert_resolution - 52); 2^-44 gives a wide
+# pentagon edges against coordinates of magnitude up to 2^curve_level,
+# so their float noise is ~2^(curve_level - 52); 2^-44 gives a wide
 # safety factor while staying geometrically negligible (cells are unit-size
 # in the scaled frame).
 _TIE_EPS = 2.0 ** -44
@@ -244,7 +244,7 @@ def _spherical_to_cell_boundary(spherical, resolution: int, first_origin_id, fir
     if not candidates:
         raise ValueError('spherical_to_cell: no candidate cell found')
     best = max(c[0] for c in candidates)
-    eps = _TIE_EPS * (1 << (1 + resolution - FIRST_HILBERT_RESOLUTION))
+    eps = _TIE_EPS * (1 << (1 + resolution - FIRST_CURVE_RESOLUTION))
     winner = min((c for c in candidates if c[0] >= best - eps), key=lambda c: c[1])
     return _accept_candidate(winner)
 
@@ -257,11 +257,11 @@ def cell_center_to_cell(cell_id: int, resolution: int) -> int:
     edge, where the round trip's own noise decides, goes round the sphere so
     ties resolve exactly as `spherical_to_cell` resolves them."""
     cell = deserialize(cell_id)
-    if resolution >= FIRST_HILBERT_RESOLUTION - 1 and cell["resolution"] >= FIRST_HILBERT_RESOLUTION - 1:
+    if resolution >= FIRST_CURVE_RESOLUTION - 1 and cell["resolution"] >= FIRST_CURVE_RESOLUTION - 1:
         quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
-        hilbert_resolution = cell["resolution"] - FIRST_HILBERT_RESOLUTION + 1
-        cell_geom = s_to_cell(cell["S"], hilbert_resolution, orientation)
-        center = get_pentagon_center(hilbert_resolution, quintant, cell_geom.triple, cell_geom.flavor)
+        curve_level = cell["resolution"] - FIRST_CURVE_RESOLUTION + 1
+        cell_geom = s_to_cell(cell["S"], curve_level, orientation)
+        center = get_pentagon_center(curve_level, quintant, cell_geom.triple, cell_geom.flavor)
         best = _lookup_in_quintant(center, cell["origin"], get_quintant_polar(to_polar(center)), resolution)
         if best is not None and best[0] > _TIE_EPS * (1 << best[5]):
             return best[1]
@@ -279,12 +279,12 @@ def _get_pentagon(cell: A5Cell) -> PentagonShape:
         PentagonShape object
     """
     quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
-    if cell["resolution"] == (FIRST_HILBERT_RESOLUTION - 2):
+    if cell["resolution"] == (FIRST_CURVE_RESOLUTION - 2):
         return get_face_vertices()
 
-    hilbert_resolution = cell["resolution"] - FIRST_HILBERT_RESOLUTION + 1
-    cell_geom = s_to_cell(cell["S"], hilbert_resolution, orientation)
-    return get_pentagon_vertices(hilbert_resolution, quintant, cell_geom.triple, cell_geom.flavor)
+    curve_level = cell["resolution"] - FIRST_CURVE_RESOLUTION + 1
+    cell_geom = s_to_cell(cell["S"], curve_level, orientation)
+    return get_pentagon_vertices(curve_level, quintant, cell_geom.triple, cell_geom.flavor)
 
 def cell_to_spherical(cell_id: int) -> Spherical:
     """
@@ -297,13 +297,13 @@ def cell_to_spherical(cell_id: int) -> Spherical:
         Spherical coordinates (theta, phi)
     """
     cell = deserialize(cell_id)
-    if cell["resolution"] >= FIRST_HILBERT_RESOLUTION - 1:
+    if cell["resolution"] >= FIRST_CURVE_RESOLUTION - 1:
         # Fast path: the pentagon center is O(1) from (triple, flavor) -- no need
         # to construct the pentagon itself.
         quintant, orientation = segment_to_quintant(cell["segment"], cell["origin"])
-        hilbert_resolution = cell["resolution"] - FIRST_HILBERT_RESOLUTION + 1
-        cell_geom = s_to_cell(cell["S"], hilbert_resolution, orientation)
-        center = get_pentagon_center(hilbert_resolution, quintant, cell_geom.triple, cell_geom.flavor)
+        curve_level = cell["resolution"] - FIRST_CURVE_RESOLUTION + 1
+        cell_geom = s_to_cell(cell["S"], curve_level, orientation)
+        center = get_pentagon_center(curve_level, quintant, cell_geom.triple, cell_geom.flavor)
         return _dodecahedron.inverse(center, cell["origin"].id)
     pentagon = _get_pentagon(cell)
     return _dodecahedron.inverse(pentagon.get_center(), cell["origin"].id)

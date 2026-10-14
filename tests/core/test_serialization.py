@@ -11,7 +11,7 @@ from a5 import (
 from a5.core.serialization import (
     serialize,
     deserialize,
-    FIRST_HILBERT_RESOLUTION,
+    FIRST_CURVE_RESOLUTION,
 )
 from a5.core.utils import A5Cell
 from a5.core.origin import origins
@@ -56,7 +56,7 @@ def test_correct_number_of_masks():
 def test_encodes_resolution_correctly_for_different_values():
     """Test resolution encoding."""
     for i in range(len(RESOLUTION_MASKS)):
-        # Origin 0 has first quintant 4, so use segment 4 to obtain start of Hilbert curve
+        # Origin 0 has first quintant 4, so use segment 4 to obtain start of the curve
         input_cell = A5Cell(origin=origin0, segment=4, S=0, resolution=i)
         serialized = serialize(input_cell)
         actual_binary = format(serialized, '064b')
@@ -75,7 +75,7 @@ def test_correctly_extracts_resolution():
 
 def test_encodes_origin_segment_and_s_correctly():
     """Test origin, segment and S encoding."""
-    # Origin 0 has first quintant 4, so use segment 4 to obtain start of Hilbert curve
+    # Origin 0 has first quintant 4, so use segment 4 to obtain start of the curve
     cell = A5Cell(origin=origin0, segment=4, S=0, resolution=MAX_RESOLUTION - 1)
     serialized = serialize(cell)
     assert serialized == 0b10  # 2 in decimal
@@ -106,7 +106,7 @@ def test_round_trip_test_ids(id):
 
 
 @pytest.mark.parametrize("origin_id", range(1, 12))
-@pytest.mark.parametrize("binary", RESOLUTION_MASKS[FIRST_HILBERT_RESOLUTION:MAX_RESOLUTION])
+@pytest.mark.parametrize("binary", RESOLUTION_MASKS[FIRST_CURVE_RESOLUTION:MAX_RESOLUTION])
 def test_round_trip_resolution_masks_with_origins(origin_id, binary):
     """Test round trip for resolution masks with different origins."""
     origin_segment_id = format(5 * origin_id, '06b')
@@ -184,9 +184,9 @@ def test_cell_to_children_ascending_id_order():
             assert ascending(cell_to_children(cell, res))
 
 
-def test_non_hilbert_to_non_hilbert_hierarchy():
-    """Test non-Hilbert to non-Hilbert transition."""
-    # Test resolution 0 to 1 (both non-Hilbert)
+def test_non_curve_to_non_curve_hierarchy():
+    """Test non-curve to non-curve transition."""
+    # Test resolution 0 to 1 (both non-curve)
     cell = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=0))
     children = cell_to_children(cell)
     assert len(children) == 5
@@ -194,9 +194,9 @@ def test_non_hilbert_to_non_hilbert_hierarchy():
         assert cell_to_parent(child) == cell
 
 
-def test_non_hilbert_to_hilbert_hierarchy():
-    """Test non-Hilbert to Hilbert transition."""
-    # Test resolution 1 to 2 (non-Hilbert to Hilbert)
+def test_non_curve_to_curve_hierarchy():
+    """Test non-curve to curve transition."""
+    # Test resolution 1 to 2 (non-curve to curve)
     cell = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=1))
     children = cell_to_children(cell)
     assert len(children) == 4
@@ -204,9 +204,9 @@ def test_non_hilbert_to_hilbert_hierarchy():
         assert cell_to_parent(child) == cell
 
 
-def test_hilbert_to_non_hilbert_hierarchy():
-    """Test Hilbert to non-Hilbert transition."""
-    # Test resolution 2 to 1 (Hilbert to non-Hilbert)
+def test_curve_to_non_curve_hierarchy():
+    """Test curve to non-curve transition."""
+    # Test resolution 2 to 1 (curve to non-curve)
     cell = serialize(A5Cell(origin=origin0, segment=0, S=0, resolution=2))
     parent = cell_to_parent(cell, 1)
     children = cell_to_children(parent)

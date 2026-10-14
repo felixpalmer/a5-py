@@ -16,7 +16,7 @@ from typing import Dict, List, Optional
 from ..core.cell import cell_to_spherical
 from ..core.coordinate_transforms import to_cartesian
 from ..core.serialization import (
-    cell_first_slot, slot_to_cell, QUINTANT_SHIFT, S_MASK, SLOT_COUNTS, FIRST_HILBERT_RESOLUTION,
+    cell_first_slot, slot_to_cell, QUINTANT_SHIFT, S_MASK, SLOT_COUNTS, FIRST_CURVE_RESOLUTION,
 )
 from ..coverings.slot_runs import SlotRuns, append_slot_run
 from ..geometry.prepared_polygon import point_in_prepared_polygon
@@ -29,10 +29,10 @@ from .polygon_boundary import Boundary, boundary_neighbors, emits_boundary_cell,
 
 # Cells are ordered on the curve by the leaf slots they occupy (see core/serialization).
 
-def _triple_slot(origin_id: int, quintant: int, x: int, y: int, z: int, hilbert_res: int, unit_shift: int) -> int:
+def _triple_slot(origin_id: int, quintant: int, x: int, y: int, z: int, curve_level: int, unit_shift: int) -> int:
     """The slot of a cell given in triple space."""
     i = origin_id * 5 + quintant
-    return QUINTANT_PREFIX[i] | (triple_to_s(Triple(x, y, z), hilbert_res, QUINTANT_ORIENTATION[i]) << unit_shift)
+    return QUINTANT_PREFIX[i] | (triple_to_s(Triple(x, y, z), curve_level, QUINTANT_ORIENTATION[i]) << unit_shift)
 
 
 def fill_by_curve_runs(
@@ -44,8 +44,8 @@ def fill_by_curve_runs(
     swallow a quintant whole (one holding no band cells at all). Returns the
     cells inside as sorted slot runs.
     """
-    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    max_row = (1 << hilbert_res) - 1
+    curve_level = resolution - FIRST_CURVE_RESOLUTION + 1
+    max_row = (1 << curve_level) - 1
     # One ring of neighbors (edge and vertex, across quintant edges too), edge neighbors first
     ring_cells, parents = boundary_neighbors(triples, [
         lambda b, c, visit: for_each_triple_neighbor(*b[c:c + 5], max_row, True, visit),
@@ -53,7 +53,7 @@ def fill_by_curve_runs(
     ])
 
     unit = SLOT_COUNTS[resolution]
-    unit_shift = 58 - 2 * hilbert_res
+    unit_shift = 58 - 2 * curve_level
 
     # Band slots carry two flags below the slot: EMIT (the cell is in the output)
     # and RING. (Python ints are unbounded, so `slot << 2` always has room.)
@@ -69,10 +69,10 @@ def fill_by_curve_runs(
     ring_inside: List[bool] = []
     for c in range(0, len(ring_cells), 5):
         cell = ring_cells[c:c + 5]
-        center = to_cartesian(triple_cell_center(*cell, hilbert_res, max_row))
+        center = to_cartesian(triple_cell_center(*cell, curve_level, max_row))
         inside = inside_next_to(boundary, center, parents[c // 5])
         ring_inside.append(inside)
-        slot = (_triple_slot(*cell, hilbert_res, unit_shift) << 2) | (EMIT | RING if inside else RING)
+        slot = (_triple_slot(*cell, curve_level, unit_shift) << 2) | (EMIT | RING if inside else RING)
         slots.append(slot)
         ring_by_slot[slot] = c
     slots.sort()
@@ -88,7 +88,7 @@ def fill_by_curve_runs(
             return None
         c = ring_by_slot[ring_slot]
         q = slot >> QUINTANT_SHIFT
-        t = s_to_triple((slot & S_MASK) >> unit_shift, hilbert_res, QUINTANT_ORIENTATION[TRIPLE_QUINTANT_BY_ID_ORDER[q]])
+        t = s_to_triple((slot & S_MASK) >> unit_shift, curve_level, QUINTANT_ORIENTATION[TRIPLE_QUINTANT_BY_ID_ORDER[q]])
         rx, ry, rz = ring_cells[c + 2], ring_cells[c + 3], ring_cells[c + 4]
         dx, dy, dz = t.x - rx, t.y - ry, t.z - rz
         for d in NEIGHBOR_DELTAS[triple_flavor(Triple(rx, ry, rz), max_row)].all:

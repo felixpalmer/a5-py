@@ -126,7 +126,7 @@ def slot_runs_to_cells(runs: SlotRuns) -> List[int]:
                     out.append(slot_to_cell(lo, 1))
                     lo += QUINTANT_SLOTS
                     continue
-            # The coarsest Hilbert-level cell that starts at lo and fits: its span is
+            # The coarsest curve-level cell that starts at lo and fits: its span is
             # 4^k slots, at most the alignment of lo and the length of the run
             offset = lo & S_MASK
             bits = 56 if offset == 0 else (offset & -offset).bit_length() - 1

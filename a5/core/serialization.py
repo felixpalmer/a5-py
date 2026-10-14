@@ -5,7 +5,7 @@ from typing import List, Optional
 from .utils import A5Cell, Origin
 from .origin import origins
 
-FIRST_HILBERT_RESOLUTION = 2
+FIRST_CURVE_RESOLUTION = 2
 MAX_RESOLUTION = 30
 # IDs below res 30 start with a 6-bit origin (res 0) or quintant, above S
 QUINTANT_SHIFT = 58
@@ -52,7 +52,7 @@ def _slot_to_res30(slot: int) -> int:
 #
 # A cell at resolution r occupies 4^(30-r) consecutive slots, an aligned block
 # starting at its first slot, and the cells of a resolution step along the
-# slots in strides of that size, as the Hilbert curve does. Unlike cell IDs,
+# slots in strides of that size, as the curve does. Unlike cell IDs,
 # whose layout differs at resolutions 0, 1 and 30, slots put every cell on one
 # integer line in curve order, including all 60 quintants at resolution 30.
 # A leaf slot is not a cell ID.
@@ -75,9 +75,9 @@ RES30_TAG_BITS = 0b10101
 
 
 # The tags of resolutions 2-29: the odd bits 55 down to 1
-_HILBERT_TAG_BITS = 0
-for _tag in RESOLUTION_TAGS[FIRST_HILBERT_RESOLUTION:MAX_RESOLUTION]:
-    _HILBERT_TAG_BITS |= _tag
+_CURVE_TAG_BITS = 0
+for _tag in RESOLUTION_TAGS[FIRST_CURVE_RESOLUTION:MAX_RESOLUTION]:
+    _CURVE_TAG_BITS |= _tag
 
 
 def cell_first_slot(cell: int) -> int:
@@ -93,7 +93,7 @@ def cell_first_slot(cell: int) -> int:
         if tag & RES30_TAG_BITS:
             return _res30_to_slot(cell)
         # Resolutions 2-29, in quintants 0-59: the first slot is the ID without its tag
-        if (tag & _HILBERT_TAG_BITS) and cell < WORLD_SLOTS:
+        if (tag & _CURVE_TAG_BITS) and cell < WORLD_SLOTS:
             return cell - tag
         if tag == 0:
             return 0
@@ -234,7 +234,7 @@ def deserialize(index: int) -> A5Cell:
         return A5Cell(origin=origin, segment=0, S=0, resolution=resolution)
 
     segment = (quintant + origin.first_quintant) % 5
-    S = 0 if resolution < FIRST_HILBERT_RESOLUTION else (slot & S_MASK) // SLOT_COUNTS[resolution]
+    S = 0 if resolution < FIRST_CURVE_RESOLUTION else (slot & S_MASK) // SLOT_COUNTS[resolution]
     return A5Cell(origin=origin, segment=segment, S=S, resolution=resolution)
 
 
@@ -254,7 +254,7 @@ def serialize(cell: A5Cell) -> int:
         return slot_to_cell(5 * origin.id * QUINTANT_SLOTS, 0)
 
     # The cell's first slot: its quintant, then S cells of this resolution into it
-    offset = S * SLOT_COUNTS[resolution] if resolution >= FIRST_HILBERT_RESOLUTION else 0
+    offset = S * SLOT_COUNTS[resolution] if resolution >= FIRST_CURVE_RESOLUTION else 0
     if offset >= QUINTANT_SLOTS:
         raise ValueError(f"S ({S}) is too large for resolution level {resolution}")
 
@@ -289,7 +289,7 @@ def cell_to_children(index: int, child_resolution: Optional[int] = None) -> List
         new_origins = origins
     all_segments = (current_resolution == -1 and new_resolution > 0) or current_resolution == 0
 
-    resolution_diff = new_resolution - max(current_resolution, FIRST_HILBERT_RESOLUTION - 1)
+    resolution_diff = new_resolution - max(current_resolution, FIRST_CURVE_RESOLUTION - 1)
     children_count = 4 ** max(0, resolution_diff)
     shifted_S = S << (2 * max(0, resolution_diff))
 
@@ -322,8 +322,8 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
     """Walk a cell up the hierarchy to a coarser resolution.
 
     Implemented as pure bit ops over the encoded index — no deserialize /
-    serialize round-trip. The three encoding regimes (non-Hilbert res 0/1,
-    Hilbert res 2..29, variable-width res 30) all reduce to the same shape
+    serialize round-trip. The three encoding regimes (non-curve res 0/1,
+    curve res 2..29, variable-width res 30) all reduce to the same shape
     after a small amount of normalization.
     """
     if parent_resolution is None:
@@ -340,7 +340,7 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
         )
 
     # Normalize res-30 children to the standard res-29 layout. After this,
-    # the fast paths below treat the cell as a Hilbert-range cell.
+    # the fast paths below treat the cell as a curve-range cell.
     c = index
     if _is_max_resolution(index):
         if parent_resolution == MAX_RESOLUTION:
@@ -349,8 +349,8 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
         if parent_resolution == MAX_RESOLUTION - 1:
             return c
 
-    if parent_resolution >= FIRST_HILBERT_RESOLUTION:
-        # Hilbert-range parent: clear bits below the parent tag, set the tag.
+    if parent_resolution >= FIRST_CURVE_RESOLUTION:
+        # Curve-range parent: clear bits below the parent tag, set the tag.
         # Identity (parent res === child res) falls out for free: the tag lands
         # in the same position and bits below the keep cut are already zero.
         keep_shift = 60 - 2 * parent_resolution
@@ -391,15 +391,15 @@ def get_res0_cells() -> List[int]:
 def is_child_of(child: int, parent: int, parent_resolution: int) -> bool:
     """Bit-level descendant test: is child the same cell as parent, or one of
     its descendants at any deeper resolution? Compares the high (quintant +
-    parent's Hilbert) bits in a single shift, no deserialize needed.
+    parent's curve) bits in a single shift, no deserialize needed.
 
-    Restricted to the Hilbert range: parent_resolution must be in
-    [FIRST_HILBERT_RESOLUTION .. MAX_RESOLUTION - 1], and child must not be
+    Restricted to the curve range: parent_resolution must be in
+    [FIRST_CURVE_RESOLUTION .. MAX_RESOLUTION - 1], and child must not be
     a resolution-30 cell (whose encoding uses a variable quintant shift).
     Callers handling those cases should fall back to cell_to_parent equality.
     """
     # Parent's identifying bits occupy positions 63..(60-2P): 6 quintant bits
-    # + 2(P-1) Hilbert bits. Bit (59-2P) is the tag, below that is zero.
+    # + 2(P-1) curve bits. Bit (59-2P) is the tag, below that is zero.
     # Shifting both right by (60-2P) keeps exactly those identifying bits and
     # discards the tag, so a descendant matches iff the high bits match.
     shift = 60 - 2 * parent_resolution

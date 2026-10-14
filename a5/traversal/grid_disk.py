@@ -5,7 +5,7 @@
 from typing import List, Set
 
 from ..coverings.slot_runs import compact_cells, to_covering
-from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
+from ..core.serialization import deserialize, serialize, FIRST_CURVE_RESOLUTION
 from ..core.origin import origins
 from ..core.face_adjacency import walk_faces
 from .triple_cells import cell_ids_to_triples, for_each_triple_neighbor, triple_cell_key, triple_cell_to_id
@@ -31,11 +31,11 @@ def _add_cell(nxt: _Ring, prev: _Ring, current: _Ring,
     nxt.cells.extend((origin_id, quintant, x, y, z))
 
 
-def _push_cell_ids(out: List[int], cells: List[int], hilbert_res: int, resolution: int) -> None:
+def _push_cell_ids(out: List[int], cells: List[int], curve_level: int, resolution: int) -> None:
     """Encode a ring's cells as cell IDs, appending them to `out`."""
     for c in range(0, len(cells), 5):
         out.append(triple_cell_to_id(cells[c], cells[c + 1], cells[c + 2], cells[c + 3], cells[c + 4],
-                                     hilbert_res, resolution))
+                                     curve_level, resolution))
 
 
 def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
@@ -62,8 +62,8 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
         return to_covering(
             [serialize({'origin': origins[face], 'segment': 0, 'S': 0, 'resolution': 0}) for face in faces], 0
         )
-    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    max_row = (1 << hilbert_res) - 1
+    curve_level = resolution - FIRST_CURVE_RESOLUTION + 1
+    max_row = (1 << curve_level) - 1
     seed = cell_ids_to_triples([cell_id])
 
     # The seed is `cell_id` already, so it goes straight to the output
@@ -89,7 +89,7 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
 
         # Evict prev_frontier -- these cells are >=2 rings behind the new frontier
         # and can never be re-discovered by BFS
-        _push_cell_ids(interior, prev_frontier.cells, hilbert_res, resolution)
+        _push_cell_ids(interior, prev_frontier.cells, curve_level, resolution)
 
         # Progressively compact interior to reduce memory pressure
         if len(interior) > 100:
@@ -99,8 +99,8 @@ def _grid_disk(cell_id: int, k: int, edge_only: bool) -> List[int]:
         frontier = next_frontier
 
     # Merge remaining boundary rings with compacted interior
-    _push_cell_ids(interior, prev_frontier.cells, hilbert_res, resolution)
-    _push_cell_ids(interior, frontier.cells, hilbert_res, resolution)
+    _push_cell_ids(interior, prev_frontier.cells, curve_level, resolution)
+    _push_cell_ids(interior, frontier.cells, curve_level, resolution)
 
     return to_covering(interior, resolution)
 

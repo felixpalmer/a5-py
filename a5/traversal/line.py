@@ -8,7 +8,7 @@ from typing import Callable, List, Optional, Set, Tuple
 from ..core.coordinate_systems import LonLat, Face
 from ..core.cell import lonlat_to_cell, spherical_to_cell, cell_intersects_segment, last_cell_shape, last_projection
 from ..core.coordinate_transforms import from_lonlat, to_cartesian, to_spherical, to_lonlat
-from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
+from ..core.serialization import deserialize, serialize, FIRST_CURVE_RESOLUTION
 from ..core.origin import origins
 from ..core.face_adjacency import walk_faces
 from ..core.tiling import get_pentagon_vertices
@@ -66,8 +66,8 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
     encoded.
     """
     sample_interval = estimate_cell_radius(resolution) * 0.5
-    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    max_row = (1 << hilbert_res) - 1 if resolution > 0 else 0
+    curve_level = resolution - FIRST_CURVE_RESOLUTION + 1
+    max_row = (1 << curve_level) - 1 if resolution > 0 else 0
 
     # Each point once: on the sphere, as a vector, and its cell, with the cell's
     # pentagon and origin and the point's projection there, as its lookup made them
@@ -102,7 +102,7 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
 
     def touches(origin_id: int, quintant: int, triple: Triple) -> bool:
         project(origin_id)
-        pentagon = get_pentagon_vertices(hilbert_res, quintant, triple, triple_flavor(triple, max_row))
+        pentagon = get_pentagon_vertices(curve_level, quintant, triple, triple_flavor(triple, max_row))
         return pentagon.intersects_segment(face_a[origin_id], face_b[origin_id])
 
     def hands_over(parts: List[Optional[Tuple[float, float, float]]]) -> bool:
@@ -168,7 +168,7 @@ def trace_path(points: List[LonLat], closed: bool, resolution: int,
         def expand(origin_id: int, quintant: int, x: int, y: int, z: int) -> bool:
             if not touches(origin_id, quintant, Triple(x, y, z)):
                 return False
-            visit(triple_cell_to_id(origin_id, quintant, x, y, z, hilbert_res, resolution), arc)
+            visit(triple_cell_to_id(origin_id, quintant, x, y, z, curve_level, resolution), arc)
             return True
 
         walk_triple_cells(cell_ids_to_triples([cell_a, cell_b]), max_row, expand)
