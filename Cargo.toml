@@ -24,15 +24,17 @@ crate-type = ["cdylib"]
 path = "src/lib.rs"
 
 [dependencies]
-# Pinned to an exact a5-rs commit rather than a version range: the Python port
-# is validated against this specific revision by the differential test suite,
-# and a silent minor bump could change cell IDs.
+# Pinned to an exact a5-rs release (`=`) rather than a version range: the Python
+# port is validated against this specific release by the differential test
+# suite, and a silent minor bump could change cell IDs. Releases are kept in
+# sync across the ports, so publish.sh refuses to tag unless this matches the
+# pyproject.toml version (1.0.0b3 <-> =1.0.0-beta.3).
 #
 # For local development against a working copy of a5-rs, add to .cargo/config.toml
 # (untracked):
-#   [patch."https://github.com/felixpalmer/a5-rs"]
+#   [patch.crates-io]
 #   a5 = { path = "../a5-rs" }
-a5 = { git = "https://github.com/felixpalmer/a5-rs", rev = "4091ab6edca23c309118299e05bef1644e49b46e" }
+a5 = "=1.0.0-beta.2"
 
 # abi3-py38: one wheel per platform covers CPython 3.8+ rather than one wheel per
 # interpreter minor version, and keeps the compiled backend's floor equal to the

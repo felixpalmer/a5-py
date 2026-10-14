@@ -5,7 +5,7 @@ same generated corpus and compares them. Everything below is a case where they
 disagree. Each needs fixing in its home repository rather than being papered
 over in `a5/_native.py`.
 
-Observed against a5-rs `4091ab6` (1.0.0-beta.2), the revision `Cargo.toml` names.
+Observed against a5-rs 1.0.0-beta.2 (`4091ab6`), the release `Cargo.toml` pins.
 Entries keep their original numbers; #1 (`get_num_cells` wrong at resolutions
 28-30) was fixed upstream and removed.
 

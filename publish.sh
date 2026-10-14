@@ -39,6 +39,22 @@ case "$VERSION" in
     fi ;;
 esac
 
+# Guard: releases are kept in sync across the ports, so the a5-rs release this wraps
+# (Cargo.toml `a5 = "=..."`) and the extension crate's own version must both be this
+# release's version in Cargo's SemVer spelling: 1.0.0b3 -> 1.0.0-beta.3.
+CARGO_VERSION="$(echo "$VERSION" | sed -E 's/a([0-9]+)$/-alpha.\1/; s/b([0-9]+)$/-beta.\1/; s/rc([0-9]+)$/-rc.\1/')"
+A5_PIN="$(grep -m1 '^a5 = ' Cargo.toml | cut -d'"' -f2)"
+if [ "$A5_PIN" != "=${CARGO_VERSION}" ]; then
+  echo "error: Cargo.toml pins a5 \"${A5_PIN}\" but this is v${VERSION} — expected \"=${CARGO_VERSION}\"" >&2
+  echo "       release a5-rs ${CARGO_VERSION} first, then move the pin and run 'cargo update -p a5'" >&2
+  exit 1
+fi
+CRATE_VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+if [ "$CRATE_VERSION" != "$CARGO_VERSION" ]; then
+  echo "error: Cargo.toml [package] version is ${CRATE_VERSION} but expected ${CARGO_VERSION}" >&2
+  exit 1
+fi
+
 # Prod releases must come from a release branch; prereleases usually come from main.
 if [ "$MODE" = "prod" ]; then
   case "$BRANCH" in
