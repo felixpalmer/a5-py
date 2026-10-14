@@ -1,6 +1,6 @@
 [package]
 name = "pya5"
-version = "1.0.0-beta.1"
+version = "1.0.0-beta.2"
 edition = "2021"
 authors = ["Felix Palmer <felixpalmer@gmail.com>"]
 description = "PyO3 bindings for the A5 geospatial index (private extension module for the pya5 package)"

@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "pya5"
-version = "1.0.0-beta.1"
+version = "1.0.0-beta.2"
 dependencies = [
  "a5",
  "pyo3",
