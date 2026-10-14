@@ -5,10 +5,7 @@
 import json
 import os
 
-from a5.coverings.compact import compact, uncompact
-from a5.coverings.resolution import covering_resolution
-from a5.core.hex import hex_to_u64
-from a5.core.serialization import get_resolution
+from a5 import compact, covering_resolution, get_resolution, hex_to_u64, uncompact
 
 # Load fixtures
 fixtures_path = os.path.join(os.path.dirname(__file__), '../fixtures/compact.json')

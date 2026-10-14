@@ -6,10 +6,14 @@ import json
 import math
 import pytest
 from pathlib import Path
-from a5.core.cell_info import get_num_cells, cell_area, cell_edge_length_avg
-from a5.core.cell import cell_to_boundary
-from a5.core.serialization import get_resolution
-from a5.core.hex import hex_to_u64
+from a5 import (
+    cell_area,
+    cell_edge_length_avg,
+    cell_to_boundary,
+    get_num_cells,
+    get_resolution,
+    hex_to_u64,
+)
 from a5.core.constants import AUTHALIC_RADIUS_EARTH
 
 # Load test fixtures
