@@ -5,7 +5,7 @@
 """Compiled backend: the public A5 API, backed by the a5-rs crate.
 
 Importing this module requires the extension module ``a5._a5``; use
-:func:`a5.get_backend` rather than importing it directly.
+the ``a5`` package rather than importing it directly.
 
 Most bindings in ``a5._a5`` already match the pure-Python signatures exactly --
 same argument order, same argument names (so keyword calls work), same defaults

@@ -58,7 +58,7 @@ def run(code, **env_overrides):
 
 
 def backend_under(**env_overrides):
-    result = run('import a5; print(a5.get_backend())', **env_overrides)
+    result = run('from a5._backend import get_backend; print(get_backend())', **env_overrides)
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()
 
@@ -88,7 +88,7 @@ class TestSelection:
 
 class TestFallback:
     def test_auto_falls_back_when_extension_missing(self):
-        result = run(BLOCK_NATIVE + 'import a5; print(a5.get_backend())', A5_BACKEND='auto')
+        result = run(BLOCK_NATIVE + 'from a5._backend import get_backend; print(get_backend())', A5_BACKEND='auto')
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == 'python'
 
@@ -103,7 +103,8 @@ class TestFallback:
     def test_fallback_still_serves_the_whole_api(self):
         code = BLOCK_NATIVE + (
             'import a5;'
-            'assert a5.get_backend() == "python";'
+            'from a5._backend import get_backend;'
+            'assert get_backend() == "python";'
             'assert all(hasattr(a5, name) for name in a5.__all__);'
             'print(a5.lonlat_to_cell((-1.0, 51.0), 10))'
         )

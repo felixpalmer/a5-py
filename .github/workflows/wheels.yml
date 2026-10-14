@@ -1,8 +1,9 @@
 name: wheels
 
-# Wheels are built on every pull request that touches the build, so a broken
-# matrix is caught before a release rather than during one. Building only --
-# publishing is not wired up here.
+# Builds every distribution pya5 ships: a platform wheel per matrix entry, the
+# pure-Python wheel and the sdist. Runs on every pull request that touches the
+# build, so a broken matrix is caught before a release rather than during one,
+# and is called by publish.yml, which uploads the dist-* artifacts to PyPI.
 on:
   pull_request:
     paths:
@@ -10,8 +11,10 @@ on:
       - 'Cargo.lock'
       - 'src/**'
       - 'pyproject.toml'
+      - 'scripts/build_pure_wheel.py'
       - '.github/workflows/wheels.yml'
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -82,7 +85,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.name }}
+          name: dist-${{ matrix.name }}
           path: wheelhouse/*.whl
 
   # One abi3 wheel is supposed to serve CPython 3.8 and everything after it.
@@ -102,7 +105,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: wheels-linux-x86_64
+          name: dist-linux-x86_64
           path: wheelhouse
 
       - name: Set up Python
@@ -122,3 +125,56 @@ jobs:
         # Run from a directory where `a5` cannot resolve to the source tree.
         working-directory: /tmp
         run: python -m pytest "$GITHUB_WORKSPACE/tests" -q
+
+  # The py3-none-any wheel pip falls back to where no platform wheel matches
+  # (PyPy, platforms outside the matrix above). Those installs get the
+  # pure-Python backend, rather than pip building the sdist, which needs Rust.
+  pure-wheel:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build the pure-Python wheel
+        run: python scripts/build_pure_wheel.py wheelhouse
+
+      - name: Install the pure-Python wheel
+        run: |
+          python -m pip install pytest
+          python -m pip install --pre --no-index --find-links wheelhouse pya5
+
+      - name: Run tests against the installed wheel
+        env:
+          A5_EXPECT_BACKEND: python
+        # Run from a directory where `a5` cannot resolve to the source tree.
+        working-directory: /tmp
+        run: python -m pytest "$GITHUB_WORKSPACE/tests" -q
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-pure
+          path: wheelhouse/*.whl
+
+  sdist:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build the sdist
+        run: |
+          python -m pip install "maturin>=1.7,<2.0"
+          maturin sdist --out wheelhouse
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-sdist
+          path: wheelhouse/*.tar.gz

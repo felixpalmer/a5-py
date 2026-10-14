@@ -5,10 +5,10 @@ The public API below is served by one of two interchangeable backends -- PyO3
 bindings to the a5-rs crate (the default wherever the compiled extension is
 available), or the pure-Python reference implementation. Signatures, return
 types and exceptions are identical either way; see :mod:`a5._backend` for how
-one is chosen and :func:`get_backend` for which one is active.
+one is chosen and which one is active.
 """
 
-from a5._backend import BACKEND, get_backend
+from a5._backend import BACKEND
 
 if BACKEND == 'rust':
     from a5._native import (
@@ -83,6 +83,4 @@ __all__ = [
     'polygon_to_cells',
     # Types
     'Degrees', 'Radians', 'A5Cell',
-    # Backend introspection (Python port only)
-    'get_backend',
 ]
