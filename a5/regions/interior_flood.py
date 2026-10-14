@@ -11,7 +11,7 @@ from typing import List
 
 from ..core.coordinate_systems import Cartesian
 from ..core.coordinate_transforms import to_cartesian
-from ..core.serialization import FIRST_HILBERT_RESOLUTION
+from ..core.serialization import FIRST_CURVE_RESOLUTION
 from ..core.cell_info import get_num_cells
 from ..traversal.lattice_flood_fill import triple_space_flood_fill
 from ..traversal.triple_cells import for_each_lattice_neighbor, triple_cell_center, triple_cell_to_id
@@ -40,8 +40,8 @@ def fill_by_flood(boundary: Boundary, triples: List[int], resolution: int, overl
     the boundary cells as flat triples. Returns the cells inside, uncompacted and
     unsorted.
     """
-    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    max_row = (1 << hilbert_res) - 1
+    curve_level = resolution - FIRST_CURVE_RESOLUTION + 1
+    max_row = (1 << curve_level) - 1
     out = boundary_output(boundary, overlapping)
 
     # The shell: the flood's own moves out of the boundary (each an edge
@@ -53,10 +53,10 @@ def fill_by_flood(boundary: Boundary, triples: List[int], resolution: int, overl
     firewall: List[int] = list(triples)
     for c in range(0, len(shell), 5):
         cell = shell[c:c + 5]
-        center = to_cartesian(triple_cell_center(*cell, hilbert_res, max_row))
+        center = to_cartesian(triple_cell_center(*cell, curve_level, max_row))
         (seeds if inside_next_to(boundary, center, parents[c // 5]) else firewall).extend(cell)
     if seeds:
         for c in range(0, len(seeds), 5):
-            out.append(triple_cell_to_id(*seeds[c:c + 5], hilbert_res, resolution))
+            out.append(triple_cell_to_id(*seeds[c:c + 5], curve_level, resolution))
         out.extend(triple_space_flood_fill(firewall, seeds, resolution)['interior_cells'])
     return out

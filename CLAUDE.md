@@ -49,7 +49,7 @@ module, the PyO3 binding in `/src/lib.rs`, and both branches of `a5/__init__.py`
 - `/Cargo.toml` - extension crate; pins the `a5` crate to an exact a5-rs commit
 - `/a5` - Python source code organized into modules:
   - `_backend.py` - backend selection; `_native.py` - shim adapting `a5._a5` to the Python API
-  - `/core` - Core geospatial functionality (cell, hex, hilbert, serialization, leaf slots, compaction marker, etc.)
+  - `/core` - Core geospatial functionality (cell, hex, serialization, leaf slots, compaction marker, etc.)
   - `/coverings` - Coverings (sets of cells at one resolution): compact/uncompact, set operations, measures (depends only on `/core`)
   - `/math` - Mathematical primitives (vec2, vec3, quat)
   - `/geometry` - Geometric calculations (pentagon, spherical_triangle, spherical_polygon)

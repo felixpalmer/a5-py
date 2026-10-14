@@ -3,7 +3,7 @@
 # Copyright (c) A5 contributors
 
 from .origin import face_step, quintant_to_segment
-from .serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION
+from .serialization import deserialize, serialize, FIRST_CURVE_RESOLUTION
 from .utils import A5Cell
 from ..lattice import compat_s_to_triple, triple_to_s
 
@@ -46,7 +46,7 @@ def migrate(cell: int) -> int:
     data = deserialize(cell)
     origin = data["origin"]
     resolution = data["resolution"]
-    if resolution < FIRST_HILBERT_RESOLUTION - 1:
+    if resolution < FIRST_CURVE_RESOLUTION - 1:
         return cell
 
     # Locate the cell's quintant in the v0 layout. Windings are unchanged, so
@@ -56,10 +56,10 @@ def migrate(cell: int) -> int:
     face_relative_quintant = (data["segment"] - origin.first_quintant + 5) % 5
     quintant = (v0_first_quintant + step * face_relative_quintant + 5) % 5
     segment, orientation = quintant_to_segment(quintant, origin)
-    if resolution == FIRST_HILBERT_RESOLUTION - 1:
+    if resolution == FIRST_CURVE_RESOLUTION - 1:
         return serialize(A5Cell(origin=origin, segment=segment, S=0, resolution=resolution))
 
-    hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION
-    triple = compat_s_to_triple(data["S"], hilbert_resolution, v0_orientation[face_relative_quintant])
-    new_s = triple_to_s(triple, hilbert_resolution, orientation)
+    curve_level = 1 + resolution - FIRST_CURVE_RESOLUTION
+    triple = compat_s_to_triple(data["S"], curve_level, v0_orientation[face_relative_quintant])
+    new_s = triple_to_s(triple, curve_level, orientation)
     return serialize(A5Cell(origin=origin, segment=segment, S=new_s, resolution=resolution))

@@ -14,14 +14,14 @@ from typing import List, Sequence
 from ..core.cell import _get_pentagon, cell_center_to_cell
 from ..core.face_adjacency import FACE_ADJACENCY, seam_transform
 from ..core.serialization import (
-    deserialize, get_resolution, slot_to_cell, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
+    deserialize, get_resolution, slot_to_cell, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
 )
 from ..core.tiling import get_face_vertices
 from ..coverings.slot_runs import SlotRuns, slot_runs_to_covering, to_covering
 from ..traversal.curve_descent import descend_in_curve_order, INSIDE, OUTSIDE, SPLIT
 
 # How far the center of any descendant of a cell can lie from the cell's own
-# center, in units of the cell's lattice spacing (face units * 2^hilbert_res). A
+# center, in units of the cell's lattice spacing (face units * 2^curve_level). A
 # child's center is within 0.342 of its parent's (the max over every flavor and
 # child), and the offsets halve each level down, so all descendants lie within
 # 2 * 0.342 (observed: 0.648).
@@ -132,7 +132,7 @@ def cell_to_subcell(cell: int, resolution: int) -> List[int]:
     target = resolution
     reaches_by_res = [_EDGE_EPS] * (target + 1)
     for res in range(1, target):
-        reaches_by_res[res] = _DESCENDANT_REACH / 2 ** (res - FIRST_HILBERT_RESOLUTION + 1) + _EDGE_EPS
+        reaches_by_res[res] = _DESCENDANT_REACH / 2 ** (res - FIRST_CURVE_RESOLUTION + 1) + _EDGE_EPS
 
     def classify(oid: int, res: int, center, slot: int) -> int:
         margin = _signed_margin(lines_by_origin[oid], center[0], center[1])

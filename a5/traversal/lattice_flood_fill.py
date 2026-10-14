@@ -5,7 +5,7 @@
 from typing import Dict, List, Optional, Set, Union
 
 from ..lattice import Triple, triple_in_bounds
-from ..core.serialization import FIRST_HILBERT_RESOLUTION
+from ..core.serialization import FIRST_CURVE_RESOLUTION
 from .triple_cells import triple_cell_key, triple_cell_to_id
 
 # Flood state, reusable across calls at one resolution: the keys of every cell visited so far
@@ -37,8 +37,8 @@ def triple_space_flood_fill(
         cell IDs (the frontier also in triple space), and the state for a
         follow-up call.
     """
-    hilbert_res = resolution - FIRST_HILBERT_RESOLUTION + 1
-    max_row = (1 << hilbert_res) - 1
+    curve_level = resolution - FIRST_CURVE_RESOLUTION + 1
+    max_row = (1 << curve_level) - 1
 
     if isinstance(firewall, list):
         state: FloodState = {'visited': set()}
@@ -80,7 +80,7 @@ def triple_space_flood_fill(
 
     def to_ids(cells: List[int]) -> List[int]:
         return [triple_cell_to_id(cells[c], cells[c + 1], cells[c + 2], cells[c + 3], cells[c + 4],
-                                  hilbert_res, resolution) for c in range(0, len(cells), 5)]
+                                  curve_level, resolution) for c in range(0, len(cells), 5)]
 
     return {
         'interior_cells': to_ids(discovered),

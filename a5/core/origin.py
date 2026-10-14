@@ -47,7 +47,7 @@ QUINTANT_ORIENTATIONS = [
 # Within each face, these are the indices of the first quintant
 QUINTANT_FIRST = [4, 2, 2, 2, 0, 4, 3, 2, 1, 0, 3, 0]
 
-# Placements of dodecahedron faces along the Hilbert curve
+# Placements of dodecahedron faces along the curve
 ORIGIN_ORDER = [0, 1, 2, 4, 3, 5, 7, 8, 6, 11, 10, 9]
 
 
@@ -89,7 +89,7 @@ def add_origin(axis: Spherical, angle: Radians, quaternion: Tuple[float, float, 
 origin_id = 0
 generate_origins()
 
-# Reorder origins to match the order of the hilbert curve
+# Reorder origins to match the order of the curve
 origins.sort(key=lambda x: ORIGIN_ORDER.index(x.id))
 for i, origin in enumerate(origins):
     origins[i] = Origin(

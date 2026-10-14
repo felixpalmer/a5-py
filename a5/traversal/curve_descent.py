@@ -11,7 +11,7 @@
 from typing import Callable, List
 
 from ..core.coordinate_systems import Face
-from ..core.serialization import FIRST_HILBERT_RESOLUTION, SLOT_COUNTS
+from ..core.serialization import FIRST_CURVE_RESOLUTION, SLOT_COUNTS
 from ..core.tiling import get_pentagon_center
 from ..coverings.slot_runs import SlotRuns, append_slot_run
 from ..lattice import CurveNode, Triple, curve_child, triple_to_curve_node
@@ -38,7 +38,7 @@ def descend_in_curve_order(
     runs: SlotRuns,
 ) -> None:
     """
-    Descend from `starts` -- non-overlapping cells at one Hilbert level, as flat
+    Descend from `starts` -- non-overlapping cells at one curve level, as flat
     triples (origin_id, quintant, x, y, z), in any order -- to `resolution`,
     appending the cells of the region `classify` describes to `runs`, as slot
     runs in curve order.
@@ -53,14 +53,14 @@ def descend_in_curve_order(
     # Slots are distinct, so the sort never compares past them
     entries.sort(key=lambda e: e[0])
 
-    target_level = resolution - FIRST_HILBERT_RESOLUTION + 1
+    target_level = resolution - FIRST_CURVE_RESOLUTION + 1
     # The descent state below the cell being visited at each level (a level's is
     # only overwritten once its cell's children are done)
     nodes = [CurveNode() for _ in range(target_level + 1)]
 
     def descend(level: int, triple: Triple, flavor: int, slot: int) -> None:
-        """Visit the cell at Hilbert `level` (its descent state in `nodes`) with the given triple, flavor and first slot."""
-        res = level + FIRST_HILBERT_RESOLUTION - 1
+        """Visit the cell at curve `level` (its descent state in `nodes`) with the given triple, flavor and first slot."""
+        res = level + FIRST_CURVE_RESOLUTION - 1
         center = get_pentagon_center(level, quintant, triple, flavor)
         kind = classify(origin_id, res, center, slot)
         if kind == INSIDE:

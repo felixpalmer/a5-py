@@ -8,7 +8,7 @@ from typing import List, Optional, Sequence, TypedDict, Union
 from ..core.coordinate_systems import LonLat, Cartesian
 from ..core.cell import cell_to_spherical
 from ..core.coordinate_transforms import from_lonlat, to_cartesian
-from ..core.serialization import cell_to_children, get_resolution, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL
+from ..core.serialization import cell_to_children, get_resolution, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, WORLD_CELL
 from ..coverings.slot_runs import slot_runs_to_covering, to_covering
 from ..geometry.prepared_polygon import prepare_polygon, point_in_prepared_polygon
 from ..traversal.triple_cells import cell_ids_to_triples
@@ -98,7 +98,7 @@ def polygon_to_cells(
     # Resolutions 0 and 1 have no lattice (a quintant is a single cell): every
     # cell off the boundary is in or out by its center, and there are at most 60
     # of them.
-    if resolution < FIRST_HILBERT_RESOLUTION:
+    if resolution < FIRST_CURVE_RESOLUTION:
         out = boundary_output(boundary, overlapping)
         for cell in cell_to_children(WORLD_CELL, resolution):
             if cell not in boundary.set and point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)), prep):

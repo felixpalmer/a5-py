@@ -10,7 +10,7 @@ from typing import Callable, Iterable, List, Optional
 
 from ..core.coordinate_systems import Spherical
 from ..lattice import Orientation, Triple, s_to_triple, triple_flavor, triple_in_bounds, triple_to_s
-from ..core.serialization import deserialize, serialize, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT
+from ..core.serialization import deserialize, serialize, FIRST_CURVE_RESOLUTION, QUINTANT_SHIFT
 from ..core.origin import origins, quintant_to_segment, segment_to_quintant
 from ..core.tiling import get_pentagon_center
 from ..projections.dodecahedron import DodecahedronProjection
@@ -20,7 +20,7 @@ from .neighbors import NEIGHBOR_DELTAS
 _dodecahedron = DodecahedronProjection()
 
 # A cell's key packs the quintant (origin.id * 5 + quintant, < 60), parity,
-# and the low _KEY_BITS bits of -x and -z (y follows). Up to Hilbert resolution
+# and the low _KEY_BITS bits of -x and -z (y follows). Up to curve level
 # 21 the coordinates fit whole; above it, two cells of one quintant share a key
 # only if they are 2^22 rows apart, and a walk holding both would need ~2^21
 # steps (~10^12 cells for a disk) -- far past what fits in memory.
@@ -53,10 +53,10 @@ def triple_cell_key(origin_id: int, quintant: int, x: int, y: int, z: int) -> in
 
 
 def triple_cell_to_id(origin_id: int, quintant: int, x: int, y: int, z: int,
-                      hilbert_res: int, resolution: int) -> int:
+                      curve_level: int, resolution: int) -> int:
     """The cell ID of a cell given in triple space."""
     q = origin_id * 5 + quintant
-    s = triple_to_s(Triple(x, y, z), hilbert_res, QUINTANT_ORIENTATION[q])
+    s = triple_to_s(Triple(x, y, z), curve_level, QUINTANT_ORIENTATION[q])
     return serialize({'origin': origins[origin_id], 'segment': QUINTANT_SEGMENT[q], 'S': s, 'resolution': resolution})
 
 
@@ -72,16 +72,16 @@ def cell_ids_to_triples(cell_ids: Iterable[int], out: Optional[List[int]] = None
         cell = deserialize(cell_id)
         origin = cell['origin']
         quintant, orientation = segment_to_quintant(cell['segment'], origin)
-        t = s_to_triple(cell['S'], cell['resolution'] - FIRST_HILBERT_RESOLUTION + 1, orientation)
+        t = s_to_triple(cell['S'], cell['resolution'] - FIRST_CURVE_RESOLUTION + 1, orientation)
         out.extend((origin.id, quintant, t.x, t.y, t.z))
     return out
 
 
 def triple_cell_center(origin_id: int, quintant: int, x: int, y: int, z: int,
-                       hilbert_res: int, max_row: int) -> Spherical:
+                       curve_level: int, max_row: int) -> Spherical:
     """The center of a cell given in triple space, on the sphere."""
     triple = Triple(x, y, z)
-    face = get_pentagon_center(hilbert_res, quintant, triple, triple_flavor(triple, max_row))
+    face = get_pentagon_center(curve_level, quintant, triple, triple_flavor(triple, max_row))
     return _dodecahedron.inverse(face, origin_id)
 
 

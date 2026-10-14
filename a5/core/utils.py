@@ -30,5 +30,5 @@ class A5Cell(TypedDict):
     """
     origin: Origin  # Origin representing one of pentagon face of the dodecahedron
     segment: int    # Index (0-4) of triangular segment within pentagonal dodecahedron face  
-    S: int         # Position along Hilbert curve within triangular segment
+    S: int         # Position along the curve within triangular segment
     resolution: int # Resolution of the cell
