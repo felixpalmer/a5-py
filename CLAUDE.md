@@ -46,7 +46,7 @@ module, the PyO3 binding in `/src/lib.rs`, and both branches of `a5/__init__.py`
 
 ## Python Project Structure
 - `/src/lib.rs` - PyO3 bindings for the Rust backend (private module `a5._a5`)
-- `/Cargo.toml` - extension crate; pins the `a5` crate to an exact a5-rs commit
+- `/Cargo.toml` - extension crate; pins the `a5` crate to an exact a5-rs release on crates.io
 - `/a5` - Python source code organized into modules:
   - `_backend.py` - backend selection; `_native.py` - shim adapting `a5._a5` to the Python API
   - `/core` - Core geospatial functionality (cell, hex, serialization, leaf slots, compaction marker, etc.)
@@ -101,17 +101,20 @@ python3 scripts/compare_backends.py bench-python.json bench-rust.json
 # platform matrix, the pure-Python py3-none-any wheel (pip's fallback where no
 # platform wheel matches, so installs never need Rust) and the sdist. Releases
 # go through publish.yml, which calls wheels.yml and uploads all of them:
-uv version --bump patch|minor|major   # also bump version in Cargo.toml
-./publish.sh beta|prod               # tags v<version> and pushes; CI publishes
+# Releases stay in sync across the ports: release a5-rs first, then move the
+# `a5 = "=<version>"` pin in Cargo.toml to it (`cargo update -p a5`), rerun both
+# backends and update RUST_BUGS.md (fixed bugs show up as strict-xfail failures).
+uv version --bump patch|minor|major   # also bump [package] version in Cargo.toml
+./publish.sh beta|prod               # checks the versions agree, tags v<version>, pushes; CI publishes
 # Pure-Python wheel locally (needs pip, which uv venvs lack):
 uv run --no-project --with pip python scripts/build_pure_wheel.py
 ```
 
 ### Working against a local a5-rs
-`Cargo.toml` pins the `a5` crate to an exact a5-rs commit. To build against the
-working copy next door instead, create an untracked `.cargo/config.toml`:
+`Cargo.toml` pins the `a5` crate to an exact a5-rs release on crates.io. To build
+against the working copy next door instead, create an untracked `.cargo/config.toml`:
 ```toml
-[patch."https://github.com/felixpalmer/a5-rs"]
+[patch.crates-io]
 a5 = { path = "../a5-rs" }
 ```
 
