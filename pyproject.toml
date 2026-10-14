@@ -67,6 +67,12 @@ test-command = [
 before-all = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
 environment = { PATH = "$HOME/.cargo/bin:$PATH" }
 
+[tool.cibuildwheel.macos]
+# The cp38 python.org installer targets macOS 10.9, but rustc's x86_64-apple-darwin
+# floor is 10.12, so delocate rejects a 10.9-tagged wheel. arm64 is unaffected:
+# its floor is 11.0 either way.
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.12" }
+
 [tool.cibuildwheel.windows]
 # cmd.exe has no `VAR=value cmd` prefix syntax. No space before `&&` -- cmd would
 # include it in the variable's value.
