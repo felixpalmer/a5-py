@@ -57,7 +57,7 @@ def cell_to_supercell(cell: int, resolution: int) -> int:
     return cell_center_to_cell(cell, resolution)
 
 
-def cell_to_subcell(cell: int, resolution: int) -> List[int]:
+def cell_to_subcells(cell: int, resolution: int) -> List[int]:
     """
     The cells at a finer `resolution` whose centers lie in `cell`: the spatial
     counterpart of `cell_to_children`, and the inverse of `cell_to_supercell` -- a

@@ -229,11 +229,11 @@ class TestHierarchy:
         for value in values:
             assert native.is_valid_cell(value) == py_serialization.is_valid_cell(value), value
 
-    def test_cell_to_subcell_and_supercell(self):
+    def test_cell_to_subcells_and_supercell(self):
         for resolution in (0, 1, 3, 6, 10):
             for cell in _cells(resolution, 6):
                 for target in range(resolution, min(resolution + 3, 31)):
-                    assert native.cell_to_subcell(cell, target) == py_subcell.cell_to_subcell(
+                    assert native.cell_to_subcells(cell, target) == py_subcell.cell_to_subcells(
                         cell, target
                     ), (cell, target)
         for resolution in (2, 5, 12, 20, 30):
@@ -452,7 +452,7 @@ class TestErrors:
 
     def test_subcell_supercell_out_of_range(self):
         cell = _cells(8, 1)[0]
-        self._assert_same_error(native.cell_to_subcell, py_subcell.cell_to_subcell, cell, 4)
+        self._assert_same_error(native.cell_to_subcells, py_subcell.cell_to_subcells, cell, 4)
         self._assert_same_error(native.cell_to_supercell, py_subcell.cell_to_supercell, cell, 12)
 
     def test_hex_to_u64_rejects_garbage(self):

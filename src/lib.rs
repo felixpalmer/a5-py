@@ -171,7 +171,7 @@ fn cell_edge_length_avg(resolution: i32) -> f64 {
 
 #[pyfunction]
 #[pyo3(signature = (cell, resolution))]
-fn cell_to_subcell(py: Python<'_>, cell: u64, resolution: i32) -> PyResult<Vec<u64>> {
+fn cell_to_subcells(py: Python<'_>, cell: u64, resolution: i32) -> PyResult<Vec<u64>> {
     py.allow_threads(|| a5::cell_to_subcell(cell, resolution))
         .map_err(to_py)
 }
@@ -354,7 +354,7 @@ fn a5_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_num_children, m)?)?;
     m.add_function(wrap_pyfunction!(cell_area, m)?)?;
     m.add_function(wrap_pyfunction!(cell_edge_length_avg, m)?)?;
-    m.add_function(wrap_pyfunction!(cell_to_subcell, m)?)?;
+    m.add_function(wrap_pyfunction!(cell_to_subcells, m)?)?;
     m.add_function(wrap_pyfunction!(cell_to_supercell, m)?)?;
 
     // Compaction
