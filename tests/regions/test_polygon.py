@@ -11,7 +11,7 @@ from a5 import polygon_to_cells, uncompact, u64_to_hex, count, covering_resoluti
 from a5._backend import get_backend
 
 # The pinned a5-rs release leaks out of thin slivers in center mode, up to a
-# whole quintant (RUST_BUGS.md #5), and at res 17 can run out of memory doing so
+# whole quintant (fixed in a5-rs#89), and at res 17 can run out of memory doing so
 RUST_SLIVER_LEAK = {"brazil_sliver_res12", "brazil_sliver_res17"}
 
 
@@ -38,7 +38,7 @@ class TestPolygonToCells:
             result_hex = [u64_to_hex(c) for c in sorted_cells]
             assert result_hex == f["cells"], f'fixture {f["name"]}'
 
-    @pytest.mark.xfail(get_backend() == "rust", strict=True, reason="RUST_BUGS.md #5")
+    @pytest.mark.xfail(get_backend() == "rust", strict=True, reason="a5-rs#89")
     def test_sliver_does_not_leak(self):
         f = next(f for f in load_fixtures()["polygon"] if f["name"] == "brazil_sliver_res12")
         result = polygon_to_cells(to_rings(f["polygon"]), f["resolution"])

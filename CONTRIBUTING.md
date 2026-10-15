@@ -56,10 +56,10 @@ cargo update -p a5  # refreshes Cargo.lock (the pin and this crate's own version
 uv run maturin develop --release
 A5_BACKEND=rust   A5_EXPECT_BACKEND=rust   uv run pytest
 A5_BACKEND=python A5_EXPECT_BACKEND=python uv run pytest
-# Strict-xfail failures mean a5-rs fixed a known divergence: drop the xfail and its RUST_BUGS.md entry
+# Strict-xfail failures mean a5-rs fixed a known divergence: drop the xfail
 
 # 3. Add a "#### pya5 [v<version>] - <date>" entry to CHANGELOG.md
-git add pyproject.toml uv.lock Cargo.toml Cargo.lock CHANGELOG.md RUST_BUGS.md
+git add pyproject.toml uv.lock Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "x.y.z release"
 
 ./publish.sh beta   # prerelease (PEP 440, e.g. 1.0.0b1), from main

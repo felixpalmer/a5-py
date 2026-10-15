@@ -22,11 +22,13 @@ from a5.core.coordinate_systems import Degrees, LonLat
 from a5.core.cell import a5cell_contains_point
 from a5.core.coordinate_transforms import from_lonlat
 from a5.core.serialization import deserialize
+from a5._backend import get_backend
 
 # Load test data
 FIXTURES_PATH = Path(__file__).parent / "fixtures"
 POPULATED_PLACES_PATH = FIXTURES_PATH / "ne_50m_populated_places_nameonly.json"
 CELL_TO_LONLAT_PATH = FIXTURES_PATH / "cell-to-lonlat.json"
+LONLAT_TO_CELL_SEQUENCE_PATH = FIXTURES_PATH / "lonlat-to-cell-sequence.json"
 
 with open(POPULATED_PLACES_PATH) as f:
     populated_places = json.load(f)
@@ -34,6 +36,9 @@ with open(POPULATED_PLACES_PATH) as f:
 
 with open(CELL_TO_LONLAT_PATH) as f:
     cell_to_lonlat_fixtures = json.load(f)
+
+with open(LONLAT_TO_CELL_SEQUENCE_PATH) as f:
+    lonlat_to_cell_sequence_fixtures = json.load(f)
 
 class TestCellIDValidation:
     """Test cell ID validation and special cases."""
@@ -206,3 +211,18 @@ class TestCellToLonLat:
                 f"lon mismatch for cell {fixture['cell_id']}: {lon} != {fixture['center_lonlat'][0]}"
             assert lat == pytest.approx(fixture['center_lonlat'][1], abs=1e-10), \
                 f"lat mismatch for cell {fixture['cell_id']}: {lat} != {fixture['center_lonlat'][1]}"
+
+
+class TestLonLatToCellSequence:
+    # The pinned a5-rs release reuses the cached cell for points on other faces
+    # (fixed in a5-rs#90): drop this once the pin moves past it
+    @pytest.mark.xfail(get_backend() == "rust", strict=True, reason="a5-rs#90")
+    def test_does_not_depend_on_earlier_lookups(self):
+        """The lookups are made in order: each must match a cold lookup of its
+        point, whatever the lookup before it was."""
+        points = lonlat_to_cell_sequence_fixtures['points']
+        for sequence in lonlat_to_cell_sequence_fixtures['sequences']:
+            resolution = sequence['resolution']
+            for i, (point, cell) in enumerate(zip(sequence['lookups'], sequence['cells'])):
+                result = lonlat_to_cell(tuple(points[point]), resolution)
+                assert u64_to_hex(result) == cell, f"resolution {resolution}, lookup {i}"

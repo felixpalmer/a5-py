@@ -37,8 +37,8 @@ fixture suite once per backend is what makes it a continuous differential test o
 the compiled one rather than a parallel mirror we hope stays in sync.
 
 **The shim does not work around upstream defects.** Where the backends disagree,
-the divergence is written up in `RUST_BUGS.md` and pinned by a test (strict
-xfail, so it fails once fixed), never hidden in `a5/_native.py`.
+the divergence is pinned by a test (strict xfail, so it fails once fixed),
+never hidden in `a5/_native.py`.
 
 When adding a public function, it must be added in three places: the pure-Python
 module, the PyO3 binding in `/src/lib.rs`, and both branches of `a5/__init__.py`.
@@ -103,7 +103,7 @@ python3 scripts/compare_backends.py bench-python.json bench-rust.json
 # go through publish.yml, which calls wheels.yml and uploads all of them:
 # Releases stay in sync across the ports: release a5-rs first, then move the
 # `a5 = "=<version>"` pin in Cargo.toml to it (`cargo update -p a5`), rerun both
-# backends and update RUST_BUGS.md (fixed bugs show up as strict-xfail failures).
+# backends and drop the xfails of fixed bugs (they show up as strict-xfail failures).
 uv version --bump patch|minor|major   # also bump [package] version in Cargo.toml
 ./publish.sh beta|prod               # checks the versions agree, tags v<version>, pushes; CI publishes
 # Pure-Python wheel locally (needs pip, which uv venvs lack):
