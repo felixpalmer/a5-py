@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) A5 contributors
 
-from typing import List, Optional
+from typing import List, NoReturn, Optional
 from .utils import A5Cell, Origin
 from .origin import origins
 
@@ -319,13 +319,17 @@ def _normalize_res30(index: int) -> int:
 
 
 def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
-    """Walk a cell up the hierarchy to a coarser resolution.
+    """Walk a cell up the hierarchy to a coarser resolution (or its own, giving
+    the cell). A finer resolution is an error.
 
     Implemented as pure bit ops over the encoded index — no deserialize /
     serialize round-trip. The three encoding regimes (non-curve res 0/1,
     curve res 2..29, variable-width res 30) all reduce to the same shape
     after a small amount of normalization.
     """
+    # The immediate parent (None) is never finer than the cell: only an
+    # explicit target needs the check below.
+    check = parent_resolution is not None
     if parent_resolution is None:
         parent_resolution = get_resolution(index) - 1
 
@@ -334,10 +338,11 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
         return WORLD_CELL
     if parent_resolution < -1 or parent_resolution > MAX_RESOLUTION:
         raise ValueError(f"Target resolution ({parent_resolution}) is out of range")
+    # A cell coarser than the target has no parent there. Each branch below
+    # detects that from bits it already reads, so the common case never pays
+    # for get_resolution.
     if index == WORLD_CELL:
-        raise ValueError(
-            f"Target resolution ({parent_resolution}) must be equal to or less than current resolution (-1)"
-        )
+        _finer_target(index, parent_resolution)
 
     # Normalize res-30 children to the standard res-29 layout. After this,
     # the fast paths below treat the cell as a curve-range cell.
@@ -353,21 +358,40 @@ def cell_to_parent(index: int, parent_resolution: Optional[int] = None) -> int:
         # Curve-range parent: clear bits below the parent tag, set the tag.
         # Identity (parent res === child res) falls out for free: the tag lands
         # in the same position and bits below the keep cut are already zero.
+        # A cell at the parent resolution or finer has its tag below the cut;
+        # a coarser cell has no bits there (at resolution 30 the cut is bit 0,
+        # so every cell not already res 30 is coarser).
         keep_shift = 60 - 2 * parent_resolution
-        return ((c >> keep_shift) << keep_shift) | (1 << (59 - 2 * parent_resolution))
+        kept = (c >> keep_shift) << keep_shift
+        if check and kept == c:
+            _finer_target(index, parent_resolution)
+        return kept | (1 << (59 - 2 * parent_resolution))
+
+    # A res-0 cell has bit 57 set with all lower bits zero — equivalently, all
+    # bottom 57 bits are zero.
+    is_res0 = (c & ((1 << 57) - 1)) == 0
 
     if parent_resolution == 1:
+        if is_res0:
+            _finer_target(index, parent_resolution)
         # Top 6 bits already encode 5*originId + segmentN; only the tag moves.
         # Identity (cell already at res 1) is preserved.
         return ((c >> 58) << 58) | (1 << 56)
 
     # parent_resolution == 0: top 6 bits change from quintant (0-59) to originId (0-11).
     # Identity (cell already at res 0) needs an explicit guard since dividing
-    # an originId by 5 would corrupt it. A res-0 cell has bit 57 set with all
-    # lower bits zero — equivalently, all bottom 57 bits are zero.
-    if (c & ((1 << 57) - 1)) == 0:
+    # an originId by 5 would corrupt it.
+    if is_res0:
         return c
     return (((c >> 58) // 5) << 58) | (1 << 57)
+
+
+def _finer_target(index: int, parent_resolution: int) -> NoReturn:
+    """Raise the error for a target resolution finer than the cell's own."""
+    raise ValueError(
+        f"Target resolution ({parent_resolution}) must be equal to or less than "
+        f"current resolution ({get_resolution(index)})"
+    )
 
 
 # The 12 resolution-0 cells (dodecahedron faces) are a constant — compute once.

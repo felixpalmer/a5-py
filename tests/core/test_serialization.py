@@ -15,6 +15,7 @@ from a5.core.serialization import (
 )
 from a5.core.utils import A5Cell
 from a5.core.origin import origins
+from a5._backend import get_backend
 import json
 from pathlib import Path
 import copy
@@ -151,6 +152,15 @@ def test_cell_to_parent_with_same_resolution_returns_original_cell(id):
     current_resolution = get_resolution(cell)
     parent = cell_to_parent(cell, current_resolution)
     assert parent == cell
+
+# The pinned a5-rs release returns a cell at the finer resolution (fixed in
+# a5-rs#94): drop the xfail once the pin moves past it
+@pytest.mark.xfail(get_backend() == "rust", strict=True, reason="a5-rs#94")
+def test_cell_to_parent_raises_for_finer_resolution():
+    for target in FIXTURES["finerParentTargets"]:
+        cell = int(target["cell"], 16)
+        with pytest.raises(ValueError, match="must be equal to or less than current resolution"):
+            cell_to_parent(cell, target["resolution"])
 
 @pytest.mark.parametrize("id", TEST_IDS)
 def test_round_trip_between_cell_to_parent_and_cell_to_children(id):
