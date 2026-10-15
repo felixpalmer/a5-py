@@ -81,11 +81,13 @@ def polygon_to_cells(
         ring_vecs_list.append([to_cartesian(from_lonlat(ring[i])) for i in range(len(ring))])
 
     prep = prepare_polygon(ring_vecs_list)
-    # 'overlapping' output is the boundary itself, so it needs every cell the
-    # boundary touches; 'center' only needs a boundary the fill can't step past
-    # (the curve runs' ring covers any cell the sampling skips).
+    # Both modes need every cell the boundary touches, each with every segment
+    # touching it: the fills classify a cell next to the boundary by the
+    # segments its boundary neighbor records (see `inside_next_to`), so a
+    # segment the sampling skipped flips that class, and the fill leaks out of
+    # the polygon.
     overlapping = containment == 'overlapping'
-    sampled = sample_boundary(rings, resolution, overlapping)
+    sampled = sample_boundary(rings, resolution)
 
     # Res 30 covers only quintants 0-41 (elsewhere A5 answers at res 29, see
     # serialize), so a polygon reaching past them is filled at res 29: mixing the

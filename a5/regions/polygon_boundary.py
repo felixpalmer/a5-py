@@ -51,13 +51,11 @@ class Boundary:
 
 
 def sample_boundary(
-    rings: List[List[LonLat]], resolution: int, exact: bool,
+    rings: List[List[LonLat]], resolution: int,
 ) -> Tuple[List[int], Set[int], SegmentMap]:
     """
-    The boundary cells, each recorded with the ring segments (outer ring and
-    holes) that reached it: with `exact`, every cell a segment touches; without,
-    the cells holding samples along the segments at half-cell-radius spacing,
-    which can miss a cell whose corner a segment clips between samples.
+    The boundary cells: every cell a ring segment (outer ring or hole) touches,
+    each recorded with every segment touching it.
     """
     cells: List[int] = []
     cell_set: Set[int] = set()
@@ -77,7 +75,7 @@ def sample_boundary(
             segment_map[cell] = [seg_idx]
 
     for ring in rings:
-        trace_path(ring, True, resolution, record_cell, exact)
+        trace_path(ring, True, resolution, record_cell, True)
         seg_offset += len(ring)
 
     return cells, cell_set, segment_map
