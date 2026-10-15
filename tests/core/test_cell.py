@@ -22,7 +22,6 @@ from a5.core.coordinate_systems import Degrees, LonLat
 from a5.core.cell import a5cell_contains_point
 from a5.core.coordinate_transforms import from_lonlat
 from a5.core.serialization import deserialize
-from a5._backend import get_backend
 
 # Load test data
 FIXTURES_PATH = Path(__file__).parent / "fixtures"
@@ -214,9 +213,6 @@ class TestCellToLonLat:
 
 
 class TestLonLatToCellSequence:
-    # The pinned a5-rs release reuses the cached cell for points on other faces
-    # (fixed in a5-rs#90): drop this once the pin moves past it
-    @pytest.mark.xfail(get_backend() == "rust", strict=True, reason="a5-rs#90")
     def test_does_not_depend_on_earlier_lookups(self):
         """The lookups are made in order: each must match a cold lookup of its
         point, whatever the lookup before it was."""

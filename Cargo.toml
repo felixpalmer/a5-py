@@ -34,7 +34,7 @@ path = "src/lib.rs"
 # (untracked):
 #   [patch.crates-io]
 #   a5 = { path = "../a5-rs" }
-a5 = "=1.0.0-beta.3"
+a5 = "=1.0.0-beta.4"
 
 # abi3-py38: one wheel per platform covers CPython 3.8+ rather than one wheel per
 # interpreter minor version, and keeps the compiled backend's floor equal to the

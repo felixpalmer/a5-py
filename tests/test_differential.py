@@ -173,8 +173,7 @@ class TestHierarchy:
                 assert native.cell_to_parent(cell) == py_serialization.cell_to_parent(cell)
                 # Bound the sweep by the cell's own resolution, not the requested
                 # one: res-30 cells normalise to the res-29 layout, so asking for
-                # a parent at 30 would be out of domain, which a5-py rejects and
-                # the pinned a5-rs release does not (fixed in a5-rs#94).
+                # a parent at 30 would be out of domain, which both ports reject.
                 actual_resolution = py_serialization.get_resolution(cell)
                 for parent_resolution in range(-1, actual_resolution + 1):
                     assert native.cell_to_parent(
