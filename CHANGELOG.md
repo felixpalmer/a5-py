@@ -19,6 +19,15 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v1.0.0b4] - October 15 2026
+
+- chore: update Rust crate and tidy
+- fix: cellToParent errors for a finer target resolution (#93)
+- fix: check the face before reusing the cached cell in lonlat_to_cell (#92)
+- fix: trace the polygon boundary exactly for center containment (#91)
+- chore: README revamp (#90)
+- chore: rename cellToSubcell -> cellToSubcells (#89)
+
 #### pya5 [v1.0.0b3] - October 14 2026
 
 - chore: python pins rust crate not commit (#88)
