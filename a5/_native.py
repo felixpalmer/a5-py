@@ -16,8 +16,8 @@ Only ``cell_to_boundary`` and ``polygon_to_cells`` need more than a re-export:
 they take an options mapping, which the Rust API models as a typed struct.
 
 This layer does not paper over a5-rs defects. Where the two backends disagree,
-the divergence is recorded in RUST_BUGS.md and pinned by a test, so it gets
-fixed upstream rather than hidden here.
+the divergence is pinned by a test, so it gets fixed upstream rather than
+hidden here.
 """
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union

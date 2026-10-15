@@ -12,6 +12,8 @@ from .coordinate_transforms import (
 from .origin import (
     find_nearest_origin,
     find_nearest_origins,
+    haversine,
+    origins,
     quintant_to_segment,
     segment_to_quintant,
 )
@@ -86,6 +88,11 @@ def lonlat_to_cell(lon_lat: LonLat, resolution: int) -> int:
     return spherical_to_cell(from_lonlat(lon_lat), resolution)
 
 
+# Haversine of the angle from a face center to its edge midpoints, atan(2)/2:
+# a point closer than that to a face center is on that face.
+_FACE_INRADIUS_HAVERSINE = 0.07467459582398002
+
+
 def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
     """
     Like `lonlat_to_cell`, but accepts a point already in A5's internal spherical
@@ -109,11 +116,18 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
     # Try the cached pentagon first -- skips the full lookup when consecutive
     # calls land in the same cell (common in dense-sample loops).
     global _last_result, _last_point, _last_point_origin, _last_point_face
+    nearest_origin = None
     if _last_result is not None and _last_result['resolution'] == resolution:
-        projected = _dodecahedron.forward(spherical, _last_result['origin_id'])
-        _last_point, _last_point_origin, _last_point_face = spherical, _last_result['origin_id'], projected
-        if _last_result['pentagon'].contains_point(projected) > 0:
-            return _last_result['cell_id']
+        # The projection maps points from other faces into this face's frame
+        # too (the antipodal face center onto this one's center), so the cached
+        # pentagon only answers for points on its own face: the nearest origin.
+        if haversine(spherical, origins[_last_result['origin_id']].axis) >= _FACE_INRADIUS_HAVERSINE:
+            nearest_origin = find_nearest_origin(spherical)
+        if nearest_origin is None or nearest_origin.id == _last_result['origin_id']:
+            projected = _dodecahedron.forward(spherical, _last_result['origin_id'])
+            _last_point, _last_point_origin, _last_point_face = spherical, _last_result['origin_id'], projected
+            if _last_result['pentagon'].contains_point(projected) > 0:
+                return _last_result['cell_id']
 
     # Fast path: locate the containing pentagon directly. Round to the leaf
     # triangle, get the closed-form flavor, and test the pentagon geometrically
@@ -121,7 +135,7 @@ def spherical_to_cell(spherical: Spherical, resolution: int) -> int:
     # not congruent, but the containing pentagon is always the triangle's cell
     # or one of its fixed neighbor deltas (verified exhaustively), so at most
     # one 7-candidate walk resolves it -- then a single curve encode.
-    origin = find_nearest_origin(spherical)
+    origin = nearest_origin if nearest_origin is not None else find_nearest_origin(spherical)
     dodec_point = _dodecahedron.forward(spherical, origin.id)
     _last_point, _last_point_origin, _last_point_face = spherical, origin.id, dodec_point
     quintant = get_quintant_polar(to_polar(dodec_point))

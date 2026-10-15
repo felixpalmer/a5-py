@@ -155,7 +155,7 @@ class TestIndexing:
         # prefix, digit separators, surrounding whitespace and a leading minus,
         # while both a5-rs and the TypeScript reference (BigInt of "0x" + hex)
         # reject all four. Pinned so that tightening a5-py is a deliberate,
-        # visible change. See RUST_BUGS.md.
+        # visible change.
         py_hex.hex_to_u64(text)
         with pytest.raises(ValueError):
             native.hex_to_u64(text)
@@ -173,8 +173,8 @@ class TestHierarchy:
                 assert native.cell_to_parent(cell) == py_serialization.cell_to_parent(cell)
                 # Bound the sweep by the cell's own resolution, not the requested
                 # one: res-30 cells normalise to the res-29 layout, so asking for
-                # a parent at 30 would be out of domain. See
-                # RUST_BUGS.md #3 for what the two ports do there.
+                # a parent at 30 would be out of domain: neither port rejects
+                # a finer parent resolution, both return the same garbage id.
                 actual_resolution = py_serialization.get_resolution(cell)
                 for parent_resolution in range(-1, actual_resolution + 1):
                     assert native.cell_to_parent(
