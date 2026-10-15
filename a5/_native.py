@@ -29,7 +29,7 @@ __all__ = [
     'hex_to_u64', 'u64_to_hex',
     'cell_to_parent', 'cell_to_children', 'get_resolution', 'get_res0_cells', 'is_valid_cell',
     'get_num_cells', 'get_num_children', 'cell_area', 'cell_edge_length_avg',
-    'cell_to_subcell', 'cell_to_supercell',
+    'cell_to_subcells', 'cell_to_supercell',
     'compact', 'uncompact', 'is_compaction_marker',
     'covering_resolution', 'contains', 'difference', 'intersect', 'overlaps', 'union', 'area', 'count',
     'migrate',
@@ -53,7 +53,7 @@ get_num_cells = _a5.get_num_cells
 get_num_children = _a5.get_num_children
 cell_area = _a5.cell_area
 cell_edge_length_avg = _a5.cell_edge_length_avg
-cell_to_subcell = _a5.cell_to_subcell
+cell_to_subcells = _a5.cell_to_subcells
 cell_to_supercell = _a5.cell_to_supercell
 
 compact = _a5.compact

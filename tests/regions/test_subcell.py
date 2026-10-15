@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from a5 import (
-    cell_to_subcell, cell_to_supercell, count, covering_resolution, get_resolution, hex_to_u64, u64_to_hex,
+    cell_to_subcells, cell_to_supercell, count, covering_resolution, get_resolution, hex_to_u64, u64_to_hex,
     uncompact,
 )
 
@@ -24,10 +24,10 @@ SUBCELL = FIXTURES["subcell"]
 SUPERCELL = FIXTURES["supercell"]
 
 
-class TestCellToSubcell:
+class TestCellToSubcells:
     @pytest.mark.parametrize("f", SUBCELL, ids=lambda f: f'{f["cell"]}-res{f["resolution"]}')
     def test_subcell_fixtures(self, f):
-        result = cell_to_subcell(hex_to_u64(f["cell"]), f["resolution"])
+        result = cell_to_subcells(hex_to_u64(f["cell"]), f["resolution"])
         assert [u64_to_hex(c) for c in result] == f["cells"]
         assert count(result) == f["count"]
 
@@ -35,19 +35,19 @@ class TestCellToSubcell:
         for f in SUBCELL:
             cell = hex_to_u64(f["cell"])
             cell_resolution = get_resolution(cell)
-            for subcell in uncompact(cell_to_subcell(cell, f["resolution"])):
+            for subcell in uncompact(cell_to_subcells(cell, f["resolution"])):
                 assert cell_to_supercell(subcell, cell_resolution) == cell
 
     def test_own_resolution_returns_cell(self):
         cell = hex_to_u64(SUBCELL[5]["cell"])
-        result = cell_to_subcell(cell, get_resolution(cell))
+        result = cell_to_subcells(cell, get_resolution(cell))
         assert list(uncompact(result)) == [cell]
         assert covering_resolution(result) == get_resolution(cell)
 
     def test_coarser_resolution_raises(self):
         cell = hex_to_u64(SUBCELL[5]["cell"])
         with pytest.raises(ValueError):
-            cell_to_subcell(cell, get_resolution(cell) - 1)
+            cell_to_subcells(cell, get_resolution(cell) - 1)
 
 
 class TestCellToSupercell:
