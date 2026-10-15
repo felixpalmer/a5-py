@@ -19,6 +19,8 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## pya5
 
+#### pya5 [v1.0.0] - October 15 2026
+
 #### pya5 [v1.0.0b4] - October 15 2026
 
 - chore: update Rust crate and tidy

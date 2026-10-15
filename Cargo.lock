@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "a5"
-version = "1.0.0-beta.4"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa96e32f25af5cfb26f30eb6c8a2a62d90158c15c80c93d42beb26778278c10b"
+checksum = "73444b5953a4d7bada9b9554cfb3dea40060bc2b1cc48429556acc77bf58d6ee"
 dependencies = [
  "lazy_static",
 ]
@@ -76,7 +76,7 @@ dependencies = [
 
 [[package]]
 name = "pya5"
-version = "1.0.0-beta.4"
+version = "1.0.0"
 dependencies = [
  "a5",
  "pyo3",
