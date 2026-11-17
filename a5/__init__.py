@@ -61,7 +61,6 @@ else:
 # Constants and types are backend-independent -- they carry no computation.
 from a5.core.serialization import MAX_RESOLUTION, WORLD_CELL
 from a5.core.coordinate_systems import Degrees, Radians
-from a5.core.utils import A5Cell
 
 __all__ = [
     # Indexing
@@ -82,5 +81,5 @@ __all__ = [
     # Regions
     'polygon_to_cells',
     # Types
-    'Degrees', 'Radians', 'A5Cell',
+    'Degrees', 'Radians',
 ]
